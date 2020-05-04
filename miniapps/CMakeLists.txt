@@ -23,3 +23,5 @@ add_subdirectory(tools)
 add_subdirectory(toys)
 add_subdirectory(nurbs)
 add_subdirectory(gslib)
+
+add_subdirectory(pnp)

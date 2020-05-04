@@ -413,6 +413,7 @@ public:
 
    /** @brief Eliminate only the rows from the matrix */
    void EliminateRows(const Array<int> &rows);
+   void EliminateRows(const Array<int> &rows, double diag=1.0);
 
    /// Makes this object a reference to another PetscParMatrix
    void MakeRef(const PetscParMatrix &master);
