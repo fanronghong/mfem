@@ -39,11 +39,28 @@ const char* options_src     = "./pnp_steadystate_box_petsc.opts";
 double phi_top     = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 上边界是 Dirichlet, 乘以alpha1进行无量纲化
 double phi_bottom  = 2.0 * alpha1; // 国际单位V, 电势在计算区域的 下边界是 Dirichlet
 
-double c1_top      = 0.9 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 上边界是 Dirichlet,乘以alpha2是把mol/L换成Angstrom,单位统一
-double c1_bottom   = 0.1 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 下边界是 Dirichlet
+double c1_top      = 0.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 上边界是 Dirichlet,乘以alpha2是把mol/L换成Angstrom,单位统一
+double c1_bottom   = 0.9 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 下边界是 Dirichlet
 
-double c2_top      = 0.1 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
+double c2_top      = 0.0 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
 double c2_bottom   = 0.9 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
+
+double phi_D_func(const Vector& x)
+{
+    if (abs(x[2] - 1.0) < 1E-10) return phi_top;
+    else if (abs(x[2] - 0.0) < 1E-10) return phi_bottom;
+}
+double c1_D_func(const Vector& x)
+{
+    if (abs(x[2] - 1.0) < 1E-10) return c1_top;
+    else if (abs(x[2] - 0.0) < 1E-10) return c1_bottom;
+}
+double c2_D_func(const Vector& x)
+{
+    if (abs(x[2] - 1.0) < 1E-10) return c2_top;
+    else if (abs(x[2] - 0.0) < 1E-10) return c2_bottom;
+}
+
 
 #elif defined(Angstrom_SCALE) and !defined(PhysicalModel)
 #define COMPUTE_CONVERGENCE_RATE   //运行所有代码内部自己添加的assert检查. Note: 不要修改下面的输入参数, 否则会造成程序中的很多assert不能通过!

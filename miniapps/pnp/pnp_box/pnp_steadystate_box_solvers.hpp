@@ -1771,14 +1771,13 @@ private:
 
     VisItDataCollection* dc;
     Array<int> Dirichlet;
-    Array<int> ess_tdof_list, top_tdof_list, bottom_tdof_list;
+    Array<int> ess_tdof_list;
     StopWatch chrono;
     int num_procs, myid;
 
 public:
     PNP_DG_Gummel_Solver_par(Mesh& mesh_): mesh(mesh_)
     {
-
         pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
         fec   = new DG_FECollection(p_order, mesh.Dimension());
         fsp   = new ParFiniteElementSpace(pmesh, fec);
@@ -1798,54 +1797,14 @@ public:
         *c2_n  = 0.0; c2_n ->SetTrueVector(); c2_n ->SetFromTrueVector();
 
 #ifdef PhysicalModel
-        phi_D = new ParGridFunction(fsp);
-        c1_D  = new ParGridFunction(fsp);
-        c2_D  = new ParGridFunction(fsp);
-        *phi_D = 0.0; phi_D->SetTrueVector(); phi_D->SetFromTrueVector();
-        *c1_D  = 0.0; c1_D ->SetTrueVector(); c1_D ->SetFromTrueVector();
-        *c2_D  = 0.0; c2_D ->SetTrueVector(); c2_D ->SetFromTrueVector();
-
-        int bdr_size = fsp->GetMesh()->bdr_attributes.Max();
-
-        Array<int> top_bdr(bdr_size);
-        top_bdr               = 0;
-        top_bdr[top_attr - 1] = 1;
-        fsp->GetEssentialTrueDofs(top_bdr, top_tdof_list);
-
-        Array<int> bottom_bdr(bdr_size);
-        bottom_bdr                  = 0;
-        bottom_bdr[bottom_attr - 1] = 1;
-        fsp->GetEssentialTrueDofs(bottom_bdr, bottom_tdof_list);
-
-        Dirichlet.SetSize(bdr_size);
+        Dirichlet.SetSize(fsp->GetMesh()->bdr_attributes.Max());
         Dirichlet = 0;
         Dirichlet[top_attr - 1] = 1;
         Dirichlet[bottom_attr - 1] = 1;
 
-        for (int i=0; i<top_tdof_list.Size(); ++i)
-        {
-            (*phi_D)[top_tdof_list[i]] = phi_top;
-            (*c1_D) [top_tdof_list[i]] = c1_top;
-            (*c2_D) [top_tdof_list[i]] = c2_top;
-        }
-
-        for (int i=0; i<bottom_tdof_list.Size(); ++i)
-        {
-            (*phi_D)[bottom_tdof_list[i]] = phi_bottom;
-            (*c1_D) [bottom_tdof_list[i]] = c1_bottom;
-            (*c2_D) [bottom_tdof_list[i]] = c2_bottom;
-        }
-
-        phi_D->SetTrueVector();
-        phi_D->SetFromTrueVector();
-        c1_D ->SetTrueVector();
-        c1_D ->SetFromTrueVector();
-        c2_D ->SetTrueVector();
-        c2_D ->SetFromTrueVector();
-
-        phi_D_coeff = new GridFunctionCoefficient(phi_D);
-        c1_D_coeff  = new GridFunctionCoefficient(c1_D);
-        c2_D_coeff  = new GridFunctionCoefficient(c2_D);
+        phi_D_coeff = new FunctionCoefficient(phi_D_func);
+        c1_D_coeff  = new FunctionCoefficient(c1_D_func);
+        c2_D_coeff  = new FunctionCoefficient(c2_D_func);
 #endif
 
         dc = new VisItDataCollection("data collection", &mesh);
@@ -2050,9 +2009,8 @@ private:
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_exact, phi_n));
 #else
         // zero Neumann bdc and below weak Dirichlet bdc
-        GridFunctionCoefficient c1_D_coeff(c1_D);
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, kappa));
-        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_D_coeff, phi_n));
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(*c1_D_coeff, D_K_, sigma, kappa));
+        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, c1_D_coeff, phi_n));
 #endif
         lf->Assemble();
 
@@ -2125,9 +2083,8 @@ private:
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_exact, phi_n));
 #else
         // zero Neumann bdc and below weak Dirichlet bdc
-        GridFunctionCoefficient c2_D_coeff(c2_D);
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_coeff, D_K_, sigma, kappa));
-        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_D_coeff, phi_n));
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(*c2_D_coeff, D_K_, sigma, kappa));
+        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, c2_D_coeff, phi_n));
 #endif
         lf->Assemble();
 
