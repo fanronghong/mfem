@@ -60,7 +60,9 @@ double c2_D_func(const Vector& x)
     if (abs(x[2] - 1.0) < 1E-10) return c2_top;
     else if (abs(x[2] - 0.0) < 1E-10) return c2_bottom;
 }
-
+FunctionCoefficient phi_D_coeff(phi_D_func);
+FunctionCoefficient c1_D_coeff (c1_D_func);
+FunctionCoefficient c2_D_coeff (c2_D_func);
 
 #elif defined(Angstrom_SCALE) and !defined(PhysicalModel)
 #define COMPUTE_CONVERGENCE_RATE   //运行所有代码内部自己添加的assert检查. Note: 不要修改下面的输入参数, 否则会造成程序中的很多assert不能通过!

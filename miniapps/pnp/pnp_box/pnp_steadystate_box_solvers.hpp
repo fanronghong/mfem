@@ -503,6 +503,26 @@ public:
         *c1    = 0.0;
         *c2    = 0.0;
 #if defined(PhysicalModel)
+//        phi_n->ProjectCoefficient(phi_D_coeff);
+//        c1_n ->ProjectCoefficient(c1_D_coeff);
+//        c2_n ->ProjectCoefficient(c2_D_coeff);
+//        phi_n->SetTrueVector();
+//        c1_n ->SetTrueVector();
+//        c2_n ->SetTrueVector();
+//        phi_n->SetFromTrueVector();
+//        c1_n ->SetFromTrueVector();
+//        c2_n ->SetFromTrueVector();
+
+//        phi->ProjectCoefficient(phi_D_coeff);
+//        c1 ->ProjectCoefficient(c1_D_coeff);
+//        c2 ->ProjectCoefficient(c2_D_coeff);
+//        phi->SetTrueVector();
+//        c1 ->SetTrueVector();
+//        c2 ->SetTrueVector();
+//        phi->SetFromTrueVector();
+//        c1 ->SetFromTrueVector();
+//        c2 ->SetFromTrueVector();
+
         Array<int> top_bdr(bdr_size);
         top_bdr               = 0;
         top_bdr[top_attr - 1] = 1;
@@ -592,8 +612,8 @@ public:
         }
         if (iter == Gummel_max_iters) MFEM_ABORT("------> Gummel iteration Failed!!!");
 
-        {
 #ifndef PhysicalModel
+        {
             double phiL2err = phi->ComputeL2Error(phi_exact);
             double c1L2err = c1->ComputeL2Error(c1_exact);
             double c2L2err = c2->ComputeL2Error(c2_exact);
@@ -606,8 +626,12 @@ public:
                 totle_size += mesh.GetElementSize(0, 1);
             }
             meshsizes_.Append(totle_size / mesh.GetNE());
-#endif
         }
+#endif
+
+        cout << "l2 norm of phi: " << phi->Norml2() << '\n'
+             << "l2 norm of c1 : " << c1->Norml2() << '\n'
+             << "l2 norm of c2 : " << c2->Norml2() << endl;
 
         (*phi) /= alpha1;
         (*c1)  /= alpha3;
@@ -618,7 +642,7 @@ public:
         Visualize(*dc, "c2", "c2");
 //        cout << "solution vector size on coarse mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
 
-        ofstream results("phi_c1_c2_cg.vtk");
+        ofstream results("phi_c1_c2_CG_Gummel.vtk");
         results.precision(14);
         int ref = 0;
         mesh.PrintVTK(results, ref);
@@ -1878,6 +1902,9 @@ public:
 #endif
         }
 
+        cout << "l2 norm of phi: " << phi->Norml2() << '\n'
+             << "l2 norm of c1 : " << c1 ->Norml2() << '\n'
+             << "l2 norm of c2 : " << c2 ->Norml2() << endl;
         (*phi) /= alpha1;
         (*c1)  /= alpha3;
         (*c2)  /= alpha3;
@@ -1885,7 +1912,7 @@ public:
         Visualize(*dc, "c1", "c1");
         Visualize(*dc, "c2", "c2");
         cout << "solution vector size on coarse mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
-        ofstream results("phi_c1_c2_dg.vtk");
+        ofstream results("phi_c1_c2_DG_Gummel.vtk");
         results.precision(14);
         int ref = 0;
         mesh.PrintVTK(results, ref);
