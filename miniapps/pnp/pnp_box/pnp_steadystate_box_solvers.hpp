@@ -503,55 +503,55 @@ public:
         *c1    = 0.0;
         *c2    = 0.0;
 #if defined(PhysicalModel)
-//        phi_n->ProjectCoefficient(phi_D_coeff);
-//        c1_n ->ProjectCoefficient(c1_D_coeff);
-//        c2_n ->ProjectCoefficient(c2_D_coeff);
-//        phi_n->SetTrueVector();
-//        c1_n ->SetTrueVector();
-//        c2_n ->SetTrueVector();
-//        phi_n->SetFromTrueVector();
-//        c1_n ->SetFromTrueVector();
-//        c2_n ->SetFromTrueVector();
+        phi_n->ProjectCoefficient(phi_D_coeff);
+        c1_n ->ProjectCoefficient(c1_D_coeff);
+        c2_n ->ProjectCoefficient(c2_D_coeff);
+        phi_n->SetTrueVector();
+        c1_n ->SetTrueVector();
+        c2_n ->SetTrueVector();
+        phi_n->SetFromTrueVector();
+        c1_n ->SetFromTrueVector();
+        c2_n ->SetFromTrueVector();
 
-//        phi->ProjectCoefficient(phi_D_coeff);
-//        c1 ->ProjectCoefficient(c1_D_coeff);
-//        c2 ->ProjectCoefficient(c2_D_coeff);
-//        phi->SetTrueVector();
-//        c1 ->SetTrueVector();
-//        c2 ->SetTrueVector();
-//        phi->SetFromTrueVector();
-//        c1 ->SetFromTrueVector();
-//        c2 ->SetFromTrueVector();
+        phi->ProjectCoefficient(phi_D_coeff);
+        c1 ->ProjectCoefficient(c1_D_coeff);
+        c2 ->ProjectCoefficient(c2_D_coeff);
+        phi->SetTrueVector();
+        c1 ->SetTrueVector();
+        c2 ->SetTrueVector();
+        phi->SetFromTrueVector();
+        c1 ->SetFromTrueVector();
+        c2 ->SetFromTrueVector();
 
-        Array<int> top_bdr(bdr_size);
-        top_bdr               = 0;
-        top_bdr[top_attr - 1] = 1;
-        fsp->GetEssentialTrueDofs(top_bdr, top_tdof_list);
-
-        Array<int> bottom_bdr(bdr_size);
-        bottom_bdr                  = 0;
-        bottom_bdr[bottom_attr - 1] = 1;
-        fsp->GetEssentialTrueDofs(bottom_bdr, bottom_tdof_list);
-
-        // essential边界条件
-        for (int i=0; i<top_tdof_list.Size(); ++i)
-        {
-            (*phi)   [top_tdof_list[i]] = phi_top;
-            (*c1)    [top_tdof_list[i]] = c1_top;
-            (*c2)    [top_tdof_list[i]] = c2_top;
-            (*phi_n) [top_tdof_list[i]] = phi_top;
-            (*c1_n)  [top_tdof_list[i]] = c1_top;
-            (*c2_n)  [top_tdof_list[i]] = c2_top;
-        }
-        for (int i=0; i<bottom_tdof_list.Size(); ++i)
-        {
-            (*phi)   [bottom_tdof_list[i]] = phi_bottom;
-            (*c1)    [bottom_tdof_list[i]] = c1_bottom;
-            (*c2)    [bottom_tdof_list[i]] = c2_bottom;
-            (*phi_n) [bottom_tdof_list[i]] = phi_bottom;
-            (*c1_n)  [bottom_tdof_list[i]] = c1_bottom;
-            (*c2_n)  [bottom_tdof_list[i]] = c2_bottom;
-        }
+//        Array<int> top_bdr(bdr_size);
+//        top_bdr               = 0;
+//        top_bdr[top_attr - 1] = 1;
+//        fsp->GetEssentialTrueDofs(top_bdr, top_tdof_list);
+//
+//        Array<int> bottom_bdr(bdr_size);
+//        bottom_bdr                  = 0;
+//        bottom_bdr[bottom_attr - 1] = 1;
+//        fsp->GetEssentialTrueDofs(bottom_bdr, bottom_tdof_list);
+//
+//        // essential边界条件
+//        for (int i=0; i<top_tdof_list.Size(); ++i)
+//        {
+//            (*phi)   [top_tdof_list[i]] = phi_top;
+//            (*c1)    [top_tdof_list[i]] = c1_top;
+//            (*c2)    [top_tdof_list[i]] = c2_top;
+//            (*phi_n) [top_tdof_list[i]] = phi_top;
+//            (*c1_n)  [top_tdof_list[i]] = c1_top;
+//            (*c2_n)  [top_tdof_list[i]] = c2_top;
+//        }
+//        for (int i=0; i<bottom_tdof_list.Size(); ++i)
+//        {
+//            (*phi)   [bottom_tdof_list[i]] = phi_bottom;
+//            (*c1)    [bottom_tdof_list[i]] = c1_bottom;
+//            (*c2)    [bottom_tdof_list[i]] = c2_bottom;
+//            (*phi_n) [bottom_tdof_list[i]] = phi_bottom;
+//            (*c1_n)  [bottom_tdof_list[i]] = c1_bottom;
+//            (*c2_n)  [bottom_tdof_list[i]] = c2_bottom;
+//        }
 #else
         phi_n->ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
         c1_n ->ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
@@ -698,6 +698,10 @@ private:
     // 3.求解耦合的方程Poisson方程
     void Solve_Poisson()
     {
+        cout << "l2 norm of phi: " << phi->Norml2() << endl;
+        cout << "l2 norm of c1: " << c1_n->Norml2() << endl;
+        cout << "l2 norm of c2: " << c2_n->Norml2() << endl;
+
         GridFunctionCoefficient* c1_n_coeff = new GridFunctionCoefficient(c1_n);
         GridFunctionCoefficient* c2_n_coeff = new GridFunctionCoefficient(c2_n);
 #ifndef PhysicalModel
@@ -741,6 +745,8 @@ private:
         solver->Mult(*b, *x);
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *phi);
+        cout << "l2 norm of phi: " << phi->Norml2() << endl;
+//        MFEM_ABORT("PNP_CG_Gummel_Solver_par: Stop!");
 
         if (solver->GetConverged() == 1)
             cout << "phi solver: Converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
@@ -1789,7 +1795,6 @@ private:
     FiniteElementCollection* fec;
     ParFiniteElementSpace* fsp;
     ParGridFunction *phi_D, *c1_D, *c2_D; // use to set Dirichlet bdc
-    Coefficient *phi_D_coeff, *c1_D_coeff, *c2_D_coeff;
     ParGridFunction *phi, *c1, *c2;       // FE 解
     ParGridFunction *phi_n, *c1_n, *c2_n; // Gummel迭代解
 
@@ -1825,10 +1830,6 @@ public:
         Dirichlet = 0;
         Dirichlet[top_attr - 1] = 1;
         Dirichlet[bottom_attr - 1] = 1;
-
-        phi_D_coeff = new FunctionCoefficient(phi_D_func);
-        c1_D_coeff  = new FunctionCoefficient(c1_D_func);
-        c2_D_coeff  = new FunctionCoefficient(c2_D_func);
 #endif
 
         dc = new VisItDataCollection("data collection", &mesh);
@@ -1946,6 +1947,11 @@ public:
 private:
     void Solve_Poisson()
     {
+        phi->ProjectCoefficient(phi_D_coeff); phi->SetTrueVector();
+        cout << "l2 norm of phi: " << phi->Norml2() << endl;
+        cout << "l2 norm of c1: " << c1_n->Norml2() << endl;
+        cout << "l2 norm of c2: " << c2_n->Norml2() << endl;
+
 #ifndef PhysicalModel
         c1_n->ProjectCoefficient(c1_exact); // for test convergence rate
         c2_n->ProjectCoefficient(c2_exact);
@@ -1968,9 +1974,7 @@ private:
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, epsilon_water, sigma, kappa)); // 用真解构造Dirichlet边界条件
 #else
         // zero Neumann bdc and below weak Dirichlet bdc
-        // 把 phi_D_coeff 改成 GridFunctionFaceCoefficient或者GridFunctionCoefficient都不行,
-        // 但是二者错误类型不一样fff
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(*phi_D_coeff, epsilon_water, sigma, kappa), Dirichlet); // 用真解构造Dirichlet边界条件
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, epsilon_water, sigma, kappa), Dirichlet); // 用真解构造Dirichlet边界条件
 #endif
         lf->Assemble();
 
@@ -1991,9 +1995,10 @@ private:
         solver->Mult(*b, *x);
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *phi);
+        cout << "l2 norm of phi: " << phi->Norml2() << endl;
+        MFEM_ABORT("PNP_DG_Gummel_Solver_par: Stop!");
 
 #ifdef SELF_VERBOSE
-//        cout << "            l2 norm of phi: " << phi->Norml2() << endl;
         if (solver->GetConverged() == 1 && myid == 0)
             cout << "phi solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
@@ -2036,8 +2041,8 @@ private:
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_exact, phi_n));
 #else
         // zero Neumann bdc and below weak Dirichlet bdc
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(*c1_D_coeff, D_K_, sigma, kappa));
-        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, c1_D_coeff, phi_n));
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, kappa));
+        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_D_coeff, phi_n));
 #endif
         lf->Assemble();
 
@@ -2110,8 +2115,8 @@ private:
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_exact, phi_n));
 #else
         // zero Neumann bdc and below weak Dirichlet bdc
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(*c2_D_coeff, D_K_, sigma, kappa));
-        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, c2_D_coeff, phi_n));
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_coeff, D_K_, sigma, kappa));
+        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_D_coeff, phi_n));
 #endif
         lf->Assemble();
 
