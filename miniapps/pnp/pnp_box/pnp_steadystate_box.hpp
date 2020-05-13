@@ -20,7 +20,7 @@ const int front_attr        = 2;
 const int back_attr         = 4;
 const int right_attr        = 3;
 
-const int p_order           = 1; //有限元基函数的多项式次数
+const int p_order           = 3; //有限元基函数的多项式次数
 const int Gummel_max_iters  = 20;
 const double Gummel_rel_tol = 1e-8;
 const double TOL            = 1e-10;
@@ -35,7 +35,7 @@ const char* options_src     = "./pnp_steadystate_box_petsc.opts";
 #define PhysicalModel
 
 #if defined(PhysicalModel)
-// use Dirichlet bdc on top and bottom, Neumann for other boundaries
+// use Dirichlet bdc on top and bottom, zero Neumann for other boundaries
 double phi_top     = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 上边界是 Dirichlet, 乘以alpha1进行无量纲化
 double phi_bottom  = 0.5 * alpha1; // 国际单位V, 电势在计算区域的 下边界是 Dirichlet
 

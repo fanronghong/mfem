@@ -509,9 +509,6 @@ public:
         phi_n->SetTrueVector();
         c1_n ->SetTrueVector();
         c2_n ->SetTrueVector();
-        phi_n->SetFromTrueVector();
-        c1_n ->SetFromTrueVector();
-        c2_n ->SetFromTrueVector();
 
         phi->ProjectCoefficient(phi_D_coeff);
         c1 ->ProjectCoefficient(c1_D_coeff);
@@ -519,9 +516,6 @@ public:
         phi->SetTrueVector();
         c1 ->SetTrueVector();
         c2 ->SetTrueVector();
-        phi->SetFromTrueVector();
-        c1 ->SetFromTrueVector();
-        c2 ->SetFromTrueVector();
 
 //        Array<int> top_bdr(bdr_size);
 //        top_bdr               = 0;
@@ -582,7 +576,7 @@ public:
     void Solve(Array<double>& phiL2errornorms_, Array<double>& c1L2errornorms_,
                Array<double>& c2L2errornorms_, Array<double>& meshsizes_)
     {
-        cout << "\n------> Begin Gummel iteration: CG1, box model\n";
+        cout << "\n------> Begin Gummel iteration: CG" << p_order << ", box model\n";
         int iter = 0;
         while (iter < Gummel_max_iters)
         {
@@ -698,10 +692,6 @@ private:
     // 3.求解耦合的方程Poisson方程
     void Solve_Poisson()
     {
-        cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
-             << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
-             << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
-
         GridFunctionCoefficient* c1_n_coeff = new GridFunctionCoefficient(c1_n);
         GridFunctionCoefficient* c2_n_coeff = new GridFunctionCoefficient(c2_n);
 #ifndef PhysicalModel
@@ -1817,12 +1807,12 @@ public:
         c1_n  = new ParGridFunction(fsp);
         c2_n  = new ParGridFunction(fsp);
 
-        *phi   = 0.0; phi  ->SetTrueVector(); phi  ->SetFromTrueVector();
-        *phi_n = 0.0; phi_n->SetTrueVector(); phi_n->SetFromTrueVector();
-        *c1    = 0.0; c1   ->SetTrueVector(); c1   ->SetFromTrueVector();
-        *c1_n  = 0.0; c1_n ->SetTrueVector(); c1_n ->SetFromTrueVector();
-        *c2    = 0.0; c2   ->SetTrueVector(); c2   ->SetFromTrueVector();
-        *c2_n  = 0.0; c2_n ->SetTrueVector(); c2_n ->SetFromTrueVector();
+        *phi   = 0.0; phi  ->SetTrueVector();
+        *phi_n = 0.0; phi_n->SetTrueVector();
+        *c1    = 0.0; c1   ->SetTrueVector();
+        *c1_n  = 0.0; c1_n ->SetTrueVector();
+        *c2    = 0.0; c2   ->SetTrueVector();
+        *c2_n  = 0.0; c2_n ->SetTrueVector();
 
 #ifdef PhysicalModel
         Dirichlet.SetSize(fsp->GetMesh()->bdr_attributes.Max());
@@ -1846,8 +1836,7 @@ public:
     void Solve(Array<double>& phiL2errornorms_, Array<double>& c1L2errornorms_,
                Array<double>& c2L2errornorms_, Array<double>& meshsizes_)
     {
-        // -------------------- 开始 Gummel 迭代 --------------------
-        cout << "\n------> Begin Gummel iteration: DG1, box model, parallel\n";
+        cout << "\n------> Begin Gummel iteration: DG" << p_order << ", box model, parallel\n";
         int iter = 1;
         while (iter < Gummel_max_iters)
         {
@@ -1896,6 +1885,7 @@ public:
         cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
              << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
              << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
+
         (*phi) /= alpha1;
         (*c1)  /= alpha3;
         (*c2)  /= alpha3;
@@ -1937,10 +1927,6 @@ public:
 private:
     void Solve_Poisson()
     {
-        cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
-             << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
-             << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
-
 #ifndef PhysicalModel
         c1_n->ProjectCoefficient(c1_exact); // for test convergence rate
         c2_n->ProjectCoefficient(c2_exact);
@@ -1963,7 +1949,7 @@ private:
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, epsilon_water, sigma, kappa)); // 用真解构造Dirichlet边界条件
 #else
         // zero Neumann bdc and below weak Dirichlet bdc
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, epsilon_water, sigma, kappa), Dirichlet); // 用真解构造Dirichlet边界条件
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, epsilon_water, sigma, kappa), Dirichlet);
 #endif
         lf->Assemble();
 
@@ -1985,28 +1971,13 @@ private:
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *phi);
 
-#ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1 && myid == 0)
             cout << "phi solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
             cerr << "phi solver: failed to converged" << endl;
+#ifdef SELF_VERBOSE
 #endif
-        {
-//            (*phi) /= alpha1;
-//            (*c1)  /= alpha3;
-//            (*c2)  /= alpha3;
-//            ofstream results("phi_c1_c2_DG_Gummel.vtk");
-//            results.precision(14);
-//            int ref = 0;
-//            mesh.PrintVTK(results, ref);
-//            phi->SaveVTK(results, "phi", ref);
-//            c1->SaveVTK(results, "c1", ref);
-//            c2->SaveVTK(results, "c2", ref);
-//            (*phi) *= (alpha1);
-//            (*c1)  *= (alpha3);
-//            (*c2)  *= (alpha3);
-//            MFEM_ABORT("stop 1111");
-        }
+
         delete blf;
         delete lf;
         delete solver;
@@ -2020,7 +1991,6 @@ private:
         ParBilinearForm *blf = new ParBilinearForm(fsp);
         blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_K_prod_v_K));
         blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
-
         blf->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
         blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa), Dirichlet);
 
@@ -2066,12 +2036,11 @@ private:
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *c1);
 
-#ifdef SELF_VERBOSE
-//        cout << "            l2 norm of c1: " << c1->Norml2() << endl;
         if (solver->GetConverged() == 1 && myid == 0)
             cout << "np1 solver : successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
             cerr << "np1 solver : failed to converged" << endl;
+#ifdef SELF_VERBOSE
 #endif
 #ifdef CLOSE
         {
@@ -2094,7 +2063,6 @@ private:
         ParBilinearForm *blf = new ParBilinearForm(fsp);
         blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_Cl_prod_v_Cl));
         blf->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
-
         blf->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_Cl_, sigma, kappa));
         blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_Cl_, sigma, kappa), Dirichlet);
 
@@ -2140,12 +2108,11 @@ private:
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *c2);
 
-#ifdef SELF_VERBOSE
-//        cout << "            l2 norm of c2: " << c2->Norml2() << endl;
         if (solver->GetConverged() == 1 && myid == 0)
             cout << "np2 solver : successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
             cerr << "np2 solver : failed to converged" << endl;
+#ifdef SELF_VERBOSE
 #endif
 #ifdef CLOSE
         {

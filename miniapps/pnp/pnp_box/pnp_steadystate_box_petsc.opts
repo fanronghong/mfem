@@ -15,7 +15,7 @@
 
 
 -np1_ksp_type gmres
--np1_pc_type lu # ilu,jacobi...
+-np1_pc_type ilu # ilu,jacobi...
 #-np1_ksp_rtol 1e-8
 #-np1_ksp_atol 1e-20
 #-np1_ksp_divtol 1e5
@@ -47,9 +47,9 @@
 -newton_snes_max_it 20
 -newton_snes_divergence_tolerance 1e5
 -newton_snes_monitor
-#-newton_snes_monitor_solution # 打印出每个Newton步的解向量
-#-newton_snes_monitor_residual # 打印出每个Newton步的残差向量
-#-newton_snes_monitor_solution_update # 打印出每个Newton步的解的下降量
+#-newton_snes_monitor_solution
+#-newton_snes_monitor_residual
+#-newton_snes_monitor_solution_update
 -newton_ksp_type gmres
 -newton_pc_type jacobi
 -newton_ksp_max_it 10000
