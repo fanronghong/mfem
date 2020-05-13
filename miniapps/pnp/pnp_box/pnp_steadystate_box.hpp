@@ -21,7 +21,7 @@ const int back_attr         = 4;
 const int right_attr        = 3;
 
 const int p_order           = 1; //有限元基函数的多项式次数
-const int Gummel_max_iters  = 100;
+const int Gummel_max_iters  = 20;
 const double Gummel_rel_tol = 1e-8;
 const double TOL            = 1e-10;
 const char* options_src     = "./pnp_steadystate_box_petsc.opts";
@@ -37,28 +37,28 @@ const char* options_src     = "./pnp_steadystate_box_petsc.opts";
 #if defined(PhysicalModel)
 // use Dirichlet bdc on top and bottom, Neumann for other boundaries
 double phi_top     = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 上边界是 Dirichlet, 乘以alpha1进行无量纲化
-double phi_bottom  = 2.0 * alpha1; // 国际单位V, 电势在计算区域的 下边界是 Dirichlet
+double phi_bottom  = 0.5 * alpha1; // 国际单位V, 电势在计算区域的 下边界是 Dirichlet
 
-double c1_top      = 0.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 上边界是 Dirichlet,乘以alpha2是把mol/L换成Angstrom,单位统一
-double c1_bottom   = 0.9 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 下边界是 Dirichlet
+double c1_top      = 0.1 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 上边界是 Dirichlet,乘以alpha2是把mol/L换成Angstrom,单位统一
+double c1_bottom   = 2.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 下边界是 Dirichlet
 
-double c2_top      = 0.0 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
-double c2_bottom   = 0.9 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
+double c2_top      = 0.1 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
+double c2_bottom   = 2.0 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
 
 double phi_D_func(const Vector& x)
 {
     if (abs(x[2] - 1.0) < 1E-10) return phi_top;
-    else if (abs(x[2] - 0.0) < 1E-10) return phi_bottom;
+    else if (abs(x[2] + 1.0) < 1E-10) return phi_bottom;
 }
 double c1_D_func(const Vector& x)
 {
     if (abs(x[2] - 1.0) < 1E-10) return c1_top;
-    else if (abs(x[2] - 0.0) < 1E-10) return c1_bottom;
+    else if (abs(x[2] + 1.0) < 1E-10) return c1_bottom;
 }
 double c2_D_func(const Vector& x)
 {
     if (abs(x[2] - 1.0) < 1E-10) return c2_top;
-    else if (abs(x[2] - 0.0) < 1E-10) return c2_bottom;
+    else if (abs(x[2] + 1.0) < 1E-10) return c2_bottom;
 }
 FunctionCoefficient phi_D_coeff(phi_D_func);
 FunctionCoefficient c1_D_coeff (c1_D_func);
@@ -154,7 +154,7 @@ const double relax_c1  = 0.2;
 const double relax_c2  = 0.2;
 
 double sigma = -1.0;
-double kappa = 20;
+double kappa = 200;
 
 // 必须足够精确
 double phi_solver_atol = 1E-20;

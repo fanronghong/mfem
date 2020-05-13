@@ -14,4 +14,4 @@ add_subdirectory(pnp_protein)
 
 add_subdirectory(utils)
 
-
+add_subdirectory(examples)

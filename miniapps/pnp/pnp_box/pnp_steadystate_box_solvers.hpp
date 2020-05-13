@@ -629,9 +629,9 @@ public:
         }
 #endif
 
-        cout << "l2 norm of phi: " << phi->Norml2() << '\n'
-             << "l2 norm of c1 : " << c1->Norml2() << '\n'
-             << "l2 norm of c2 : " << c2->Norml2() << endl;
+        cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
+             << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
+             << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
 
         (*phi) /= alpha1;
         (*c1)  /= alpha3;
@@ -640,7 +640,7 @@ public:
         Visualize(*dc, "phi", "phi");
         Visualize(*dc, "c1", "c1");
         Visualize(*dc, "c2", "c2");
-//        cout << "solution vector size on coarse mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
+        cout << "solution vector size on coarse mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
 
         ofstream results("phi_c1_c2_CG_Gummel.vtk");
         results.precision(14);
@@ -698,9 +698,9 @@ private:
     // 3.求解耦合的方程Poisson方程
     void Solve_Poisson()
     {
-        cout << "l2 norm of phi: " << phi->Norml2() << endl;
-        cout << "l2 norm of c1: " << c1_n->Norml2() << endl;
-        cout << "l2 norm of c2: " << c2_n->Norml2() << endl;
+        cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
+             << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
+             << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
 
         GridFunctionCoefficient* c1_n_coeff = new GridFunctionCoefficient(c1_n);
         GridFunctionCoefficient* c2_n_coeff = new GridFunctionCoefficient(c2_n);
@@ -745,7 +745,7 @@ private:
         solver->Mult(*b, *x);
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *phi);
-        cout << "l2 norm of phi: " << phi->Norml2() << endl;
+//        cout << "l2 norm of phi: " << phi->Norml2() << endl;
 //        MFEM_ABORT("PNP_CG_Gummel_Solver_par: Stop!");
 
         if (solver->GetConverged() == 1)
@@ -1794,7 +1794,6 @@ private:
     ParMesh* pmesh;
     FiniteElementCollection* fec;
     ParFiniteElementSpace* fsp;
-    ParGridFunction *phi_D, *c1_D, *c2_D; // use to set Dirichlet bdc
     ParGridFunction *phi, *c1, *c2;       // FE 解
     ParGridFunction *phi_n, *c1_n, *c2_n; // Gummel迭代解
 
@@ -1836,6 +1835,7 @@ public:
         dc->RegisterField("phi", phi);
         dc->RegisterField("c1",   c1);
         dc->RegisterField("c2",   c2);
+
     }
     ~PNP_DG_Gummel_Solver_par()
     {
@@ -1869,23 +1869,13 @@ public:
             cout << "======> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
             if (tol < Gummel_rel_tol)
             {
-#ifdef SELF_VERBOSE
-                cout << "===> Gummel iteration converge!!!" << endl;
-                cout << "l2 norm of phi: " << phi->Norml2() << endl;
-                cout << "l2 norm of  c1: " << c1->Norml2() << endl;
-                cout << "l2 norm of  c2: " << c2->Norml2() << '\n' << endl;
-#endif
                 break;
             }
-#ifdef SELF_VERBOSE
-            cout << "l2 norm of phi: " << phi->Norml2() << endl;
-            cout << "l2 norm of   c1: " << c1->Norml2() << endl;
-            cout << "l2 norm of   c2: " << c2->Norml2() << endl;
-#endif
             iter++;
             cout << endl;
         }
-        if (iter == Gummel_max_iters) cerr << "===> Gummel Not converge!!!" << endl;
+        if (iter == Gummel_max_iters)
+            cerr << "===> Gummel Not converge!!!" << endl;
         {
 #ifndef PhysicalModel
             double phiL2err = phi->ComputeL2Error(phi_exact);
@@ -1903,9 +1893,9 @@ public:
 #endif
         }
 
-        cout << "l2 norm of phi: " << phi->Norml2() << '\n'
-             << "l2 norm of c1 : " << c1 ->Norml2() << '\n'
-             << "l2 norm of c2 : " << c2 ->Norml2() << endl;
+        cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
+             << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
+             << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
         (*phi) /= alpha1;
         (*c1)  /= alpha3;
         (*c2)  /= alpha3;
@@ -1947,10 +1937,9 @@ public:
 private:
     void Solve_Poisson()
     {
-        phi->ProjectCoefficient(phi_D_coeff); phi->SetTrueVector();
-        cout << "l2 norm of phi: " << phi->Norml2() << endl;
-        cout << "l2 norm of c1: " << c1_n->Norml2() << endl;
-        cout << "l2 norm of c2: " << c2_n->Norml2() << endl;
+        cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
+             << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
+             << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
 
 #ifndef PhysicalModel
         c1_n->ProjectCoefficient(c1_exact); // for test convergence rate
@@ -1959,7 +1948,7 @@ private:
         ParBilinearForm *blf = new ParBilinearForm(fsp);
         blf->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water));
         blf->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(epsilon_water, sigma, kappa)); // 后面两个参数分别是对称化参数, 惩罚参数
-        blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(epsilon_water, sigma, kappa));
+        blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(epsilon_water, sigma, kappa), Dirichlet);
         blf->Assemble();
         blf->Finalize();
 
@@ -1995,8 +1984,6 @@ private:
         solver->Mult(*b, *x);
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *phi);
-        cout << "l2 norm of phi: " << phi->Norml2() << endl;
-        MFEM_ABORT("PNP_DG_Gummel_Solver_par: Stop!");
 
 #ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1 && myid == 0)
@@ -2004,7 +1991,22 @@ private:
         else if (solver->GetConverged() != 1)
             cerr << "phi solver: failed to converged" << endl;
 #endif
-
+        {
+//            (*phi) /= alpha1;
+//            (*c1)  /= alpha3;
+//            (*c2)  /= alpha3;
+//            ofstream results("phi_c1_c2_DG_Gummel.vtk");
+//            results.precision(14);
+//            int ref = 0;
+//            mesh.PrintVTK(results, ref);
+//            phi->SaveVTK(results, "phi", ref);
+//            c1->SaveVTK(results, "c1", ref);
+//            c2->SaveVTK(results, "c2", ref);
+//            (*phi) *= (alpha1);
+//            (*c1)  *= (alpha3);
+//            (*c2)  *= (alpha3);
+//            MFEM_ABORT("stop 1111");
+        }
         delete blf;
         delete lf;
         delete solver;
@@ -2020,15 +2022,15 @@ private:
         blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
 
         blf->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
-        blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
+        blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa), Dirichlet);
 
         ProductCoefficient neg_D_K_v_K(neg, D_K_prod_v_K);
         blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n));
-        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n));
+        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n), Dirichlet);
 
         ProductCoefficient sigma_D_K_v_K(sigma_coeff, D_K_prod_v_K);
         blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi_n));
-        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi_n));
+        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi_n), Dirichlet);
 
         blf->Assemble(0);
         blf->Finalize(0);
@@ -2041,8 +2043,8 @@ private:
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_exact, phi_n));
 #else
         // zero Neumann bdc and below weak Dirichlet bdc
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, kappa));
-        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_D_coeff, phi_n));
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, kappa), Dirichlet);
+        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_D_coeff, phi_n), Dirichlet);
 #endif
         lf->Assemble();
 
@@ -2094,15 +2096,15 @@ private:
         blf->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
 
         blf->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_Cl_, sigma, kappa));
-        blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_Cl_, sigma, kappa));
+        blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_Cl_, sigma, kappa), Dirichlet);
 
         ProductCoefficient neg_D_Cl_v_Cl(neg, D_Cl_prod_v_Cl);
         blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_Cl_v_Cl, *phi_n));
-        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_Cl_v_Cl, *phi_n));
+        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_Cl_v_Cl, *phi_n), Dirichlet);
 
         ProductCoefficient sigma_D_Cl_v_Cl(sigma_coeff, D_Cl_prod_v_Cl);
         blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_Cl_v_Cl, *phi_n));
-        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_Cl_v_Cl, *phi_n));
+        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_Cl_v_Cl, *phi_n), Dirichlet);
 
         blf->Assemble(0);
         blf->Finalize(0);
@@ -2115,8 +2117,8 @@ private:
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_exact, phi_n));
 #else
         // zero Neumann bdc and below weak Dirichlet bdc
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_coeff, D_K_, sigma, kappa));
-        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_D_coeff, phi_n));
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_coeff, D_K_, sigma, kappa), Dirichlet);
+        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_D_coeff, phi_n), Dirichlet);
 #endif
         lf->Assemble();
 

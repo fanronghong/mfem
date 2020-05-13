@@ -22,8 +22,8 @@ int main(int args, char **argv)
 
     for (int i=0; i<refine_times + 1; i++) mesh.UniformRefinement();
 
-    PNP_CG_Gummel_Solver_par solver(mesh);
-//    PNP_DG_Gummel_Solver_par solver(mesh);
+//    PNP_CG_Gummel_Solver_par solver(mesh);
+    PNP_DG_Gummel_Solver_par solver(mesh);
     solver.Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
 
 
