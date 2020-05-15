@@ -20,13 +20,13 @@ int main(int args, char **argv)
     Mesh mesh(mesh_file);
     Array<double> phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes;
 
-    for (int i=0; i<refine_times + 1; i++) mesh.UniformRefinement();
+    for (int i=0; i<refine_times; i++) mesh.UniformRefinement();
 
-//    PNP_CG_Gummel_Solver_par solver(mesh);
-    PNP_CG_Newton_box_Solver_par solver(&mesh);
-//    PNP_DG_Gummel_Solver_par solver(mesh);
-    solver.Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-
+//    PNP_CG_Gummel_Solver_par* solver = new PNP_CG_Gummel_Solver_par(mesh);
+//    PNP_DG_Gummel_Solver_par* solver = new PNP_DG_Gummel_Solver_par(mesh);
+    PNP_CG_Newton_box_Solver_par* solver = new PNP_CG_Newton_box_Solver_par(&mesh);
+    solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+    delete solver;
 
 #ifndef PhysicalModel
     meshsizes.Print(cout << "\nMesh sizes: \n", meshsizes.Size());

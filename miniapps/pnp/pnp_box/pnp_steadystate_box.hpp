@@ -12,7 +12,7 @@ using namespace mfem;
 //#define SELF_VERBOSE
 
 const char* mesh_file       = "./translate_translate.msh";
-int refine_times            = 1;
+int refine_times            = 0;
 const int bottom_attr       = 1;
 const int top_attr          = 6;
 const int left_attr         = 5;
@@ -20,7 +20,7 @@ const int front_attr        = 2;
 const int back_attr         = 4;
 const int right_attr        = 3;
 
-const int p_order           = 3; //有限元基函数的多项式次数
+const int p_order           = 1; //有限元基函数的多项式次数
 const int Gummel_max_iters  = 20;
 const double Gummel_rel_tol = 1e-8;
 const double TOL            = 1e-10;

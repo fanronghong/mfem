@@ -181,7 +181,7 @@ public:
         Visualize(*dc, "phi", "phi");
         Visualize(*dc, "c1", "c1");
         Visualize(*dc, "c2", "c2");
-//        cout << "solution vector size on coarse mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
+//        cout << "solution vector size on mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
 
         ofstream results("phi_c1_c2_cg.vtk");
         results.precision(14);
@@ -206,7 +206,7 @@ public:
             Visualize(*dc, "phi", "phi (with units, added by phi1 and phi2)");
             Visualize(*dc, "c1", "c1 (with units)");
             Visualize(*dc, "c2", "c2 (with units)");
-            cout << "solution vector size on coarse mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
+            cout << "solution vector size on mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
 
             ofstream results("phi_c1_c2.vtk");
             results.precision(14);
@@ -625,6 +625,7 @@ public:
         }
 #endif
 
+        cout.precision(14);
         cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
              << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
              << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
@@ -636,7 +637,7 @@ public:
         Visualize(*dc, "phi", "phi");
         Visualize(*dc, "c1", "c1");
         Visualize(*dc, "c2", "c2");
-        cout << "solution vector size on coarse mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
+        cout << "solution vector size on mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
 
         ofstream results("phi_c1_c2_CG_Gummel.vtk");
         results.precision(14);
@@ -661,7 +662,7 @@ public:
             Visualize(*dc, "phi", "phi (with units, added by phi1 and phi2)");
             Visualize(*dc, "c1", "c1 (with units)");
             Visualize(*dc, "c2", "c2 (with units)");
-            cout << "solution vector size on coarse mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
+            cout << "solution vector size on mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
 
             ofstream results("phi_c1_c2.vtk");
             results.precision(14);
@@ -1581,7 +1582,7 @@ public:
             Visualize(*dc, "phi", "phi (with units, added by phi1 and phi2)");
             Visualize(*dc, "c1", "c1 (with units)");
             Visualize(*dc, "c2", "c2 (with units)");
-            cout << "solution vector size on coarse mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
+            cout << "solution vector size on mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
 
             ofstream results("phi_c1_c2.vtk");
             results.precision(14);
@@ -1884,6 +1885,7 @@ public:
 #endif
         }
 
+        cout.precision(14);
         cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
              << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
              << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
@@ -1894,7 +1896,7 @@ public:
         Visualize(*dc, "phi", "phi");
         Visualize(*dc, "c1", "c1");
         Visualize(*dc, "c2", "c2");
-        cout << "solution vector size on coarse mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
+        cout << "solution vector size on mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
         ofstream results("phi_c1_c2_DG_Gummel.vtk");
         results.precision(14);
         int ref = 0;
@@ -2234,6 +2236,7 @@ public:
             KSPSetFromOptions(kspblock[i]);
             KSPSetUp(kspblock[i]);
         }
+//        cout << "in BlockPreconditionerSolver::BlockPreconditionerSolver()" << endl;
     }
     virtual ~BlockPreconditionerSolver()
     {
@@ -2280,6 +2283,7 @@ public:
         Y->ResetArray();
 //        cout << "in BlockPreconditionerSolver::Mult(), l2 norm y after: " << y.Norml2() << endl;
 //        MFEM_ABORT("in BlockPreconditionerSolver::Mult()");
+//        cout << "in BlockPreconditioner::Mult()" << endl;
     }
 };
 class PreconditionerFactory: public PetscPreconditionerFactory
@@ -2288,11 +2292,15 @@ private:
     const PNP_CG_Newton_Operator_par& op; // op就是Nonlinear Operator(可用来计算Residual, Jacobian)
 
 public:
-    PreconditionerFactory(const PNP_CG_Newton_Operator_par& op_, const string& name_): PetscPreconditionerFactory(name_), op(op_) {}
+    PreconditionerFactory(const PNP_CG_Newton_Operator_par& op_, const string& name_): PetscPreconditionerFactory(name_), op(op_)
+    {
+//        cout << "in PreconditionerFactory() " << endl;
+    }
     virtual ~PreconditionerFactory() {}
 
     virtual Solver* NewPreconditioner(const OperatorHandle& oh) // oh就是当前Newton迭代步的Jacobian的句柄
     {
+//        cout << "in NewPreconditioner() " << endl;
         return new BlockPreconditionerSolver(oh);
     }
 };
@@ -2413,10 +2421,10 @@ public:
         phi->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
-        cout << "in Mult(), l2 norm of phi: " <<  phi->Norml2() << endl;
-        cout << "in Mult(), l2 norm of  c1: " << c1_k->Norml2() << endl;
-        cout << "in Mult(), l2 norm of  c2: " << c2_k->Norml2() << endl;
-        cout << "in Mult(), l2 norm of Residual: " << rhs_k->Norml2() << endl;
+//        cout << "in Mult(), l2 norm of phi: " <<  phi->Norml2() << endl;
+//        cout << "in Mult(), l2 norm of  c1: " << c1_k->Norml2() << endl;
+//        cout << "in Mult(), l2 norm of  c2: " << c2_k->Norml2() << endl;
+//        cout << "in Mult(), l2 norm of Residual: " << rhs_k->Norml2() << endl;
 
 #ifdef SELF_DEBUG
         {
@@ -2479,7 +2487,7 @@ public:
         f2->Assemble();
         f2->SetSubVector(ess_tdof_list, 0.0);
 
-        cout << "in Mult(), l2 norm of Residual: " << rhs_k->Norml2() << endl;
+//        cout << "in Mult(), l2 norm of Residual: " << rhs_k->Norml2() << endl;
     }
 
     virtual Operator &GetGradient(const Vector& x) const
@@ -2492,9 +2500,9 @@ public:
         phi->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
-        cout << "in GetGradient(), l2 norm of phi: "  << phi->Norml2() << endl;
-        cout << "in GetGradient(), l2 norm of  c1: " <<   c1_k->Norml2() << endl;
-        cout << "in GetGradient(), l2 norm of  c2: " <<   c2_k->Norml2() << endl;
+//        cout << "in GetGradient(), l2 norm of phi: "  << phi->Norml2() << endl;
+//        cout << "in GetGradient(), l2 norm of  c1: " <<   c1_k->Norml2() << endl;
+//        cout << "in GetGradient(), l2 norm of  c2: " <<   c2_k->Norml2() << endl;
 
         delete a21;
         a21 = new ParBilinearForm(fsp);
@@ -2673,7 +2681,7 @@ public:
         newton_solver->SetRelTol(newton_rtol);
         newton_solver->SetMaxIter(newton_maxitr);
         newton_solver->SetPrintLevel(newton_printlvl);
-//        newton_solver->SetPreconditionerFactory(jac_factory);
+        newton_solver->SetPreconditionerFactory(jac_factory);
     }
     virtual ~PNP_CG_Newton_box_Solver_par()
     {
@@ -2682,10 +2690,10 @@ public:
 
     void Solve(Array<double> phiL2errornomrs, Array<double> c1L2errornorms, Array<double> c2L2errornorms, Array<double> meshsizes)
     {
-        cout << "---------------------- CG1, Newton, protein, parallel ----------------------" << endl;
-        Vector zero;
-        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
-        newton_solver->Mult(zero, *u_k); // u_k must be a true vector
+        cout << "\n---------------------- CG1, Newton, box, parallel ----------------------" << endl;
+//        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
+        Vector zero_vec;
+        newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
 
         phi .MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
         c1_k.MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
@@ -2693,9 +2701,11 @@ public:
         phi.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
-        cout << "l2 norm of phi3: " << phi.Norml2() << endl;
-        cout << "l2 norm of   c1: " <<   c1_k.Norml2() << endl;
-        cout << "l2 norm of   c2: " <<   c2_k.Norml2() << endl;
+        cout.precision(14);
+        cout << "l2 norm of phi3: " << phi.ComputeL2Error(zero) << endl;
+        cout << "l2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
+        cout << "l2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
+        cout << "solution vector size on mesh: phi, " << phi.Size() << "; c1, " << c1_k.Size() << "; c2, " << c2_k.Size() << endl;
     }
 };
 
