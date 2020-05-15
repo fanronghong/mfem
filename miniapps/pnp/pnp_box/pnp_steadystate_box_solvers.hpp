@@ -9,6 +9,8 @@
 #include "../utils/DGSelfTraceIntegrator.hpp"
 #include "../utils/DGSelfBdrFaceIntegrator.hpp"
 #include "pnp_steadystate_box.hpp"
+#include "petsc.h"
+#include "../utils/petsc_utils.hpp"
 
 
 class PNP_CG_Gummel_Solver
@@ -2128,6 +2130,572 @@ private:
         delete A;
         delete x;
         delete b;
+    }
+};
+
+
+
+
+class PNP_CG_Newton_Operator_par;
+class BlockPreconditionerSolver: public Solver
+{
+private:
+    IS index_set[3];
+    Mat **sub;
+    KSP kspblock[3];
+    mutable PetscParVector *X, *Y; // Create PetscParVectors as placeholders X and Y
+
+public:
+    BlockPreconditionerSolver(const OperatorHandle& oh): Solver()
+    {
+        PetscErrorCode ierr;
+
+        // Get the PetscParMatrix out of oh.
+        PetscParMatrix *Jacobian_;
+        oh.Get(Jacobian_);
+        Mat Jacobian = *Jacobian_; // type cast to Petsc Mat
+
+        // update base (Solver) class
+        width = Jacobian_->Width();
+        height = Jacobian_->Height();
+        X = new PetscParVector(PETSC_COMM_WORLD, *this, true, false);
+        Y = new PetscParVector(PETSC_COMM_WORLD, *this, false, false);
+
+        PetscInt M, N;
+        ierr = MatNestGetSubMats(Jacobian, &N, &M, &sub); PCHKERRQ(sub[0][0], ierr); // get block matrices
+        ierr = MatNestGetISs(Jacobian, index_set, NULL); PCHKERRQ(index_set, ierr); // get the index sets of the blocks
+//        cout << "M: " << M << ", N: " << N << endl;
+//        MatView(sub[0][0], PETSC_VIEWER_STDOUT_WORLD);
+//        MatView(sub[1][1], PETSC_VIEWER_STDOUT_WORLD);
+//        MatView(sub[2][2], PETSC_VIEWER_STDOUT_WORLD);
+//        ISView(index_set[0],PETSC_VIEWER_STDOUT_WORLD);
+//        ISView(index_set[1],PETSC_VIEWER_STDOUT_WORLD);
+//        ISView(index_set[2],PETSC_VIEWER_STDOUT_WORLD);
+//        Write_Mat_Matlab_txt("A11_.m", sub[0][0]);
+//        Write_Mat_Matlab_txt("A22_.m", sub[1][1]);
+//        Write_Mat_Matlab_txt("A33_.m", sub[2][2]);
+#ifdef CLOSE
+        {
+            PetscScalar haha[height/3];
+            PetscInt    id[height/3];
+            for (int i=0; i<height/3; ++i) {
+                haha[i] = i%10;
+                id[i] = i;
+            }
+            Vec x,y;
+            MatCreateVecs(sub[0][0], &x, &y);
+            VecSetValues(x, height/3, id, haha, INSERT_VALUES);
+            VecAssemblyBegin(x);
+            VecAssemblyEnd(x);
+
+            PetscScalar norm;
+
+            MatMult(sub[0][0], x, y);
+            VecNorm(y, NORM_2, &norm);
+            cout << "A11_haha: " << norm << endl;
+
+            MatMult(sub[0][1], x, y);
+            VecNorm(y, NORM_2, &norm);
+            cout << "A12_haha: " << norm << endl;
+
+            MatMult(sub[0][2], x, y);
+            VecNorm(y, NORM_2, &norm);
+            cout << "A13_haha: " << norm << endl;
+
+            MatMult(sub[1][0], x, y);
+            VecNorm(y, NORM_2, &norm);
+            cout << "A21_haha: " << norm << endl;
+
+            MatMult(sub[1][1], x, y);
+            VecNorm(y, NORM_2, &norm);
+            cout << "A22_haha: " << norm << endl;
+
+            MatMult(sub[2][0], x, y);
+            VecNorm(y, NORM_2, &norm);
+            cout << "A31_haha: " << norm << endl;
+
+            MatMult(sub[2][2], x, y);
+            VecNorm(y, NORM_2, &norm);
+            cout << "A33_haha: " << norm << endl;
+        }
+#endif
+
+        for (int i=0; i<3; ++i)
+        {
+            ierr = KSPCreate(MPI_COMM_WORLD, &kspblock[i]); PCHKERRQ(kspblock[i], ierr);
+            ierr = KSPSetOperators(kspblock[i], sub[i][i], sub[i][i]); PCHKERRQ(sub[i][i], ierr);
+            if (i == 0)
+                KSPAppendOptionsPrefix(kspblock[i], "sub_block1_");
+            else if (i == 1)
+                KSPAppendOptionsPrefix(kspblock[i], "sub_block2_");
+            else if (i == 2)
+                KSPAppendOptionsPrefix(kspblock[i], "sub_block3_");
+            else MFEM_ABORT("Wrong block preconditioner solver!");
+            KSPSetFromOptions(kspblock[i]);
+            KSPSetUp(kspblock[i]);
+        }
+    }
+    virtual ~BlockPreconditionerSolver()
+    {
+        for (int i=0; i<3; i++)
+        {
+            KSPDestroy(&kspblock[i]);
+            //ISDestroy(&index_set[i]); no need to delete it
+        }
+
+        delete X;
+        delete Y;
+    }
+
+    virtual void SetOperator(const Operator& op) { MFEM_ABORT("Not support!"); }
+
+    virtual void Mult(const Vector& x, Vector& y) const
+    {
+        Vec blockx, blocky;
+        Vec blockx0, blocky0;
+
+        X->PlaceArray(x.GetData()); // no copy, only the data pointer is passed to PETSc
+        Y->PlaceArray(y.GetData());
+        // solve 3 equations
+        for (int i=0; i<3; ++i)
+        {
+            VecGetSubVector(*X, index_set[i], &blockx);
+            VecGetSubVector(*Y, index_set[i], &blocky);
+
+            KSPSolve(kspblock[i], blockx, blocky);
+#ifdef CLOSE
+            {
+            PetscScalar normx, normy;
+                VecNorm(blockx, NORM_2, &normx);
+               VecNorm(blocky, NORM_2, &normy);
+               cout << "norm x: " << normx
+                    << ", norm y: " << normy << endl;
+            }
+#endif
+            VecRestoreSubVector(*X, index_set[i], &blockx);
+            VecRestoreSubVector(*Y, index_set[i], &blocky);
+        }
+
+        X->ResetArray();
+        Y->ResetArray();
+//        cout << "in BlockPreconditionerSolver::Mult(), l2 norm y after: " << y.Norml2() << endl;
+//        MFEM_ABORT("in BlockPreconditionerSolver::Mult()");
+    }
+};
+class PreconditionerFactory: public PetscPreconditionerFactory
+{
+private:
+    const PNP_CG_Newton_Operator_par& op; // op就是Nonlinear Operator(可用来计算Residual, Jacobian)
+
+public:
+    PreconditionerFactory(const PNP_CG_Newton_Operator_par& op_, const string& name_): PetscPreconditionerFactory(name_), op(op_) {}
+    virtual ~PreconditionerFactory() {}
+
+    virtual Solver* NewPreconditioner(const OperatorHandle& oh) // oh就是当前Newton迭代步的Jacobian的句柄
+    {
+        return new BlockPreconditionerSolver(oh);
+    }
+};
+class PNP_CG_Newton_Operator_par: public Operator
+{
+protected:
+    ParFiniteElementSpace *fsp;
+
+    Array<int> block_offsets, block_trueoffsets;
+    mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
+    mutable BlockOperator *jac_k; // Jacobian at current solution
+
+    mutable ParLinearForm *f, *f1, *f2;
+    mutable PetscParMatrix A11, A12, A13, A21, A22, A31, A33;
+    mutable ParBilinearForm *a11, *a12, *a13, *a21, *a22, *a31, *a33;
+
+    ParGridFunction *phi, *c1_k, *c2_k;
+
+    PetscNonlinearSolver* newton_solver;
+
+    Array<int> ess_bdr, top_bdr, bottom_bdr;
+    Array<int> ess_tdof_list, top_ess_tdof_list, bottom_ess_tdof_list;
+
+    StopWatch chrono;
+    int num_procs, myid;
+    Array<int> null_array;
+
+public:
+    PNP_CG_Newton_Operator_par(ParFiniteElementSpace *fsp_): Operator(fsp_->TrueVSize()*3), fsp(fsp_)
+    {
+        MPI_Comm_size(fsp->GetComm(), &num_procs);
+        MPI_Comm_rank(fsp->GetComm(), &myid);
+
+        ess_bdr.SetSize(fsp->GetMesh()->bdr_attributes.Max());
+        ess_bdr                  = 0;
+        ess_bdr[top_attr - 1]    = 1;
+        ess_bdr[bottom_attr - 1] = 1;
+        fsp->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+
+        top_bdr.SetSize(fsp->GetMesh()->bdr_attributes.Max());
+        top_bdr                 = 0;
+        top_bdr[top_attr - 1] = 1;
+        fsp->GetEssentialTrueDofs(top_bdr, top_ess_tdof_list);
+
+        bottom_bdr.SetSize(fsp->GetMesh()->bdr_attributes.Max());
+        bottom_bdr = 0;
+        bottom_bdr[bottom_attr - 1] = 1;
+        fsp->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
+
+        block_offsets.SetSize(4); // number of variables + 1;
+        block_offsets[0] = 0;
+        block_offsets[1] = fsp->GetVSize(); //GetVSize()返回的就是总的自由度个数,也就是线性方程组的维数
+        block_offsets[2] = fsp->GetVSize();
+        block_offsets[3] = fsp->GetVSize();
+        block_offsets.PartialSum();
+
+        block_trueoffsets.SetSize(4); // number of variables + 1;
+        block_trueoffsets[0] = 0;
+        block_trueoffsets[1] = fsp->GetTrueVSize();
+        block_trueoffsets[2] = fsp->GetTrueVSize();
+        block_trueoffsets[3] = fsp->GetTrueVSize();
+        block_trueoffsets.PartialSum();
+
+        rhs_k = new BlockVector(block_trueoffsets); // not block_offsets !!!
+        jac_k = new BlockOperator(block_trueoffsets);
+        phi   = new ParGridFunction(fsp);
+        c1_k  = new ParGridFunction(fsp);
+        c2_k  = new ParGridFunction(fsp);
+
+        f  = new ParLinearForm(fsp);
+        f1  = new ParLinearForm(fsp);
+        f2  = new ParLinearForm(fsp);
+        a21 = new ParBilinearForm(fsp);
+        a22 = new ParBilinearForm(fsp);
+        a31 = new ParBilinearForm(fsp);
+        a33 = new ParBilinearForm(fsp);
+
+        a11 = new ParBilinearForm(fsp);
+        a11->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water));
+        a11->Assemble(0);
+        a11->Finalize(0);
+        a11->SetOperatorType(Operator::PETSC_MATAIJ);
+        a11->FormSystemMatrix(ess_tdof_list, A11);
+
+        a12 = new ParBilinearForm(fsp);
+        ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K(neg, alpha2_prod_alpha3_prod_v_K);
+        a12->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_K));
+        a12->Assemble(0);
+        a12->Finalize(0);
+        a12->SetOperatorType(Operator::PETSC_MATAIJ);
+        a12->FormSystemMatrix(null_array, A12);
+
+        a13 = new ParBilinearForm(fsp);
+        ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl(neg, alpha2_prod_alpha3_prod_v_Cl);
+        a13->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_Cl));
+        a13->Assemble(0);
+        a13->Finalize(0);
+        a13->SetOperatorType(Operator::PETSC_MATAIJ);
+        a13->FormSystemMatrix(null_array, A13);
+    }
+    virtual ~PNP_CG_Newton_Operator_par()
+    {
+        delete f, f1, f2;
+        delete a11, a12, a13, a21, a22, a31, a33;
+        delete rhs_k, jac_k;
+        delete newton_solver;
+    }
+
+    virtual void Mult(const Vector& x, Vector& y) const
+    {
+//        cout << "\nin PNP_Newton_Operator::Mult(), l2 norm of x: " << x.Norml2() << endl;
+//        cout << "l2 norm of y: " << y.Norml2() << endl;
+        int sc = height / 3;
+        Vector& x_ = const_cast<Vector&>(x);
+        phi->MakeTRef(fsp, x_, 0);
+        c1_k->MakeTRef(fsp, x_, sc);
+        c2_k->MakeTRef(fsp, x_, 2*sc);
+        phi->SetFromTrueVector();
+        c1_k->SetFromTrueVector();
+        c2_k->SetFromTrueVector();
+        cout << "in Mult(), l2 norm of phi: " <<  phi->Norml2() << endl;
+        cout << "in Mult(), l2 norm of  c1: " << c1_k->Norml2() << endl;
+        cout << "in Mult(), l2 norm of  c2: " << c2_k->Norml2() << endl;
+        cout << "in Mult(), l2 norm of Residual: " << rhs_k->Norml2() << endl;
+
+#ifdef SELF_DEBUG
+        {
+            // essential边界条件
+            for (int i = 0; i < top_ess_tdof_list.Size(); ++i)
+            {
+                assert(abs((phi)[top_ess_tdof_list[i]] - phi_top) < TOL);
+                assert(abs((c1_k)  [top_ess_tdof_list[i]] - c1_top)  < TOL);
+                assert(abs((c2_k)  [top_ess_tdof_list[i]] - c2_top)  < TOL);
+            }
+            for (int i = 0; i < bottom_ess_tdof_list.Size(); ++i)
+            {
+                assert(abs((phi)[bottom_ess_tdof_list[i]] - phi_bottom) < TOL);
+                assert(abs((c1_k)  [bottom_ess_tdof_list[i]] - c1_bottom)  < TOL);
+                assert(abs((c2_k)  [bottom_ess_tdof_list[i]] - c2_bottom)  < TOL);
+            }
+            for (int i=0; i<protein_dofs.Size(); ++i)
+            {
+                assert( abs((c1_k)[protein_dofs[i]])  < TOL );
+                assert( abs((c2_k)[protein_dofs[i]])  < TOL );
+            }
+        }
+#endif
+
+        rhs_k->Update(y.GetData(), block_trueoffsets); // update residual
+        Vector y1(y.GetData() +   0, sc);
+        Vector y2(y.GetData() +  sc, sc);
+        Vector y3(y.GetData() +2*sc, sc);
+
+        delete f;
+        f = new ParLinearForm(fsp);
+        f->Update(fsp, rhs_k->GetBlock(0), 0);
+        GridFunctionCoefficient c1_k_coeff(c1_k), c2_k_coeff(c2_k);
+        ProductCoefficient term1(alpha2_prod_alpha3_prod_v_K,  c1_k_coeff);
+        ProductCoefficient term2(alpha2_prod_alpha3_prod_v_Cl, c2_k_coeff);
+        SumCoefficient term(term1, term2);
+        ProductCoefficient neg_term(neg, term);
+        f->AddDomainIntegrator(new DomainLFIntegrator(neg_term));
+        f->AddDomainIntegrator(new GradConvectionIntegrator2(&epsilon_water, phi));
+        f->Assemble();
+        f->SetSubVector(ess_tdof_list, 0.0);
+
+        delete f1;
+        f1 = new ParLinearForm(fsp);
+        f1->Update(fsp, rhs_k->GetBlock(1), 0);
+        f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D_K_, c1_k));
+        ProductCoefficient D1_prod_z1_prod_c1_k(D_K_prod_v_K, c1_k_coeff);
+        f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D1_prod_z1_prod_c1_k, phi));
+        f1->Assemble();
+        f1->SetSubVector(ess_tdof_list, 0.0);
+//        for (int i=0; i<ess_tdof_list.Size(); ++i) (*f1)[ess_tdof_list[i]] = 0.0;
+
+        delete f2;
+        f2 = new ParLinearForm(fsp);
+        f2->Update(fsp, rhs_k->GetBlock(2), 0);
+        GradientGridFunctionCoefficient grad_c2_k(c2_k);
+        f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D_Cl_, c2_k));
+        ProductCoefficient D2_prod_z2_prod_c2_k(D_Cl_prod_v_Cl, c2_k_coeff);
+        f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D2_prod_z2_prod_c2_k, phi));
+        f2->Assemble();
+        f2->SetSubVector(ess_tdof_list, 0.0);
+
+        cout << "in Mult(), l2 norm of Residual: " << rhs_k->Norml2() << endl;
+    }
+
+    virtual Operator &GetGradient(const Vector& x) const
+    {
+        int sc = height / 3;
+        Vector& x_ = const_cast<Vector&>(x);
+        phi->MakeTRef(fsp, x_, 0);
+        c1_k->MakeTRef(fsp, x_, sc);
+        c2_k->MakeTRef(fsp, x_, 2*sc);
+        phi->SetFromTrueVector();
+        c1_k->SetFromTrueVector();
+        c2_k->SetFromTrueVector();
+        cout << "in GetGradient(), l2 norm of phi: "  << phi->Norml2() << endl;
+        cout << "in GetGradient(), l2 norm of  c1: " <<   c1_k->Norml2() << endl;
+        cout << "in GetGradient(), l2 norm of  c2: " <<   c2_k->Norml2() << endl;
+
+        delete a21;
+        a21 = new ParBilinearForm(fsp);
+        GridFunctionCoefficient c1_k_coeff(c1_k);
+        ProductCoefficient D1_prod_z1_prod_c1_k(D_K_prod_v_K, c1_k_coeff);
+        a21->AddDomainIntegrator(new DiffusionIntegrator(D1_prod_z1_prod_c1_k));
+        a21->Assemble(0);
+        a21->Finalize(0);
+        a21->SetOperatorType(Operator::PETSC_MATAIJ);
+        a21->FormSystemMatrix(null_array, A21);
+        A21.EliminateRows(ess_tdof_list, 0.0);
+
+        delete a22;
+        a22 = new ParBilinearForm(fsp);
+        a22->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+        a22->AddDomainIntegrator(new GradConvectionIntegrator(*phi, &D_K_prod_v_K));
+        a22->Assemble(0);
+        a22->Finalize(0);
+        a22->SetOperatorType(Operator::PETSC_MATAIJ);
+        a22->FormSystemMatrix(ess_tdof_list, A22);
+
+        delete a31;
+        a31 = new ParBilinearForm(fsp);
+        GridFunctionCoefficient c2_k_coeff(c2_k);
+        ProductCoefficient D2_prod_z2_prod_c2_k(D_Cl_prod_v_Cl, c2_k_coeff);
+        a31->AddDomainIntegrator(new DiffusionIntegrator(D2_prod_z2_prod_c2_k));
+        a31->Assemble(0);
+        a31->Finalize(0);
+        a31->SetOperatorType(Operator::PETSC_MATAIJ);
+        a31->FormSystemMatrix(null_array, A31);
+        A31.EliminateRows(ess_tdof_list, 0.0);
+
+        delete a33;
+        a33 = new ParBilinearForm(fsp);
+        a33->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
+        a33->AddDomainIntegrator(new GradConvectionIntegrator(*phi, &D_Cl_prod_v_Cl));
+        a33->Assemble(0);
+        a33->Finalize(0);
+        a33->SetOperatorType(Operator::PETSC_MATAIJ);
+        a33->FormSystemMatrix(ess_tdof_list, A33);
+
+        jac_k = new BlockOperator(block_trueoffsets);
+        jac_k->SetBlock(0, 0, &A11);
+        jac_k->SetBlock(0, 1, &A12);
+        jac_k->SetBlock(0, 2, &A13);
+        jac_k->SetBlock(1, 0, &A21);
+        jac_k->SetBlock(1, 1, &A22);
+        jac_k->SetBlock(2, 0, &A31);
+        jac_k->SetBlock(2, 2, &A33);
+#ifdef CLOSE
+        { // for test
+            cout << "after Assemble() in GetGradient() in par:\n";
+            Vector temp(height/3), haha(height/3);
+            for (int i=0; i<height/3; ++i) {
+                haha[i] = i%10;
+            }
+
+            ofstream temp_file;
+
+            temp_file.open("./A11_mult_phi_par");
+            A11.Mult(haha, temp);
+            cout << "A11_temp norm: " << temp.Norml2() << endl;
+            temp.Print(temp_file, 1);
+            temp_file.close();
+
+            temp_file.open("./A12_mult_phi_par");
+            A12.Mult(haha, temp);
+            cout << "A12_temp norm: " << temp.Norml2() << endl;
+            temp.Print(temp_file, 1);
+            temp_file.close();
+
+            temp_file.open("./A13_mult_phi_par");
+            A13.Mult(haha, temp);
+            cout << "A13_temp norm: " << temp.Norml2() << endl;
+            temp.Print(temp_file, 1);
+            temp_file.close();
+
+            temp_file.open("./A21_mult_phi_par");
+            A21.Mult(haha, temp);
+            cout << "A21_temp norm: " << temp.Norml2() << endl;
+            temp.Print(temp_file, 1);
+            temp_file.close();
+
+            temp_file.open("./A22_mult_phi_par");
+            A22.Mult(haha, temp);
+            cout << "A22_temp norm: " << temp.Norml2() << endl;
+            temp.Print(temp_file, 1);
+            temp_file.close();
+
+            temp_file.open("./A31_mult_phi_par");
+            A31.Mult(haha, temp);
+            cout << "A31_temp norm: " << temp.Norml2() << endl;
+            temp.Print(temp_file, 1);
+            temp_file.close();
+
+            temp_file.open("./A33_mult_phi_par");
+            A33.Mult(haha, temp);
+            cout << "A33_temp norm: " << temp.Norml2() << endl;
+            temp.Print(temp_file, 1);
+            temp_file.close();
+
+//            MFEM_ABORT("save mesh done in par");
+        }
+#endif
+        return *jac_k;
+    }
+};
+class PNP_CG_Newton_box_Solver_par
+{
+protected:
+    Mesh* mesh;
+    ParMesh* pmesh;
+    H1_FECollection* h1_fec;
+    ParFiniteElementSpace* h1_space;
+    PNP_CG_Newton_Operator_par* op;
+    PetscPreconditionerFactory *jac_factory;
+    PetscNonlinearSolver* newton_solver;
+
+    Array<int> block_trueoffsets, top_bdr, bottom_bdr, top_ess_tdof_list, bottom_ess_tdof_list;
+    BlockVector* u_k;
+    ParGridFunction phi, c1_k, c2_k;
+
+    StopWatch chrono;
+
+public:
+    PNP_CG_Newton_box_Solver_par(Mesh* mesh_): mesh(mesh_)
+    {
+        int mesh_dim = mesh->Dimension(); //网格的维数:1D,2D,3D
+        pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
+
+        h1_fec = new H1_FECollection(p_order, mesh_dim);
+        h1_space = new ParFiniteElementSpace(pmesh, h1_fec);
+
+        top_bdr.SetSize(h1_space->GetMesh()->bdr_attributes.Max());
+        top_bdr               = 0;
+        top_bdr[top_attr - 1] = 1;
+        h1_space->GetEssentialTrueDofs(top_bdr, top_ess_tdof_list);
+
+        bottom_bdr.SetSize(h1_space->GetMesh()->bdr_attributes.Max());
+        bottom_bdr = 0;
+        bottom_bdr[bottom_attr - 1] = 1;
+        h1_space->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
+
+        block_trueoffsets.SetSize(4);
+        block_trueoffsets[0] = 0;
+        block_trueoffsets[1] = h1_space->GetTrueVSize();
+        block_trueoffsets[2] = h1_space->GetTrueVSize();
+        block_trueoffsets[3] = h1_space->GetTrueVSize();
+        block_trueoffsets.PartialSum();
+
+        // MakeTRef(), SetTrueVector(), SetFromTrueVector() 三者要配套使用ffffffffff
+        u_k = new BlockVector(block_trueoffsets); //必须满足essential边界条件
+        phi .MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
+        c1_k.MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
+        c2_k.MakeTRef(h1_space, *u_k, block_trueoffsets[2]);
+        phi = 0.0;
+        c1_k = 0.0;
+        c2_k = 0.0;
+        phi .ProjectCoefficient(phi_D_coeff);
+        c1_k.ProjectCoefficient(c1_D_coeff);
+        c2_k.ProjectCoefficient(c2_D_coeff);
+        phi.SetTrueVector();
+        phi.SetFromTrueVector();
+        c1_k.SetTrueVector();
+        c1_k.SetFromTrueVector();
+        c2_k.SetTrueVector();
+        c2_k.SetFromTrueVector();
+
+        op = new PNP_CG_Newton_Operator_par(h1_space);
+
+        jac_factory   = new PreconditionerFactory(*op, "Block Preconditioner");
+
+        newton_solver = new PetscNonlinearSolver(h1_space->GetComm(), *op, "newton_");
+        newton_solver->iterative_mode = true;
+        newton_solver->SetAbsTol(newton_atol);
+        newton_solver->SetRelTol(newton_rtol);
+        newton_solver->SetMaxIter(newton_maxitr);
+        newton_solver->SetPrintLevel(newton_printlvl);
+//        newton_solver->SetPreconditionerFactory(jac_factory);
+    }
+    virtual ~PNP_CG_Newton_box_Solver_par()
+    {
+        delete newton_solver, op, jac_factory, u_k, mesh, pmesh;
+    }
+
+    void Solve(Array<double> phiL2errornomrs, Array<double> c1L2errornorms, Array<double> c2L2errornorms, Array<double> meshsizes)
+    {
+        cout << "---------------------- CG1, Newton, protein, parallel ----------------------" << endl;
+        Vector zero;
+        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
+        newton_solver->Mult(zero, *u_k); // u_k must be a true vector
+
+        phi .MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
+        c1_k.MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
+        c2_k.MakeTRef(h1_space, *u_k, block_trueoffsets[2]);
+        phi.SetFromTrueVector();
+        c1_k.SetFromTrueVector();
+        c2_k.SetFromTrueVector();
+        cout << "l2 norm of phi3: " << phi.Norml2() << endl;
+        cout << "l2 norm of   c1: " <<   c1_k.Norml2() << endl;
+        cout << "l2 norm of   c2: " <<   c2_k.Norml2() << endl;
     }
 };
 

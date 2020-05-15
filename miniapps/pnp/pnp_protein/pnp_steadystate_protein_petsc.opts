@@ -58,10 +58,10 @@
 #-newton_snes_rtol 1e-10
 #-newton_snes_atol 1e-20
 #-newton_snes_divergence_tolerance 1e5
--newton_snes_monitor
 -newton_snes_linesearch_type basic
 -newton_snes_linesearch_monitor
 -newton_snes_linesearch_maxstep 0
+-newton_snes_monitor
 #-newton_snes_linesearch_damping
 #-newton_snes_monitor_solution
 #-newton_snes_monitor_residual

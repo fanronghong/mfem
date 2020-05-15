@@ -78,6 +78,58 @@ public:
 };
 
 
+// 给定 w(类型为GridFunction) and Coefficient Q, compute Q*(grad(w), grad(v))_T
+class GradConvectionIntegrator2: public LinearFormIntegrator
+{
+protected:
+    Coefficient *q;
+    GradientGridFunctionCoefficient *gradw;
+
+    DenseMatrix adjJ, dshape, tmp;
+    Vector gradw_val, tmp_vec;
+
+public:
+    GradConvectionIntegrator2(Coefficient* q_, GridFunction* w): q(q_)
+    { gradw = new GradientGridFunctionCoefficient(w); }
+    ~GradConvectionIntegrator2() {}
+
+    virtual void AssembleRHSElementVect(const FiniteElement &el, ElementTransformation &Tr, Vector &elvect)
+    {
+        int nd = el.GetDof();
+        int dim = el.GetDim();
+
+        adjJ.SetSize(dim);
+        gradw_val.SetSize(dim);
+
+        dshape.SetSize(nd, dim);
+        tmp.SetSize(nd, dim);
+        tmp_vec.SetSize(nd);
+        elvect.SetSize(nd);
+        elvect = 0.0;
+
+        int order = Tr.OrderGrad(&el) + Tr.Order() + el.GetOrder();
+        const IntegrationRule *ir = &IntRules.Get(el.GetGeomType(), order);
+
+        for (int i=0; i<ir->GetNPoints(); ++i)
+        {
+            const IntegrationPoint& ip = ir->IntPoint(i);
+
+            Tr.SetIntPoint(&ip);
+            CalcAdjugate(Tr.Jacobian(), adjJ);
+
+            el.CalcDShape(ip, dshape);
+
+            gradw->Eval(gradw_val, Tr, ip);
+            double wi = ip.weight * q->Eval(Tr, ip);
+
+            Mult(dshape, adjJ, tmp);
+            tmp.Mult(gradw_val, tmp_vec);
+            elvect.Add(wi, tmp_vec);
+        }
+    }
+
+    using LinearFormIntegrator::AssembleRHSElementVect;
+};
 
 
 double sin_cfunc1_GradConvection_Integrator(const Vector& x)
@@ -128,7 +180,6 @@ void Test_gradConvectionIntegrator1()
         if (abs(res1[i]) > 1e-8) mfem_error("Wrong: GradConvection_Integrator.hpp");
     }
 }
-
 
 double func_GradConvection_Integrator(const Vector& x)
 {
@@ -181,12 +232,43 @@ void Test_gradConvectionIntegrator2()
     }
 }
 
+void Test_GradConvectionIntegrator2_1()
+{
+    Mesh mesh(100, 100, Element::TRIANGLE, 1, 1.0, 1.0);
 
+    H1_FECollection    h1_fec(1, 2);
+    FiniteElementSpace h1_space(&mesh, &h1_fec);
+    int size = h1_space.GetTrueVSize();
+
+    ConstantCoefficient one(1.23456);
+
+    GridFunction rand_gf(&h1_space), res1(&h1_space), res2(&h1_space);
+    for (int i=0; i<h1_space.GetNDofs(); ++i) rand_gf[i] = rand() % 10;
+
+    BilinearForm blf1(&h1_space);
+    blf1.AddDomainIntegrator(new DiffusionIntegrator(one));
+    blf1.Assemble();
+
+    SparseMatrix blf1_mat(blf1.SpMat());
+    blf1_mat.Mult(rand_gf, res1);
+
+    // 下面用另外一种方式生成刚度矩阵做对比
+    LinearForm lf(&h1_space);
+    lf.AddDomainIntegrator(new GradConvectionIntegrator2(&one, &rand_gf));
+    lf.Assemble();
+
+    res1 -= lf;
+    for (int i=0; i<res1.Size(); i++)
+    {
+        if (abs(res1[i]) > 1e-10) mfem_error("Wrong: class GradConvectionIntegrator2");
+    }
+}
 
 void Test_GradConvection_Integrator()
 {
     Test_gradConvectionIntegrator1();
     Test_gradConvectionIntegrator2();
+    Test_GradConvectionIntegrator2_1();
 
     cout << "===> Test Pass: GradConvection_Integrator.hpp" << endl;
 }

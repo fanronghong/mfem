@@ -172,6 +172,16 @@ double np2_solver_rtol = 1E-14;
 int np2_solver_maxiter = 1000;
 int np2_solver_printlv = -1;
 
+const double newton_rtol   = 1.0e-8;
+const double newton_atol   = 1.0e-20;
+const double newton_maxitr = 20;
+const int newton_printlvl  = 1;
+
+const double jacobi_rtol = 1.0e-8;
+const double jacobi_atol = 1.0e-20;
+const int jacobi_maxiter = 1000;
+const int jacobi_printlv = -1;
+
 ConstantCoefficient sigma_coeff(sigma);
 ConstantCoefficient kappa_coeff(kappa);
 ConstantCoefficient zero(0.0);
