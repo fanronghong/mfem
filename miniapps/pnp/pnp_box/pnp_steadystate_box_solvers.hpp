@@ -2136,8 +2136,6 @@ private:
 };
 
 
-
-
 class PNP_CG_Newton_Operator_par;
 class BlockPreconditionerSolver: public Solver
 {
