@@ -2708,4 +2708,9 @@ public:
 };
 
 
+class PNP_DG_Newton_box_Solver_par
+{
+    
+};
+
 #endif
