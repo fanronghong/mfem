@@ -2784,7 +2784,7 @@ public:
         a31 = new ParBilinearForm(fsp);
         a33 = new ParBilinearForm(fsp);
 
-        a11 = new ParBilinearForm(fsp); // goon
+        a11 = new ParBilinearForm(fsp);
         a11->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water));
         a11->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(epsilon_water, sigma, kappa));
         a11->AddBdrFaceIntegrator(new DGDiffusionIntegrator(epsilon_water, sigma, kappa));

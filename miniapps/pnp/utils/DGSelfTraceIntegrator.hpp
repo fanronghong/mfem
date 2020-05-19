@@ -13,7 +13,7 @@ using namespace std;
 using namespace mfem;
 
 /* 计算(边界或者内部Face都可以):
- *        q <{u grad(w).n}, [v]>_E,
+ *    q <{u grad(w).n}, [v]>_E,
  *
  * u is trial function, v is test function
  * q are Coefficient. q在边E的两边连续
@@ -129,7 +129,7 @@ public:
 
 
 /* 计算(边界或者内部Face都可以):
- *        q <[u], {v grad(w).n}>_E,
+ *   q <[u], {v grad(w).n}>_E,
  *
  * u is trial function, v is test function
  * q are Coefficient. q在边E的两边连续
@@ -240,6 +240,42 @@ public:
             }
         }
     }
+};
+
+
+/* 计算(边界或者内部Face都可以):
+ *   q <[u], [v]>_E,
+ *
+ * u is trial function, v is test function
+ * q are Coefficient. q在边E的两边连续
+ * */
+class DGSelfTraceIntegrator_3: public BilinearFormIntegrator
+{
+
+};
+
+
+/* 计算(边界或者内部Face都可以):
+ *   q <[u], [v]>_E,
+ *
+ * u is GridFunction, v is test function
+ * q are Coefficient. q在边E的两边连续
+ * */
+class DGSelfTraceIntegrator_4: public LinearFormIntegrator
+{
+
+};
+
+
+/* 计算(边界或者内部Face都可以):
+ *    q <{grad(u).n}, [v]>_E,
+ *
+ * u is given GridFunction, v is test function
+ * q are Coefficient. q在边E的两边连续
+ * */
+class DGSelfTraceIntegrator_5 : public LinearFormIntegrator
+{
+
 };
 
 
