@@ -1,11 +1,12 @@
 
 #include <iostream>
 #include "mfem.hpp"
-#include "../utils/GradConvection_Integrator.hpp"
+#include "../utils/DGSelfTraceIntegrator.hpp"
 using namespace std;
 using namespace mfem;
 
 int main()
 {
-    Test_GradConvection_Integrator();
+    using namespace _DGSelfTraceIntegrator;
+    Test_DGSelfTraceIntegrator();
 }

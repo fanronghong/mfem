@@ -8,6 +8,8 @@
 #include <iostream>
 #include "mfem.hpp"
 #include <cassert>
+#include <random>
+#include <numeric>
 
 using namespace std;
 using namespace mfem;
@@ -316,21 +318,114 @@ public:
 
 
 /* 计算(边界或者内部Face都可以):
- *   q <[u], [v]>_E,
+ *   q <h^{-1} [u], [v]>_E
  *
  * u is trial function, v is test function
  * q are Coefficient. q在边E的两边连续
  * */
 class DGSelfTraceIntegrator_3: public BilinearFormIntegrator
 {
+protected:
+    Coefficient* Q;
 
+    Vector shape1, shape2, nor;
+
+public:
+    DGSelfTraceIntegrator_3(Coefficient& q) : Q(&q) {}
+
+    using BilinearFormIntegrator::AssembleFaceMatrix;
+    virtual void AssembleFaceMatrix(const FiniteElement& el1,
+                                    const FiniteElement& el2,
+                                    FaceElementTransformations& Trans,
+                                    DenseMatrix& elmat)
+    {
+        int dim, ndof1, ndof2, ndofs;
+        dim = el1.GetDim();
+        ndof1 = el1.GetDof();
+        ndof2 = 0;
+
+        nor.SetSize(dim);
+        shape1.SetSize(ndof1);
+        if (Trans.Elem2No >= 0)
+        {
+            ndof2 = el2.GetDof();
+            shape2.SetSize(ndof2);
+        }
+
+        ndofs = ndof1 + ndof2;
+        elmat.SetSize(ndofs);
+        elmat = 0.0;
+
+        const IntegrationRule *ir = IntRule;
+        if (ir == NULL)
+        {
+            // a simple choice for the integration order; is this OK?
+            int order;
+            if (ndof2)
+            {
+                order = 2*max(el1.GetOrder(), el2.GetOrder());
+            }
+            else
+            {
+                order = 2*el1.GetOrder();
+            }
+            ir = &IntRules.Get(Trans.GetGeometryType(), order);
+        }
+
+        for (int p=0; p<ir->GetNPoints(); ++p)
+        {
+            const IntegrationPoint& ip = ir->IntPoint(p);
+            IntegrationPoint eip1, eip2;
+
+            Trans.Loc1.Transform(ip, eip1);
+
+            Trans.Face->SetIntPoint(&ip);
+            if (dim == 1)
+            {
+                nor(0) = 2*eip1.x - 1.0;
+            }
+            else
+            {
+                CalcOrtho(Trans.Face->Jacobian(), nor);
+            }
+
+            Trans.Elem1->SetIntPoint(&eip1);
+            double h_E = Trans.Elem1->Weight() / nor.Norml2();
+
+            double w = ip.weight * Q->Eval(*Trans.Elem1, eip1) * nor.Norml2() / h_E;
+
+            el1.CalcShape(eip1, shape1);
+            for (int i=0; i<ndof1; ++i)
+                for (int j=0; j<ndof1; ++j)
+                    elmat(i, j) += w * shape1(i) * shape1(j);
+
+            // interior facet
+            if (ndof2 > 0)
+            {
+                Trans.Loc2.Transform(ip, eip2);
+                el2.CalcShape(eip2, shape2);
+
+                for (int i=0; i<ndof1; ++i)
+                    for (int j=0; j<ndof2; ++j)
+                        elmat(i, j+ndof1) -= w * shape1(i) * shape2(j);
+
+                for (int i=0; i<ndof2; ++i)
+                    for (int j=0; j<ndof1; ++j)
+                        elmat(i+ndof1, j) -= w * shape2(i) * shape1(j);
+
+                for (int i=0; i<ndof2; ++i)
+                    for (int j=0; j<ndof2; ++j)
+                        elmat(i+ndof1, j+ndof2) += w * shape2(i) * shape2(j);
+            }
+        }
+    }
 };
 
 
 /* 计算(边界或者内部Face都可以):
- *   q <[u], [v]>_E,
+ *   q <h^{-1} [u], [v]>_E,
  *
- * u is GridFunction, v is test function
+ * u is given GridFunction, v is test function
  * q are Coefficient. q在边E的两边连续
  * */
 class DGSelfTraceIntegrator_4: public LinearFormIntegrator
@@ -348,6 +443,173 @@ class DGSelfTraceIntegrator_4: public LinearFormIntegrator
 class DGSelfTraceIntegrator_5 : public LinearFormIntegrator
 {
 
+};
+
+
+/* 计算(边界或者内部Face都可以):
+ *    q <{Q grad(u).n}, [v]>_E,
+ *
+ * u is trial function, v is test function
+ * q are Coefficient. q在边E的两边连续
+ * */
+class DGSelfTraceIntegrator_6 : public BilinearFormIntegrator
+{
+protected:
+    Coefficient *Q, *q;
+
+    Vector shape1, shape2, dshape1dn, dshape2dn, nor, nh, ni;
+    DenseMatrix jmat, dshape1, dshape2, mq, adjJ;
+
+public:
+    DGSelfTraceIntegrator_6(Coefficient* q_, Coefficient* Q_): q(q_), Q(Q_) {}
+
+    using BilinearFormIntegrator::AssembleFaceMatrix;
+    virtual void AssembleFaceMatrix(const FiniteElement &el1,
+                                    const FiniteElement &el2,
+                                    FaceElementTransformations &Trans,
+                                    DenseMatrix &elmat)
+    {
+        int dim, ndof1, ndof2, ndofs;
+        double w, wq = 0.0;
+
+        dim = el1.GetDim();
+        ndof1 = el1.GetDof();
+
+        nor.SetSize(dim);
+        nh.SetSize(dim);
+        ni.SetSize(dim);
+        adjJ.SetSize(dim);
+
+        shape1.SetSize(ndof1);
+        dshape1.SetSize(ndof1, dim);
+        dshape1dn.SetSize(ndof1);
+        if (Trans.Elem2No >= 0)
+        {
+            ndof2 = el2.GetDof();
+            shape2.SetSize(ndof2);
+            dshape2.SetSize(ndof2, dim);
+            dshape2dn.SetSize(ndof2);
+        }
+        else
+        {
+            ndof2 = 0;
+        }
+
+        ndofs = ndof1 + ndof2;
+        elmat.SetSize(ndofs);
+        elmat = 0.0;
+
+        const IntegrationRule *ir = IntRule;
+        if (ir == NULL)
+        {
+            // a simple choice for the integration order; is this OK?
+            int order;
+            if (ndof2)
+            {
+                order = 2*max(el1.GetOrder(), el2.GetOrder());
+            }
+            else
+            {
+                order = 2*el1.GetOrder();
+            }
+            ir = &IntRules.Get(Trans.GetGeometryType(), order);
+        }
+
+        for (int p = 0; p < ir->GetNPoints(); p++)
+        {
+            const IntegrationPoint &ip = ir->IntPoint(p);
+            IntegrationPoint eip1, eip2;
+
+            Trans.Loc1.Transform(ip, eip1);
+            Trans.SetIntPoint(&ip);
+            if (dim == 1)
+            {
+                nor(0) = 2*eip1.x - 1.0;
+            }
+            else
+            {
+                CalcOrtho(Trans.Jacobian(), nor);
+            }
+
+            el1.CalcShape(eip1, shape1);
+            el1.CalcDShape(eip1, dshape1);
+            Trans.Elem1->SetIntPoint(&eip1);
+            w = ip.weight/Trans.Elem1->Weight();
+            if (ndof2)
+            {
+                w /= 2;
+            }
+
+            w *= Q->Eval(*Trans.Elem1, eip1);
+            ni.Set(w, nor);
+
+            CalcAdjugate(Trans.Elem1->Jacobian(), adjJ);
+            adjJ.Mult(ni, nh);
+
+            // Note: in the jump term, we use 1/h1 = |nor|/det(J1) which is
+            // independent of Loc1 and always gives the size of element 1 in
+            // direction perpendicular to the face. Indeed, for linear transformation
+            //     |nor|=measure(face)/measure(ref. face),
+            //   det(J1)=measure(element)/measure(ref. element),
+            // and the ratios measure(ref. element)/measure(ref. face) are
+            // compatible for all element/face pairs.
+            // For example: meas(ref. tetrahedron)/meas(ref. triangle) = 1/3, and
+            // for any tetrahedron vol(tet)=(1/3)*height*area(base).
+            // For interior faces: q_e/h_e=(q1/h1+q2/h2)/2.
+
+            dshape1.Mult(nh, dshape1dn);
+            for (int i = 0; i < ndof1; i++)
+                for (int j = 0; j < ndof1; j++)
+                {
+                    elmat(i, j) += shape1(i) * dshape1dn(j);
+                }
+
+            if (ndof2)
+            {
+                Trans.Loc2.Transform(ip, eip2);
+                el2.CalcShape(eip2, shape2);
+                el2.CalcDShape(eip2, dshape2);
+                Trans.Elem2->SetIntPoint(&eip2);
+                w = ip.weight/2/Trans.Elem2->Weight();
+                w *= Q->Eval(*Trans.Elem2, eip2);
+                ni.Set(w, nor);
+
+                CalcAdjugate(Trans.Elem2->Jacobian(), adjJ);
+                adjJ.Mult(ni, nh);
+
+                dshape2.Mult(nh, dshape2dn);
+
+                for (int i = 0; i < ndof1; i++)
+                    for (int j = 0; j < ndof2; j++)
+                    {
+                        elmat(i, ndof1 + j) += shape1(i) * dshape2dn(j);
+                    }
+
+                for (int i = 0; i < ndof2; i++)
+                    for (int j = 0; j < ndof1; j++)
+                    {
+                        elmat(ndof1 + i, j) -= shape2(i) * dshape1dn(j);
+                    }
+
+                for (int i = 0; i < ndof2; i++)
+                    for (int j = 0; j < ndof2; j++)
+                    {
+                        elmat(ndof1 + i, ndof1 + j) -= shape2(i) * dshape2dn(j);
+                    }
+            }
+        }
+
+        for (int i = 0; i < ndofs; i++)
+        {
+            for (int j = 0; j < i; j++)
+            {
+                double aij = elmat(i,j), aji = elmat(j,i);
+                elmat(i,j) =  - aij;
+                elmat(j,i) =  - aji;
+            }
+            elmat(i,i) *= ( - 1.);
+        }
+    }
 };
 
 
@@ -505,6 +767,107 @@ namespace _DGSelfTraceIntegrator
 
         delete mesh;
     }
+
+    void Test_DGSelfTraceIntegrator_3()
+    {
+        Mesh* mesh = new Mesh(50, 50, Element::TRIANGLE, true, 1.0, 1.0);
+
+        DG_FECollection fec(1, mesh->Dimension());
+        FiniteElementSpace fsp(mesh, &fec);
+
+        FunctionCoefficient sin_coeff(sin_cfun);
+        GridFunction sin_gf(&fsp);
+        sin_gf.ProjectCoefficient(sin_coeff);
+
+        GridFunction rand_gf(&fsp);
+        for (int i=0; i<fsp.GetNDofs(); ++i) rand_gf[i] = rand() % 10;
+
+        {
+            Vector out1(fsp.GetVSize()), out2(fsp.GetVSize());
+
+            BilinearForm blf1(&fsp);
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(sin_coeff));
+            blf1.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0, 0));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(sin_coeff));
+            blf1.AddBdrFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0, 0));
+            blf1.Assemble();
+            blf1.Finalize();
+            blf1.Mult(rand_gf, out1);
+
+            BilinearForm blf2(&fsp);
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 1.0));
+            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 1.0));
+            blf2.Assemble();
+            blf2.Finalize();
+            blf2.Mult(rand_gf, out2);
+
+            for (int i=0; i<fsp.GetVSize(); ++i)
+                assert(abs(out1[i] - out2[i]) < 1E-10);
+        }
+
+        {
+            ConstantCoefficient neg(-1.0);
+
+            Vector out1(fsp.GetVSize()), out2(fsp.GetVSize());
+
+            BilinearForm blf1(&fsp);
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(sin_coeff));
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_6(&neg, &sin_coeff));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(sin_coeff));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_6(&neg, &sin_coeff));
+            blf1.Assemble();
+            blf1.Finalize();
+            blf1.Mult(rand_gf, out1);
+
+            BilinearForm blf2(&fsp);
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 1.0));
+            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 1.0));
+            blf2.Assemble();
+            blf2.Finalize();
+            blf2.Mult(rand_gf, out2);
+
+            for (int i=0; i<fsp.GetVSize(); ++i)
+                assert(abs(out1[i] - out2[i]) < 1E-10);
+        }
+    }
+
+    void Test_DGSelfTraceIntegrator_6()
+    {
+        Mesh* mesh = new Mesh(60, 50, Element::TRIANGLE, true, 1.0, 1.0);
+
+        DG_FECollection fec(1, mesh->Dimension());
+        FiniteElementSpace fsp(mesh, &fec);
+
+        ConstantCoefficient neg(-1.0);
+        FunctionCoefficient sin_coeff(sin_cfun);
+        GridFunction sin_gf(&fsp);
+        sin_gf.ProjectCoefficient(sin_coeff);
+
+        GridFunction rand_gf(&fsp);
+        for (int i=0; i<fsp.GetNDofs(); ++i) rand_gf[i] = rand() % 10;
+
+        Vector out1(fsp.GetVSize()), out2(fsp.GetVSize());
+
+        BilinearForm blf1(&fsp);
+        blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_6(&neg, &sin_coeff));
+        blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_6(&neg, &sin_coeff));
+        blf1.Assemble();
+        blf1.Finalize();
+        blf1.Mult(rand_gf, out1);
+
+        BilinearForm blf2(&fsp);
+        blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 0.0));
+        blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 0.0));
+        blf2.Assemble();
+        blf2.Finalize();
+        blf2.Mult(rand_gf, out2);
+
+//        out1.Print(cout << "out1: ", fsp.GetTrueVSize());
+//        out2.Print(cout << "out2: ", fsp.GetTrueVSize());
+        for (int i=0; i<fsp.GetVSize(); ++i)
+            assert(abs(out1[i] - out2[i]) < 1E-10);
+
+    }
 }
 
 void Test_DGSelfTraceIntegrator()
@@ -513,6 +876,10 @@ void Test_DGSelfTraceIntegrator()
     Test_DGSelfTraceIntegrator_1();
     Test_DGSelfTraceIntegrator_2();
     Test_DGSelfBdrFaceIntegrator_1();
+
+    Test_DGSelfTraceIntegrator_3();
+
+    Test_DGSelfTraceIntegrator_6();
 
     cout << "===> Test Pass: DGSelfTraceIntegrator.hpp" << endl;
 }
