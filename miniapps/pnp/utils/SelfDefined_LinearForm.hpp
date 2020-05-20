@@ -230,11 +230,14 @@ public:
 };
 
 
-double sin_cfunc_SelfDefined_LinearForm(const Vector& x) // 不要修改此函数,用作特例做测试用
+namespace _SelfDefined_LinearForm
+{
+
+double sin_cfunc(const Vector& x) // 不要修改此函数,用作特例做测试用
 {
     return sin(x[0]) * sin(x[1]) * sin(x[2]);
 }
-void grad_sin_cfunc_SelfDefined_LinearForm(const Vector& x, Vector& y) // 不要修改此函数,用作特例做测试用
+void grad_sin_cfunc(const Vector& x, Vector& y) // 不要修改此函数,用作特例做测试用
 {
     y[0] = cos(x[0]) * sin(x[1]) * sin(x[2]);
     y[1] = sin(x[0]) * cos(x[1]) * sin(x[2]);
@@ -242,7 +245,7 @@ void grad_sin_cfunc_SelfDefined_LinearForm(const Vector& x, Vector& y) // 不要
 }
 void Test_SelfDefined_LFFacetIntegrator3() // 这个测试里面实现了在一个facet上积分的步骤
 {
-    Mesh mesh("../../data/one_tet.msh");
+    Mesh mesh("../../../data/one_tet.msh");
     int dim = mesh.Dimension();
 
     int p_order = 1;
@@ -250,10 +253,10 @@ void Test_SelfDefined_LFFacetIntegrator3() // 这个测试里面实现了在一�
     FiniteElementSpace h1_space(&mesh, &h1_fec);
     int ndofs = h1_space.GetVSize();
 
-    FunctionCoefficient sin_coeff(sin_cfunc_SelfDefined_LinearForm);
+    FunctionCoefficient sin_coeff(sin_cfunc);
     GridFunction sin_gf(&h1_space);
     sin_gf.ProjectCoefficient(sin_coeff);
-    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc_SelfDefined_LinearForm);
+    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc);
 
     LinearForm lf1(&h1_space);
     {
@@ -332,13 +335,13 @@ void Test_SelfDefined_LFFacetIntegrator3() // 这个测试里面实现了在一�
 }
 void Test_SelfDefined_LFFacetIntegrator4()
 {
-    Mesh mesh("../../data/facet_normal1.msh");
+    Mesh mesh("../../../data/facet_normal1.msh");
 
     int p_order = 1;
     H1_FECollection h1_fec(p_order, mesh.Dimension());
     FiniteElementSpace h1_space(&mesh, &h1_fec);
 
-    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc_SelfDefined_LinearForm);
+    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc);
     ConstantCoefficient two(21.31446321465); // 可以任意改里面的数值,但是下面的测试仍然能够通过
 
     LinearForm lf1(&h1_space);
@@ -374,13 +377,13 @@ void Test_SelfDefined_LFFacetIntegrator4()
 }
 void Test_SelfDefined_LFFacetIntegrator5() // 和上面一个test几乎一样
 {
-    Mesh mesh("../../data/simple.mesh");
+    Mesh mesh("../../../data/simple.mesh");
 
     int p_order = 1;
     H1_FECollection h1_fec(p_order, mesh.Dimension());
     FiniteElementSpace h1_space(&mesh, &h1_fec);
 
-    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc_SelfDefined_LinearForm);
+    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc);
 
     Array<int> marker(mesh.bdr_attributes.Max());
     marker = 0;
@@ -401,14 +404,14 @@ void Test_SelfDefined_LFFacetIntegrator5() // 和上面一个test几乎一样
 }
 void Test_SelfDefined_LFFacetIntegrator6()
 {
-    Mesh mesh("../../data/self_defined.mesh");
+    Mesh mesh("../../../data/self_defined.mesh");
 
     int p_order = 1;
     H1_FECollection h1_fec(p_order, mesh.Dimension());
     FiniteElementSpace h1_space(&mesh, &h1_fec);
 
-    FunctionCoefficient sin_coeff(sin_cfunc_SelfDefined_LinearForm);
-    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc_SelfDefined_LinearForm);
+    FunctionCoefficient sin_coeff(sin_cfunc);
+    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc);
 
     Array<int> marker(mesh.bdr_attributes.Max());
     marker = 0;
@@ -435,11 +438,11 @@ void Test_SelfDefined_LFFacetIntegrator7() //终极测试
     int p_order = 1;
     H1_FECollection h1_fec(p_order, 3);
 
-    FunctionCoefficient sin_coeff(sin_cfunc_SelfDefined_LinearForm);
-    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc_SelfDefined_LinearForm);
+    FunctionCoefficient sin_coeff(sin_cfunc);
+    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc);
 
     //selfAssembleRHSElementVect()里面normal不取Neg()才能通过测试. 一般情况关闭这个测试
-    Mesh mesh1("../../data/special.mesh");
+    Mesh mesh1("../../../data/special.mesh");
     FiniteElementSpace h1_space(&mesh1, &h1_fec);
     Array<int> marker(mesh1.bdr_attributes.Max());
     marker = 0;
@@ -503,8 +506,8 @@ void Test_SelfDefined_LFFacetIntegrator8() //终极测试
     H1_FECollection h1_fec(p_order, 3);
     FiniteElementSpace h1_space(&mesh, &h1_fec);
 
-    FunctionCoefficient sin_coeff(sin_cfunc_SelfDefined_LinearForm);
-    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc_SelfDefined_LinearForm);
+    FunctionCoefficient sin_coeff(sin_cfunc);
+    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc);
 
     Array<int> marker(mesh.bdr_attributes.Max());
     marker = 0;
@@ -542,8 +545,8 @@ void Test_SelfDefined_LFFacetIntegrator9() //终极测试
     H1_FECollection h1_fec(p_order, 3);
     FiniteElementSpace h1_space(&mesh, &h1_fec);
 
-    FunctionCoefficient sin_coeff(sin_cfunc_SelfDefined_LinearForm);
-    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc_SelfDefined_LinearForm);
+    FunctionCoefficient sin_coeff(sin_cfunc);
+    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc);
     ConstantCoefficient arbt(3.1234345); // 为了测试SelfDefined_LinearForm对MFEM内部的积分子也是对的
 
     Array<int> marker(mesh.bdr_attributes.Max());
@@ -593,8 +596,8 @@ void Test_SelfConvectionIntegrator()
     FiniteElementSpace h1_space(&mesh, &h1_fec);
     int ndofs = h1_space.GetVSize();
 
-    FunctionCoefficient sin_coeff(sin_cfunc_SelfDefined_LinearForm);
-    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc_SelfDefined_LinearForm);
+    FunctionCoefficient sin_coeff(sin_cfunc);
+    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc);
 
     BilinearForm blf(&h1_space);
     blf.AddDomainIntegrator(new DiffusionIntegrator(sin_coeff)); // sin(x) * (grad(u), grad(v))
@@ -617,9 +620,11 @@ void Test_SelfConvectionIntegrator()
     }
 }
 
+}
 
 void Test_SelfDefined_LinearForm()
 {
+    using namespace _SelfDefined_LinearForm;
 //    Test_SelfDefined_LFFacetIntegrator9();
     Test_SelfDefined_LFFacetIntegrator3();
     Test_SelfDefined_LFFacetIntegrator4();
@@ -628,7 +633,7 @@ void Test_SelfDefined_LinearForm()
     Test_SelfDefined_LFFacetIntegrator7();
 //    Test_SelfDefined_LFFacetIntegrator8();
 
-    Test_SelfConvectionIntegrator();
+//    Test_SelfConvectionIntegrator(); // fff
 
     cout << "===> Test Pass: SelfDefined_LinearForm.hpp" << endl;
 }

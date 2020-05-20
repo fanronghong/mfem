@@ -132,11 +132,14 @@ public:
 };
 
 
-double sin_cfunc1_GradConvection_Integrator(const Vector& x)
+namespace _GradConvection_Integrator
+{
+
+double sin_cfun(const Vector& x)
 {
     return sin(x[0])*sin(x[0]) + cos(x[1])*cos(x[1]);
 }
-void grad_sin_cfunc1_GradConvection_Integrator(const Vector& x, Vector& y)
+void grad_sin_cfun(const Vector& x, Vector& y)
 {
     y[0] = 2 * sin(x[0]) * cos(x[0]);
     y[1] = -2 * cos(x[1]) * sin(x[1]);
@@ -149,8 +152,8 @@ void Test_gradConvectionIntegrator1()
     H1_FECollection    h1_fec(1, dim);
     FiniteElementSpace h1_space(&mesh, &h1_fec);
 
-    FunctionCoefficient       sin_coeff(sin_cfunc1_GradConvection_Integrator);
-    VectorFunctionCoefficient grad_sin_coeff(dim, grad_sin_cfunc1_GradConvection_Integrator);
+    FunctionCoefficient       sin_coeff(sin_cfun);
+    VectorFunctionCoefficient grad_sin_coeff(dim, grad_sin_cfun);
     ConstantCoefficient       one(1.2345678);
 
     GridFunction w(&h1_space);
@@ -181,11 +184,11 @@ void Test_gradConvectionIntegrator1()
     }
 }
 
-double func_GradConvection_Integrator(const Vector& x)
+double func(const Vector& x)
 {
     return 4*x[0] + 10*x[1];
 }
-void grad_func_GradConvection_Integrator(const Vector& x, Vector& y)
+void grad_func(const Vector& x, Vector& y)
 {
     y[0] = 4;
     y[1] = 10;
@@ -197,8 +200,8 @@ void Test_gradConvectionIntegrator2()
     H1_FECollection    h1_fec(1, 2);
     FiniteElementSpace h1_space(&mesh, &h1_fec);
 
-    FunctionCoefficient       func_coeff(func_GradConvection_Integrator);
-    VectorFunctionCoefficient grad_func_coeff(2, grad_func_GradConvection_Integrator);
+    FunctionCoefficient       func_coeff(func);
+    VectorFunctionCoefficient grad_func_coeff(2, grad_func);
     double                    alpha=1.23456789;
     ConstantCoefficient       one(alpha);
 
@@ -264,8 +267,12 @@ void Test_GradConvectionIntegrator2_1()
     }
 }
 
+}
+
+
 void Test_GradConvection_Integrator()
 {
+    using namespace _GradConvection_Integrator;
     Test_gradConvectionIntegrator1();
     Test_gradConvectionIntegrator2();
     Test_GradConvectionIntegrator2_1();

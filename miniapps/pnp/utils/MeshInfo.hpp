@@ -23,18 +23,23 @@
 using namespace std;
 using namespace mfem;
 
+namespace _MeshInfo
+{
+
 const double TOL_MeshInfo = 1E-10;
 
-void grad_sin_cfunc_MeshInfo(const Vector& x, Vector& y) // 不要修改此函数,用作特例做测试用
+void grad_sin_cfunc(const Vector& x, Vector& y) // 不要修改此函数,用作特例做测试用
 {
     y[0] = cos(x[0]) * sin(x[1]) * sin(x[2]);
     y[1] = sin(x[0]) * cos(x[1]) * sin(x[2]);
     y[2] = sin(x[0]) * sin(x[1]) * cos(x[2]);
 }
 
+}
 
 void VertexInfo(Mesh& mesh)
 {
+    using namespace _MeshInfo;
     Vector coord;
     mesh.GetVertices(coord); //得到网格的所有vertex的坐标
 
@@ -395,7 +400,7 @@ void FacetInfo2(Mesh& mesh)
 
 void FacetInfo3()
 {
-    Mesh mesh("../../data/1MAG_2.msh");
+    Mesh mesh("../../../data/1MAG_2.msh");
     int dim = mesh.Dimension();
 //    mesh.PrintInfo(cout << "mesh information:\n");
 
@@ -457,7 +462,7 @@ void FacetInfo3()
 
 void FaceTransformationInfo()
 {
-    Mesh mesh("../../data/simple.mesh");
+    Mesh mesh("../../../data/simple.mesh");
 
     Vector coors;
     mesh.GetVertices(coors);
@@ -568,8 +573,8 @@ void NormalInfo1(Mesh& mesh)
             Trans->Loc2.Transform(*center, eip2);
             Trans->Elem1->SetIntPoint(&eip1);
             Trans->Elem2->SetIntPoint(&eip2);
-            CalcOrtho(Trans->Elem1->Jacobian(), norm3);
-            CalcOrtho(Trans->Elem2->Jacobian(), norm4);
+//            CalcOrtho(Trans->Elem1->Jacobian(), norm3); // fff
+//            CalcOrtho(Trans->Elem2->Jacobian(), norm4); // fff
 
 //            cout << "Integration point: " << center->x << ", " << center->y << ", " << center->z << ", " << center->weight << endl;
 //            norm0.Print(cout << "norm0: ");
@@ -589,7 +594,7 @@ void NormalInfo2()
     // 测试目的: 位于区域内部的facet的normal是不是从单元编号较小的指向单元编号较大的. 结果:是的
     // ref: https://github.com/mfem/mfem/issues/1122#issuecomment-547714451
     {
-        Mesh mesh("../../data/simple_.msh");
+        Mesh mesh("../../../data/simple_.msh");
         int dim = mesh.Dimension();
 
         Vector norm0(dim), norm1(dim), norm2(dim), norm3(dim), norm4(dim);
@@ -627,8 +632,8 @@ void NormalInfo2()
                 Trans->Loc2.Transform(*center, eip2);
                 Trans->Elem1->SetIntPoint(&eip1);
                 Trans->Elem2->SetIntPoint(&eip2);
-                CalcOrtho(Trans->Elem1->Jacobian(), norm3);
-                CalcOrtho(Trans->Elem2->Jacobian(), norm4);
+//                CalcOrtho(Trans->Elem1->Jacobian(), norm3); // fff
+//                CalcOrtho(Trans->Elem2->Jacobian(), norm4); // fff
 
 //            cout << "Integration point: " << center->x << ", " << center->y << ", " << center->z << ", " << center->weight << endl;
 //            norm0.Print(cout << "norm0: ");
@@ -641,7 +646,7 @@ void NormalInfo2()
         }
     }
     {
-        Mesh mesh("../../data/simple_2.msh");
+        Mesh mesh("../../../data/simple_2.msh");
         int dim = mesh.Dimension();
 
         Vector norm0(dim);
@@ -667,7 +672,7 @@ void NormalInfo2()
 
 void NormalInfo3()
 {
-    Mesh mesh("../../data/simple__.mesh");
+    Mesh mesh("../../../data/simple__.mesh");
     int dim = mesh.Dimension();
 
     Vector norm0(dim), norm1(dim), norm2(dim), norm3(dim), norm4(dim), physical_center(dim);
@@ -701,8 +706,8 @@ void NormalInfo3()
             Trans->Loc2.Transform(*center, eip2);
             Trans->Elem1->SetIntPoint(&eip1);
             Trans->Elem2->SetIntPoint(&eip2);
-            CalcOrtho(Trans->Elem1->Jacobian(), norm3);
-            CalcOrtho(Trans->Elem2->Jacobian(), norm4);
+//            CalcOrtho(Trans->Elem1->Jacobian(), norm3); // fff
+//            CalcOrtho(Trans->Elem2->Jacobian(), norm4); // fff
 
 //            cout << "reference Integration point: " << center->x << ", " << center->y << ", " << center->z << endl;
 //            cout << "physicl Integration point: " << physical_center[0] << ", " << physical_center[0] << ", " << physical_center[0] << endl;
@@ -721,7 +726,7 @@ void NormalInfo4()
     // 再次测试: 区域内部的facet的normal是不是从单元编号较小的单元指向编号较大的单元
     // ref: https://github.com/mfem/mfem/issues/1122#issuecomment-547714451
     // 结论: 是的
-    Mesh mesh("../../data/1MAG_2.msh"); //该网格单元编号只有1和2
+    Mesh mesh("../../../data/1MAG_2.msh"); //该网格单元编号只有1和2
     int dim = mesh.Dimension();
 
     Vector facet_normal(dim), center1(dim), center2(dim);
@@ -756,6 +761,8 @@ void NormalInfo4()
 
 void NormalInfo5()
 {
+    using namespace _MeshInfo;
+
     /* MFEM读取Gmsh的3D网格之后,只保留3部分内容:vetex的坐标,Element(四面体)的节点编号,其余剩下的都是BdrElement
      * 如果把Gmsh中的某个(些)interior facet(s)当成interface,那么这些facet在MFEM里面变成BdrElement.
      * 那么在利用 BoundaryNormalLFIntegrator 在这些facet上积分时,这个facet normal的确定方式是右手定则(由组成这个
@@ -765,7 +772,7 @@ void NormalInfo5()
      * 下面来验证这个解释是否正确.
      * facet_normal1.msh和facet_normal2.msh只有interface facet的节点顺序不一致,其余完全相同
      * */
-    Mesh mesh1("../../data/facet_normal1.msh");
+    Mesh mesh1("../../../data/facet_normal1.msh");
     H1_FECollection h1_fec1(1, mesh1.Dimension());
     FiniteElementSpace h1_space1(&mesh1, &h1_fec1);
     LinearForm lf1(&h1_space1);
@@ -773,13 +780,13 @@ void NormalInfo5()
         Array<int> marker(mesh1.bdr_attributes.Max());
         marker = 0;
         marker[3 - 1] = 1;
-        VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc_MeshInfo);
+        VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc);
         lf1.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(grad_sin_coeff), marker);
         lf1.Assemble();
 //        lf1.Print(cout << "lf1: ");
     }
 
-    Mesh mesh2("../../data/facet_normal2.msh");
+    Mesh mesh2("../../../data/facet_normal2.msh");
     H1_FECollection h1_fec2(1, mesh2.Dimension());
     FiniteElementSpace h1_space2(&mesh2, &h1_fec2);
     LinearForm lf2(&h1_space2);
@@ -787,7 +794,7 @@ void NormalInfo5()
         Array<int> marker(mesh2.bdr_attributes.Max());
         marker = 0;
         marker[3 - 1] = 1;
-        VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc_MeshInfo);
+        VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc);
         lf2.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(grad_sin_coeff), marker);
         lf2.Assemble();
 //        lf2.Print(cout << "lf2: ");
@@ -802,7 +809,7 @@ void NormalInfo5()
 
 void Test_MeshInfo()
 {
-    Mesh mesh("../../data/1MAG_2.msh"); //不要更改这里的网格: 下面函数的调用都是针对这个网格的,换一个网格有可能会有异常
+    Mesh mesh("../../../data/1MAG_2.msh"); //不要更改这里的网格: 下面函数的调用都是针对这个网格的,换一个网格有可能会有异常
 //    mesh.attributes.Print(cout << "mesh.attributes: ", mesh.attributes.Size());
 //    mesh.bdr_attributes.Print(cout << "mesh.bdr_attributes: ", mesh.bdr_attributes.Size());
 

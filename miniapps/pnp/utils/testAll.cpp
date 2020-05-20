@@ -1,5 +1,4 @@
 #include "AnalyticSolutionsWithMultiplePointCharges.hpp"
-#include "DGSelfBdrFaceIntegrator.hpp"
 #include "DGSelfTraceIntegrator.hpp"
 #include "EAFE_ModifyStiffnessMatrix.hpp"
 #include "GradConvection_Integrator.hpp"
@@ -24,7 +23,6 @@ int main()
     try 
     {
         Test_AnalyticSolutionsWithMultiplePointCharges();
-        Test_DGSelfBdrFaceIntegrator();
         Test_DGSelfTraceIntegrator();
         Test_EAFE_ModifyStiffnessMatrix();
         Test_GradConvection_Integrator();

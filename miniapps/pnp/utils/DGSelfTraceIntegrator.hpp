@@ -12,6 +12,78 @@
 using namespace std;
 using namespace mfem;
 
+
+/* 计算(区域边界积分)
+ *   q<u_D, v grad(w).n>_E
+ * q, u_D are Coefficient
+ * w is GridFunction
+ * */
+class DGSelfBdrFaceIntegrator: public LinearFormIntegrator
+{
+protected:
+    Coefficient *q, *u_D;
+    GradientGridFunctionCoefficient *gradw;
+
+    Vector nor, shape, grad_w;
+
+public:
+    DGSelfBdrFaceIntegrator(Coefficient *q_, Coefficient *u_D_, GridFunction* w)
+            : q(q_), u_D(u_D_) { gradw = new GradientGridFunctionCoefficient(w); }
+
+    virtual void AssembleRHSElementVect(const FiniteElement &el,
+                                        ElementTransformation &Tr,
+                                        Vector &elvect)
+    {
+        mfem_error("Not Support");
+    }
+
+    virtual void AssembleRHSElementVect(const FiniteElement& el,
+                                        FaceElementTransformations& Tr,
+                                        Vector& elvect)
+    {
+        int dim  = el.GetDim();
+        int ndof = el.GetDof();
+
+        nor.SetSize(dim);
+        grad_w.SetSize(dim);
+
+        shape.SetSize(ndof);
+        elvect.SetSize(ndof);
+        elvect = 0.0;
+
+        const IntegrationRule *ir = IntRule;
+        if (ir == NULL)
+        {
+            // a simple choice for the integration order; is this OK?
+            int order = 2*el.GetOrder();
+            ir = &IntRules.Get(Tr.FaceGeom, order);
+        }
+
+        for (int p = 0; p < ir->GetNPoints(); p++)
+        {
+            const IntegrationPoint& ip = ir->IntPoint(p);
+            IntegrationPoint eip;
+
+            Tr.Face->SetIntPoint(&ip);
+            if (dim == 1)
+                nor(0) = 2*eip.x - 1.0; //1维参考单元的法向量(不是单位的)
+            else
+                CalcOrtho(Tr.Face->Jacobian(), nor);
+
+            Tr.Loc1.Transform(ip, eip);
+            el.CalcShape(eip, shape);
+
+            gradw->Eval(grad_w, *Tr.Elem1, eip);
+
+            double val = ip.weight * q->Eval(*Tr.Face, ip) * u_D->Eval(*Tr.Face, ip) * (nor * grad_w);
+
+            shape *= val;
+            elvect += shape;
+        }
+    }
+};
+
+
 /* 计算(边界或者内部Face都可以):
  *    q <{u grad(w).n}, [v]>_E,
  *
@@ -279,124 +351,168 @@ class DGSelfTraceIntegrator_5 : public LinearFormIntegrator
 };
 
 
-
-double sin_cfun_DGSelfTraceIntegrator(const Vector& x)
+namespace _DGSelfTraceIntegrator
 {
-    return sin(x[0]) * sin(x[1]); // sin(x) * sin(y)
-}
-
-void Test_DGSelfTraceIntegrator_1()
-{
-    Mesh* mesh = new Mesh(50, 50, Element::TRIANGLE, true, 1.0, 1.0);
-
-//    H1_FECollection h1_fec(1, mesh->Dimension());
-    DG_FECollection h1_fec(1, mesh->Dimension());
-    FiniteElementSpace h1_space(mesh, &h1_fec);
-
-    ConstantCoefficient one(1.0);
-    ConstantCoefficient neg(-1.0);
-    FunctionCoefficient sin_coeff(sin_cfun_DGSelfTraceIntegrator);
-    GridFunction sin_gf(&h1_space), one_gf(&h1_space);
-    sin_gf.ProjectCoefficient(sin_coeff);
-    one_gf.ProjectCoefficient(one);
-
-    { // 只在内部边积分, test DGSelfTraceIntegrator_1
-        Vector out1(h1_space.GetVSize()), out2(h1_space.GetVSize());
-
-        BilinearForm blf1(&h1_space);
-        blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg, sin_gf));
-        blf1.Assemble();
-        blf1.Finalize();
-        blf1.Mult(one_gf, out1);
-
-        BilinearForm blf2(&h1_space);
-        blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(one, 0.0, 0.0));
-        blf2.Assemble();
-        blf2.Finalize();
-        blf2.Mult(sin_gf, out2);
-
-        for (int i=0; i<h1_space.GetVSize(); ++i)
-            assert(abs(out1[i] - out2[i]) < 1E-10);
+    double sin_cfun(const Vector& x)
+    {
+        return sin(x[0]) * sin(x[1]); // sin(x) * sin(y)
     }
 
-    { // 只在边界积分, test DGSelfTraceIntegrator_1
-        Vector out1(h1_space.GetVSize()), out2(h1_space.GetVSize());
-
-        BilinearForm blf1(&h1_space);
-        blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg, sin_gf));
-        blf1.Assemble();
-        blf1.Finalize();
-        blf1.Mult(one_gf, out1);
-
-        BilinearForm blf2(&h1_space);
-        blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(one, 0.0, 0.0));
-        blf2.Assemble();
-        blf2.Finalize();
-        blf2.Mult(sin_gf, out2);
-
-        for (int i=0; i<h1_space.GetVSize(); ++i)
-            assert(abs(out1[i] - out2[i]) < 1E-10);
+    double cos_cfun(const Vector& x)
+    {
+        return cos(x[0]) * cos(x[1]);
     }
 
-    delete mesh;
-}
 
-void Test_DGSelfTraceIntegrator_2()
-{
-    Mesh* mesh = new Mesh(20, 20, Element::TRIANGLE, true, 1.0, 1.0);
+    void Test_DGSelfTraceIntegrator_1()
+    {
+        Mesh* mesh = new Mesh(50, 50, Element::TRIANGLE, true, 1.0, 1.0);
 
 //    H1_FECollection h1_fec(1, mesh->Dimension());
-    DG_FECollection h1_fec(1, mesh->Dimension());
-    FiniteElementSpace h1_space(mesh, &h1_fec);
+        DG_FECollection h1_fec(1, mesh->Dimension());
+        FiniteElementSpace h1_space(mesh, &h1_fec);
 
-    ConstantCoefficient one(1.0);
-    ConstantCoefficient neg(-1.0);
-    FunctionCoefficient sin_coeff(sin_cfun_DGSelfTraceIntegrator);
-    GridFunction sin_gf(&h1_space), one_gf(&h1_space);
-    sin_gf.ProjectCoefficient(sin_coeff);
-    one_gf.ProjectCoefficient(one);
+        ConstantCoefficient one(1.0);
+        ConstantCoefficient neg(-1.0);
+        FunctionCoefficient sin_coeff(sin_cfun);
+        GridFunction sin_gf(&h1_space), one_gf(&h1_space);
+        sin_gf.ProjectCoefficient(sin_coeff);
+        one_gf.ProjectCoefficient(one);
 
-    { // test: DGSelfTraceIntegrator_2
-        Vector out1(h1_space.GetVSize()), out2(h1_space.GetVSize()), out3(h1_space.GetVSize());
+        { // 只在内部边积分, test DGSelfTraceIntegrator_1
+            Vector out1(h1_space.GetVSize()), out2(h1_space.GetVSize());
 
-        BilinearForm blf1(&h1_space);
-        blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(neg, sin_gf));
-        blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(neg, sin_gf));
-        blf1.Assemble();
-        blf1.Finalize();
-        blf1.Mult(sin_gf, out1);
+            BilinearForm blf1(&h1_space);
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg, sin_gf));
+            blf1.Assemble();
+            blf1.Finalize();
+            blf1.Mult(one_gf, out1);
 
-        BilinearForm blf2(&h1_space);
-        blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(one, 1.0, 0.0));
-        blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(one, 1.0, 0.0));
-        blf2.Assemble();
-        blf2.Finalize();
-        blf2.Mult(sin_gf, out2);
+            BilinearForm blf2(&h1_space);
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(one, 0.0, 0.0));
+            blf2.Assemble();
+            blf2.Finalize();
+            blf2.Mult(sin_gf, out2);
 
-        BilinearForm blf3(&h1_space);
-        blf3.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(one, sin_gf));
-        blf3.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(one, sin_gf));
-        blf3.Assemble();
-        blf3.Finalize();
-        blf3.Mult(one_gf, out3);
+            for (int i=0; i<h1_space.GetVSize(); ++i)
+                assert(abs(out1[i] - out2[i]) < 1E-10);
+        }
 
-        out3 += out2;
-        for (int i=0; i<h1_space.GetVSize(); ++i)
-        {
+        { // 只在边界积分, test DGSelfTraceIntegrator_1
+            Vector out1(h1_space.GetVSize()), out2(h1_space.GetVSize());
+
+            BilinearForm blf1(&h1_space);
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg, sin_gf));
+            blf1.Assemble();
+            blf1.Finalize();
+            blf1.Mult(one_gf, out1);
+
+            BilinearForm blf2(&h1_space);
+            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(one, 0.0, 0.0));
+            blf2.Assemble();
+            blf2.Finalize();
+            blf2.Mult(sin_gf, out2);
+
+            for (int i=0; i<h1_space.GetVSize(); ++i)
+                assert(abs(out1[i] - out2[i]) < 1E-10);
+        }
+
+        delete mesh;
+    }
+
+    void Test_DGSelfTraceIntegrator_2()
+    {
+        Mesh* mesh = new Mesh(20, 20, Element::TRIANGLE, true, 1.0, 1.0);
+
+//    H1_FECollection h1_fec(1, mesh->Dimension());
+        DG_FECollection h1_fec(1, mesh->Dimension());
+        FiniteElementSpace h1_space(mesh, &h1_fec);
+
+        ConstantCoefficient one(1.0);
+        ConstantCoefficient neg(-1.0);
+        FunctionCoefficient sin_coeff(sin_cfun);
+        GridFunction sin_gf(&h1_space), one_gf(&h1_space);
+        sin_gf.ProjectCoefficient(sin_coeff);
+        one_gf.ProjectCoefficient(one);
+
+        { // test: DGSelfTraceIntegrator_2
+            Vector out1(h1_space.GetVSize()), out2(h1_space.GetVSize()), out3(h1_space.GetVSize());
+
+            BilinearForm blf1(&h1_space);
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(neg, sin_gf));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(neg, sin_gf));
+            blf1.Assemble();
+            blf1.Finalize();
+            blf1.Mult(sin_gf, out1);
+
+            BilinearForm blf2(&h1_space);
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(one, 1.0, 0.0));
+            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(one, 1.0, 0.0));
+            blf2.Assemble();
+            blf2.Finalize();
+            blf2.Mult(sin_gf, out2);
+
+            BilinearForm blf3(&h1_space);
+            blf3.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(one, sin_gf));
+            blf3.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(one, sin_gf));
+            blf3.Assemble();
+            blf3.Finalize();
+            blf3.Mult(one_gf, out3);
+
+            out3 += out2;
+            for (int i=0; i<h1_space.GetVSize(); ++i)
+            {
 //            assert(abs(out1[i] - out2[i]) < 1E-10);
 //            cout << "hh" << endl;
+            }
         }
+        delete mesh;
+        cout << "     Needs more tests here!" << endl;
     }
-    delete mesh;
-    cout << "     Needs more tests here!" << endl;
+
+    void Test_DGSelfBdrFaceIntegrator_1()
+    {
+        Mesh* mesh = new Mesh(50, 50, Element::TRIANGLE, true, 1.0, 1.0);
+
+        DG_FECollection h1_fec(1, mesh->Dimension());
+        FiniteElementSpace h1_space(mesh, &h1_fec);
+
+        ConstantCoefficient one(1.0);
+        ConstantCoefficient neg(-1.0);
+        FunctionCoefficient sin_coeff(sin_cfun);
+        FunctionCoefficient cos_coeff(cos_cfun);
+        GridFunction sin_gf(&h1_space), one_gf(&h1_space);
+        sin_gf.ProjectCoefficient(sin_coeff);
+        one_gf.ProjectCoefficient(one);
+        GradientGridFunctionCoefficient grad_sin(&sin_gf);
+
+        {
+            LinearForm lf1(&h1_space);
+            lf1.AddBdrFaceIntegrator(new BoundaryFlowIntegrator(cos_coeff, grad_sin, 2.0, 0.0));
+            lf1.Assemble();
+
+            LinearForm lf2(&h1_space);
+            lf2.AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&one, &cos_coeff, &sin_gf));
+            lf2.Assemble();
+
+//        lf1.Print(cout << "lf1: " , h1_space.GetVSize());
+//        lf2.Print(cout << "lf2: ", h1_space.GetVSize());
+            for (int i=0; i<h1_space.GetVSize(); ++i)
+            {
+                assert(abs(lf1[i] - lf2[i]) < 1E-10);
+            }
+        }
+
+        delete mesh;
+    }
 }
-
-
 
 void Test_DGSelfTraceIntegrator()
 {
+    using namespace _DGSelfTraceIntegrator;
     Test_DGSelfTraceIntegrator_1();
     Test_DGSelfTraceIntegrator_2();
+    Test_DGSelfBdrFaceIntegrator_1();
 
     cout << "===> Test Pass: DGSelfTraceIntegrator.hpp" << endl;
 }

@@ -357,7 +357,7 @@ void Get_ess_tdof_list(FiniteElementSpace& fsp, const Mesh& mesh_, const int mar
 }
 void Test_Get_ess_tdof_list()
 {
-    Mesh mesh("../data/1MAG_2.msh", 1, 1);
+    Mesh mesh("../../../data/1MAG_2.msh", 1, 1);
     H1_FECollection h1_fec(1, 3);
     FiniteElementSpace h1_space(&mesh, &h1_fec);
     int protein_marker = 1;
@@ -469,7 +469,7 @@ void Test_Mark_Protein_Water_Coefficient()
     MarkProteinCoefficient protein(1, 2);
     MarkWaterCoefficient   water(1, 2);
 
-    Mesh mesh("../data/1MAG_2.msh");
+    Mesh mesh("../../../data/1MAG_2.msh");
     int dim = mesh.Dimension();
 
     int p_order = 1;

@@ -147,7 +147,7 @@ void ReadPQR(const std::string& filename, std::vector<std::vector<double>>& pqr)
 void Test_ReadPQR() // 只针对一个pqr文件做了测试
 {
     std::vector<std::vector<double>> pqr;
-    ReadPQR("../data/1MAG.pqr", pqr);
+    ReadPQR("../../../data/1MAG.pqr", pqr);
     for (int i=0; i<pqr.size(); i++)
     {
         if (i == 0)
@@ -237,8 +237,8 @@ public:
 };
 void Test_G_gradG_cfun() // 只针对特定的网格和特定的参数做测试
 {
-    const char* pqr_file = "../data/1MAG.pqr";
-    mfem::Mesh mesh("../data/1MAG_2.msh", 1, 1);
+    const char* pqr_file = "../../../data/1MAG.pqr";
+    mfem::Mesh mesh("../../../data/1MAG_2.msh", 1, 1);
     mfem::H1_FECollection h1_fec(1, 3);
     mfem::FiniteElementSpace h1_space(&mesh, &h1_fec);
     mfem::FiniteElementSpace h1_vec_space(&mesh, &h1_fec, 3);

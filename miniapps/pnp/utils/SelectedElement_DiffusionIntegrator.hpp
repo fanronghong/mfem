@@ -284,7 +284,7 @@ void Generate_Dofs(Array<int>& interfacedofs, Array<int>& attr1dofs,
 
 void Test_SelectedElement1()
 {
-    Mesh mesh("../../data/1MAG_2.msh");
+    Mesh mesh("../../../data/1MAG_2.msh");
     int dim = mesh.Dimension();
 
     Array<int> marker_attr(mesh.attributes.Size());
