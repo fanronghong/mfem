@@ -217,9 +217,12 @@ void LinearForm::Assemble()
                fes -> GetElementVDofs (tr -> Elem2No, vdofs2);
                vdofs1.Append(vdofs2); // 把两边单元的自由度编号合并到第一个vdofs
 
+               const FiniteElement* fe1 = fes->GetFE(tr->Elem1No); // 与该内部facet相连的两个 FiniteElement (与Element区分)
+               const FiniteElement* fe2 = fes->GetFE(tr->Elem2No);
+
                for (size_t k=0; k<iflfi.Size(); k++)
                {
-                   iflfi[k]->AssembleRHSElementVect(*fes->GetFE(tr->Elem1No),
+                   iflfi[k]->AssembleRHSElementVect(*fe1, *fe2,
                                                     *tr, elemvect);
                    AddElementVector(vdofs1, elemvect);
                }

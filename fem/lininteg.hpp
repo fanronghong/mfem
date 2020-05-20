@@ -36,6 +36,13 @@ public:
                                        FaceElementTransformations &Tr,
                                        Vector &elvect);
 
+    // added by fan
+   virtual void AssembleRHSElementVect(const FiniteElement& el1,
+                                        const FiniteElement& el2,
+                                        FaceElementTransformations& Tr,
+                                        Vector& elvect)
+   { MFEM_ABORT("Not support!"); }
+
    void SetIntRule(const IntegrationRule *ir) { IntRule = ir; }
    const IntegrationRule* GetIntRule() { return IntRule; }
 

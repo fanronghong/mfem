@@ -115,15 +115,15 @@ public:
     }
 
     // exactly same with above selfAssembleRHSElementVect()
-    virtual void AssembleRHSElementVect(const FiniteElement& dummy,
+    virtual void AssembleRHSElementVect(const FiniteElement& felm1, const FiniteElement& felm2,
                                         FaceElementTransformations &Trans, Vector &elvect)
     {
         const Element* e1  = mesh->GetElement(Trans.Elem1No); // 与该内部facet相连的两个 Element (与FiniteElement区分)
         const Element* e2  = mesh->GetElement(Trans.Elem2No);
         int attr1 = e1->GetAttribute(); //(对特定的mesh)蛋白和溶液的标记分别为1,2,但只想在蛋白的那个面积分,且法向量应该是蛋白区域的外法向
         int attr2 = e2->GetAttribute();
-        const FiniteElement* fe1 = fes->GetFE(Trans.Elem1No); // 与该内部facet相连的两个 FiniteElement (与Element区分)
-        const FiniteElement* fe2 = fes->GetFE(Trans.Elem2No);
+        const FiniteElement* fe1 = &felm1; // 与该内部facet相连的两个 FiniteElement (与Element区分)
+        const FiniteElement* fe2 = &felm2;
 
         int ndofs1 = fe1->GetDof(), ndofs2 = fe2->GetDof();
         shape1.SetSize(ndofs1); shape2.SetSize(ndofs2);
