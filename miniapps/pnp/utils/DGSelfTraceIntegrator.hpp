@@ -425,7 +425,7 @@ public:
 /* 计算(边界或者内部Face都可以):
  *   q <h^{-1} [u], [v]>_E,
  *
- * u is given GridFunction, v is test function
+ * u is Coefficient, v is test function
  * q are Coefficient. q在边E的两边连续
  * */
 class DGSelfTraceIntegrator_4: public LinearFormIntegrator
@@ -437,7 +437,7 @@ class DGSelfTraceIntegrator_4: public LinearFormIntegrator
 /* 计算(边界或者内部Face都可以):
  *    q <{grad(u).n}, [v]>_E,
  *
- * u is given GridFunction, v is test function
+ * u is Coefficient, v is test function
  * q are Coefficient. q在边E的两边连续
  * */
 class DGSelfTraceIntegrator_5 : public LinearFormIntegrator

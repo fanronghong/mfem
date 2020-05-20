@@ -17,7 +17,7 @@ using namespace mfem;
 
 // 给定 w(VectorFunctionCoefficient, 表示一个GridFunction的导数),
 // 计算特定的facet积分: <w \cdot n, v>, v是TestFunction, n是Facet的法向量
-class SelfDefined_LFFacetIntegrator
+class SelfDefined_LFFacetIntegrator: public LinearFormIntegrator
 {
 protected:
     VectorCoefficient& nabla_w;
@@ -33,6 +33,13 @@ public:
         mesh = fes->GetMesh();
     }
     ~SelfDefined_LFFacetIntegrator() {}
+
+    virtual void AssembleRHSElementVect(const FiniteElement &el,
+                                        ElementTransformation &Tr,
+                                        Vector &elvect)
+    {
+        MFEM_ABORT("not support!");
+    }
 
     // 把要积分的Facet当成interface
     void selfAssembleRHSElementVect(FaceElementTransformations &Trans, Vector &elvect)
@@ -106,8 +113,81 @@ public:
             }
         }
     }
-};
 
+    // exactly same with above selfAssembleRHSElementVect()
+    virtual void AssembleRHSElementVect(const FiniteElement& dummy,
+                                        FaceElementTransformations &Trans, Vector &elvect)
+    {
+        const Element* e1  = mesh->GetElement(Trans.Elem1No); // 与该内部facet相连的两个 Element (与FiniteElement区分)
+        const Element* e2  = mesh->GetElement(Trans.Elem2No);
+        int attr1 = e1->GetAttribute(); //(对特定的mesh)蛋白和溶液的标记分别为1,2,但只想在蛋白的那个面积分,且法向量应该是蛋白区域的外法向
+        int attr2 = e2->GetAttribute();
+        const FiniteElement* fe1 = fes->GetFE(Trans.Elem1No); // 与该内部facet相连的两个 FiniteElement (与Element区分)
+        const FiniteElement* fe2 = fes->GetFE(Trans.Elem2No);
+
+        int ndofs1 = fe1->GetDof(), ndofs2 = fe2->GetDof();
+        shape1.SetSize(ndofs1); shape2.SetSize(ndofs2);
+        elvect.SetSize(ndofs1 + ndofs2);
+        elvect = 0.0;
+
+        int dim = fe1->GetDim();
+        normal.SetSize(dim);
+        gradw.SetSize(dim);
+
+        Geometry::Type geo_type = mesh->GetFaceGeometryType(Trans.Face->ElementNo);
+        const IntegrationPoint *center = &Geometries.GetCenter(geo_type); // 计算Facet的中点,用来计算facet的法向量
+        Trans.Face->SetIntPoint(center);
+        // 下面这种计算facet的normal其方向始终从单元编号较小(肯定就是Elem1No)的指向单元编号较大(肯定就是Elem2No)的.
+        CalcOrtho(Trans.Face->Jacobian(), normal); // not unit normal vector
+        assert(Trans.Elem1No < Trans.Elem2No);
+
+        const IntegrationRule *ir = &IntRules.Get(Trans.FaceGeom, 2 * fe1->GetOrder()); //得到facet上的积分点集
+        IntegrationPoint eip;
+        if (attr1 == protein_marker && attr2 == water_marker)
+        {
+            for (int i=0; i<ir->GetNPoints(); i++)
+            {
+                const IntegrationPoint &ip = ir->IntPoint(i);
+                Trans.Face->SetIntPoint(&ip);
+
+                Trans.Loc1.Transform(ip, eip); //把facet上的积分点变换到第一个与该face相连的单元的参考单元上
+                fe1->CalcShape(eip, shape1);
+                shape2 = 0.0; //只在attribute为1的单元积分
+
+                Trans.Elem1->SetIntPoint(&eip);
+                nabla_w.Eval(gradw, *(Trans.Elem1), eip);
+
+                double val = ip.weight * (gradw * normal); //ref:BoundaryLFIntegrator::AssembleRHSElementVect()
+                for (int j = 0; j < ndofs1; j++)
+                {
+                    elvect[j] += val * shape1[j];
+                }
+            }
+        }
+        else if (attr1 == water_marker && attr2 == protein_marker)
+        {
+            normal.Neg(); // 要取attribute为1(蛋白单元)的element的外法向量
+            for (int i=0; i<ir->GetNPoints(); i++)
+            {
+                const IntegrationPoint& ip = ir->IntPoint(i);
+                Trans.Face->SetIntPoint(&ip);
+
+                Trans.Loc2.Transform(ip, eip); //把facet上的积分点变换到第一个与该face相连的单元的参考单元上
+                fe2->CalcShape(eip, shape2);
+                shape1 = 0.0; //只在attribute为1的单元积分
+
+                Trans.Elem2->SetIntPoint(&eip);
+                nabla_w.Eval(gradw, *(Trans.Elem2), eip);
+
+                double val = ip.weight * (gradw * normal); //ref:BoundaryLFIntegrator::AssembleRHSElementVect()
+                for (int j=0; j<ndofs2; j++)
+                {
+                    elvect[j + ndofs1] += val*shape2[j];
+                }
+            }
+        }
+    }
+};
 
 // Given VectorCoefficient w and Coefficient Q, compute Q*(w, grad(v))_{\Omega}
 class SelfConvectionIntegrator
@@ -583,6 +663,40 @@ void Test_SelfDefined_LFFacetIntegrator9() //终极测试
         }
     }
 //    cout << "equal: " << equal << ",  conter: " << conter << ",  error: " << error << endl;
+}
+
+void Test_SelfDefined_LFFacetIntegrator10()
+{
+    // 测试两种不同的方式进行单元内部边界积分: 实验结果显示两种方式完全等价
+    int p_order = 1;
+    H1_FECollection h1_fec(p_order, 3);
+
+    FunctionCoefficient sin_coeff(sin_cfunc);
+    VectorFunctionCoefficient grad_sin_coeff(3, grad_sin_cfunc);
+
+    //selfAssembleRHSElementVect()里面normal不取Neg()才能通过测试. 一般情况关闭这个测试
+    Mesh mesh1("../../../data/special.mesh");
+    FiniteElementSpace h1_space(&mesh1, &h1_fec);
+    Array<int> marker(mesh1.bdr_attributes.Max());
+    marker = 0;
+    marker[7 - 1] = 1; // interface的标记为7
+
+    LinearForm lf1(&h1_space);
+    Array<int> null_array;
+    lf1.AddInteriorFaceIntegrator(new SelfDefined_LFFacetIntegrator(&h1_space, grad_sin_coeff, 1, 2), null_array); //(g \cdot n, v)
+    lf1.Assemble();
+
+    SelfDefined_LinearForm lf2(&h1_space);
+    lf2.AddSelfDefined_LFFacetIntegrator(new SelfDefined_LFFacetIntegrator(&h1_space, grad_sin_coeff, 1, 2));
+    lf2.SelfDefined_Assemble();
+
+//    assert(lf1.Size() == lf2.Size());
+//    lf1.Print(cout << "lf1: " , h1_space.GetVSize());
+//    lf2.Print(cout << "lf2: " , h1_space.GetVSize());
+    for (size_t i=0; i<lf1.Size(); i++)
+    {
+        assert(abs(lf1[i] - lf2[i]) < 1E-8);
+    }
 }
 
 

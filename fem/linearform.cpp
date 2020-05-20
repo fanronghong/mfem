@@ -76,6 +76,13 @@ void LinearForm::AddBdrFaceIntegrator(LinearFormIntegrator *lfi,
    flfi_marker.Append(&bdr_attr_marker);
 }
 
+// added by fan
+void LinearForm::AddInteriorFaceIntegrator(LinearFormIntegrator *lfi, Array<int> face_attr_marker)
+{
+    iflfi.Append(lfi);
+    iflfi_marker.Append(&face_attr_marker);
+}
+
 void LinearForm::Assemble()
 {
    Array<int> vdofs;
@@ -193,6 +200,31 @@ void LinearForm::Assemble()
             }
          }
       }
+   }
+   if (iflfi.Size()) // added by fan. Interior face linear form integrator
+   {
+       Mesh* mesh = fes->GetMesh();
+       FaceElementTransformations* tr;
+       Vector elemvect;
+       Array<int> vdofs1, vdofs2; //单元刚度向量组装到总的载荷向量时用到的自由度编号
+
+       for (size_t i=0; i<mesh->GetNumFaces(); i++) // 对所有的facet循环:interior facet, boundary facet
+       {
+           tr = mesh->GetInteriorFaceTransformations(i);
+           if (tr != NULL) // facet位于interior,否则位于区域边界
+           {
+               fes -> GetElementVDofs (tr -> Elem1No, vdofs1);
+               fes -> GetElementVDofs (tr -> Elem2No, vdofs2);
+               vdofs1.Append(vdofs2); // 把两边单元的自由度编号合并到第一个vdofs
+
+               for (size_t k=0; k<iflfi.Size(); k++)
+               {
+                   iflfi[k]->AssembleRHSElementVect(*fes->GetFE(tr->Elem1No),
+                                                    *tr, elemvect);
+                   AddElementVector(vdofs1, elemvect);
+               }
+           }
+       }
    }
 }
 
