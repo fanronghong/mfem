@@ -305,7 +305,7 @@ void Test2_EAFE_Modify()
     }
 
     Array<double> rates = compute_convergence(L2norms, meshsizes);
-    rates.Print(std::cout);
+//    rates.Print(std::cout);
     int size = rates.Size() - 1;
     assert(abs(rates[size - 0] - 2.0) < 0.1); // the last 2 must be close 2.0 (L2 errornorm convergence rate)
 //    assert(abs(rates[size - 1] - 2.0) < 0.1);

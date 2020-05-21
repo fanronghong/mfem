@@ -7,7 +7,6 @@
 #include "../utils/python_utils.hpp"
 #include "../utils/SUPG_Integrator.hpp"
 #include "../utils/DGSelfTraceIntegrator.hpp"
-#include "../utils/DGSelfBdrFaceIntegrator.hpp"
 #include "pnp_steadystate_box.hpp"
 #include "petsc.h"
 #include "../utils/petsc_utils.hpp"
@@ -2287,10 +2286,10 @@ public:
 class PreconditionerFactory: public PetscPreconditionerFactory
 {
 private:
-    const PNP_CG_Newton_Operator_par& op; // op就是Nonlinear Operator(可用来计算Residual, Jacobian)
+    const Operator& op; // op就是Nonlinear Operator(可用来计算Residual, Jacobian)
 
 public:
-    PreconditionerFactory(const PNP_CG_Newton_Operator_par& op_, const string& name_): PetscPreconditionerFactory(name_), op(op_)
+    PreconditionerFactory(const Operator& op_, const string& name_): PetscPreconditionerFactory(name_), op(op_)
     {
 //        cout << "in PreconditionerFactory() " << endl;
     }
@@ -2719,7 +2718,7 @@ protected:
     mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
     mutable BlockOperator *jac_k; // Jacobian at current solution
 
-    mutable ParLinearForm *f, *f1, *f2;
+    mutable ParLinearForm *f, *f1, *f2, *g, *g1, *g2;
     mutable PetscParMatrix A11, A12, A13, A21, A22, A31, A33;
     mutable ParBilinearForm *a11, *a12, *a13, *a21, *a22, *a31, *a33;
 
@@ -2776,6 +2775,18 @@ public:
         c1_k  = new ParGridFunction(fsp);
         c2_k  = new ParGridFunction(fsp);
 
+        g = new ParLinearForm(fsp);
+//        g->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, epsilon_water, sigma, 0.0));
+        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_D_coeff));
+//        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_D_coeff));
+        g->Assemble();
+
+        g1 = new ParLinearForm(fsp);
+        g1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, 0.0));
+        g1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_D_coeff));
+        g1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_D_coeff));
+        g1->Assemble();
+
         f  = new ParLinearForm(fsp);
         f1  = new ParLinearForm(fsp);
         f2  = new ParLinearForm(fsp);
@@ -2796,6 +2807,8 @@ public:
         a12 = new ParBilinearForm(fsp);
         ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K(neg, alpha2_prod_alpha3_prod_v_K);
         a12->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_K));
+        a12->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
+        a12->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
         a12->Assemble(0);
         a12->Finalize(0);
         a12->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -2804,6 +2817,8 @@ public:
         a13 = new ParBilinearForm(fsp);
         ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl(neg, alpha2_prod_alpha3_prod_v_Cl);
         a13->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_Cl));
+        a13->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
+        a13->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
         a13->Assemble(0);
         a13->Finalize(0);
         a13->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3023,9 +3038,9 @@ class PNP_DG_Newton_box_Solver_par
 private:
     Mesh* mesh;
     ParMesh* pmesh;
-    H1_FECollection* h1_fec;
-    ParFiniteElementSpace* h1_space;
-    PNP_CG_Newton_Operator_par* op;
+    DG_FECollection* dg_fec;
+    ParFiniteElementSpace* dg_space;
+    PNP_DG_Newton_Operator_par* op;
     PetscPreconditionerFactory *jac_factory;
     PetscNonlinearSolver* newton_solver;
 
@@ -3041,31 +3056,31 @@ public:
         int mesh_dim = mesh->Dimension(); //网格的维数:1D,2D,3D
         pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
 
-        h1_fec = new H1_FECollection(p_order, mesh_dim);
-        h1_space = new ParFiniteElementSpace(pmesh, h1_fec);
+        dg_fec = new DG_FECollection(p_order, mesh_dim);
+        dg_space = new ParFiniteElementSpace(pmesh, dg_fec);
 
-        top_bdr.SetSize(h1_space->GetMesh()->bdr_attributes.Max());
+        top_bdr.SetSize(dg_space->GetMesh()->bdr_attributes.Max());
         top_bdr               = 0;
         top_bdr[top_attr - 1] = 1;
-        h1_space->GetEssentialTrueDofs(top_bdr, top_ess_tdof_list);
+        dg_space->GetEssentialTrueDofs(top_bdr, top_ess_tdof_list);
 
-        bottom_bdr.SetSize(h1_space->GetMesh()->bdr_attributes.Max());
+        bottom_bdr.SetSize(dg_space->GetMesh()->bdr_attributes.Max());
         bottom_bdr = 0;
         bottom_bdr[bottom_attr - 1] = 1;
-        h1_space->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
+        dg_space->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
 
         block_trueoffsets.SetSize(4);
         block_trueoffsets[0] = 0;
-        block_trueoffsets[1] = h1_space->GetTrueVSize();
-        block_trueoffsets[2] = h1_space->GetTrueVSize();
-        block_trueoffsets[3] = h1_space->GetTrueVSize();
+        block_trueoffsets[1] = dg_space->GetTrueVSize();
+        block_trueoffsets[2] = dg_space->GetTrueVSize();
+        block_trueoffsets[3] = dg_space->GetTrueVSize();
         block_trueoffsets.PartialSum();
 
         // MakeTRef(), SetTrueVector(), SetFromTrueVector() 三者要配套使用ffffffffff
         u_k = new BlockVector(block_trueoffsets); //必须满足essential边界条件
-        phi .MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
-        c1_k.MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
-        c2_k.MakeTRef(h1_space, *u_k, block_trueoffsets[2]);
+        phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
+        c1_k.MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
+        c2_k.MakeTRef(dg_space, *u_k, block_trueoffsets[2]);
         phi = 0.0;
         c1_k = 0.0;
         c2_k = 0.0;
@@ -3079,11 +3094,11 @@ public:
         c2_k.SetTrueVector();
         c2_k.SetFromTrueVector();
 
-        op = new PNP_CG_Newton_Operator_par(h1_space);
+        op = new PNP_DG_Newton_Operator_par(dg_space);
 
-        jac_factory   = new PreconditionerFactory(*op, "Block Preconditioner");
+        jac_factory = new PreconditionerFactory(*op, "Block Preconditioner");
 
-        newton_solver = new PetscNonlinearSolver(h1_space->GetComm(), *op, "newton_");
+        newton_solver = new PetscNonlinearSolver(dg_space->GetComm(), *op, "newton_");
         newton_solver->iterative_mode = true;
         newton_solver->SetAbsTol(newton_atol);
         newton_solver->SetRelTol(newton_rtol);
@@ -3103,16 +3118,16 @@ public:
         Vector zero_vec;
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
 
-        phi .MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
-        c1_k.MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
-        c2_k.MakeTRef(h1_space, *u_k, block_trueoffsets[2]);
+        phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
+        c1_k.MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
+        c2_k.MakeTRef(dg_space, *u_k, block_trueoffsets[2]);
         phi.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
         cout.precision(14);
-        cout << "l2 norm of phi3: " << phi.ComputeL2Error(zero) << endl;
-        cout << "l2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
-        cout << "l2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
+        cout << "l2 norm of phi: " <<  phi.ComputeL2Error(zero) << endl;
+        cout << "l2 norm of  c1: " << c1_k.ComputeL2Error(zero) << endl;
+        cout << "l2 norm of  c2: " << c2_k.ComputeL2Error(zero) << endl;
         cout << "solution vector size on mesh: phi, " << phi.Size() << "; c1, " << c1_k.Size() << "; c2, " << c2_k.Size() << endl;
     }
 };
