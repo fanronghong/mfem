@@ -2776,15 +2776,15 @@ public:
         c2_k  = new ParGridFunction(fsp);
 
         g = new ParLinearForm(fsp);
-//        g->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, epsilon_water, sigma, 0.0));
-        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_D_coeff));
-//        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_D_coeff));
+        g->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, epsilon_water, sigma, 0.0));
+        g->AddFaceIntegrator(new DGSelfTraceIntegrator_4_bdr(&kappa_coeff, &phi_D_coeff));
+        g->AddFaceIntegrator(new DGSelfTraceIntegrator_4_bdr(&kappa_coeff, &c1_D_coeff));
         g->Assemble();
 
         g1 = new ParLinearForm(fsp);
         g1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, 0.0));
-        g1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_D_coeff));
-        g1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_D_coeff));
+        g1->AddFaceIntegrator(new DGSelfTraceIntegrator_4_bdr(&kappa_coeff, &c1_D_coeff));
+        g1->AddFaceIntegrator(new DGSelfTraceIntegrator_4_bdr(&kappa_coeff, &phi_D_coeff));
         g1->Assemble();
 
         f  = new ParLinearForm(fsp);
@@ -2849,6 +2849,8 @@ public:
 //        cout << "in Mult(), l2 norm of  c2: " << c2_k->Norml2() << endl;
 //        cout << "in Mult(), l2 norm of Residual: " << rhs_k->Norml2() << endl;
 
+        GridFunctionCoefficient phi_coeff(phi), c1_k_coeff(c1_k), c2_k_coeff(c2_k);
+
 #ifdef SELF_DEBUG
         {
             // essential边界条件
@@ -2880,15 +2882,15 @@ public:
         delete f;
         f = new ParLinearForm(fsp);
         f->Update(fsp, rhs_k->GetBlock(0), 0);
-        GridFunctionCoefficient c1_k_coeff(c1_k), c2_k_coeff(c2_k);
         ProductCoefficient term1(alpha2_prod_alpha3_prod_v_K,  c1_k_coeff);
         ProductCoefficient term2(alpha2_prod_alpha3_prod_v_Cl, c2_k_coeff);
         SumCoefficient term(term1, term2);
         ProductCoefficient neg_term(neg, term);
         f->AddDomainIntegrator(new DomainLFIntegrator(neg_term));
-        f->AddDomainIntegrator(new GradConvectionIntegrator2(&epsilon_water, phi));
+        ProductCoefficient neg_epsilon_water(neg, epsilon_water);
+        f->AddFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_epsilon_water, phi));
+
         f->Assemble();
-        f->SetSubVector(ess_tdof_list, 0.0);
 
         delete f1;
         f1 = new ParLinearForm(fsp);
