@@ -112,7 +112,7 @@ public:
         nor.SetSize(dim);
 
         ndof1 = el1.GetDof();
-        if (Trans.Elem2No >= 0)
+        if (Trans.Elem2No > 0)
             ndof2 = el2.GetDof();
         else ndof2 = 0;
 
@@ -125,7 +125,7 @@ public:
         if (ir == NULL) {
             int order;
             // Assuming order(u)==order(mesh)
-            if (Trans.Elem2No >= 0)
+            if (Trans.Elem2No > 0)
                 order = (min(Trans.Elem1->OrderW(), Trans.Elem2->OrderW()) +
                          2 * max(el1.GetOrder(), el2.GetOrder()));
             else {
@@ -222,7 +222,7 @@ public:
         nor.SetSize(dim);
 
         ndof1 = el1.GetDof();
-        if (Trans.Elem2No >= 0)
+        if (Trans.Elem2No > 0)
             ndof2 = el2.GetDof();
         else ndof2 = 0;
 
@@ -235,7 +235,7 @@ public:
         if (ir == NULL) {
             int order;
             // Assuming order(u)==order(mesh)
-            if (Trans.Elem2No >= 0)
+            if (Trans.Elem2No > 0)
                 order = (min(Trans.Elem1->OrderW(), Trans.Elem2->OrderW()) +
                          2 * max(el1.GetOrder(), el2.GetOrder()));
             else {
@@ -328,7 +328,7 @@ public:
 
         nor.SetSize(dim);
         shape1.SetSize(ndof1);
-        if (Trans.Elem2No >= 0)
+        if (Trans.Elem2No > 0)
         {
             ndof2 = el2.GetDof();
             shape2.SetSize(ndof2);
@@ -434,7 +434,7 @@ public:
 
         nor.SetSize(dim);
         shape1.SetSize(ndof1);
-        if (Trans.Elem2No >=0)
+        if (Trans.Elem2No > 0)
         {
             ndof2 = el2.GetDof();
             shape2.SetSize(ndof2);
@@ -484,7 +484,7 @@ public:
             double w = ip.weight * Q->Eval(*Trans.Elem1, eip1) * nor.Norml2() / h_E;
 
             el1.CalcShape(eip1, shape1);
-            if (ndof2 >= 0)
+            if (ndof2 > 0)
             {
                 Trans.Loc2.Transform(ip, eip2);
                 el2.CalcShape(eip2, shape2);
@@ -545,7 +545,7 @@ public:
 
         ndof1 = el1.GetDof();
         shape1.SetSize(ndof1);
-        if (Trans.Elem2No >=0)
+        if (Trans.Elem2No > 0)
         {
             ndof2 = el2.GetDof();
             shape2.SetSize(ndof2);
@@ -593,7 +593,7 @@ public:
             Trans.Elem1->SetIntPoint(&eip1);
             double w = ip.weight * Q->Eval(*Trans.Elem1, eip1);
 
-            if (ndof2 >= 0)
+            if (ndof2 > 0)
             {
                 gradu->Eval(grad_u, *Trans.Elem1, eip1);
                 double tmp = (grad_u * nor);
@@ -659,7 +659,7 @@ public:
         shape1.SetSize(ndof1);
         dshape1.SetSize(ndof1, dim);
         dshape1dn.SetSize(ndof1);
-        if (Trans.Elem2No >= 0)
+        if (Trans.Elem2No > 0)
         {
             ndof2 = el2.GetDof();
             shape2.SetSize(ndof2);
@@ -1091,16 +1091,17 @@ namespace _DGSelfTraceIntegrator
         {
             Vector out1(fsp.GetVSize()), out2(fsp.GetVSize());
 
+            LinearForm lf(&fsp);
+            Array<int> null_array;
+            lf.AddFaceIntegrator(new DGSelfTraceIntegrator_4(&sin_coeff, &rand_coeff));
+            lf.Assemble();
+
             BilinearForm blf1(&fsp);
             blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(sin_coeff));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(sin_coeff));
             blf1.Assemble();
             blf1.Finalize();
             blf1.Mult(rand_gf, out1);
-
-            LinearForm lf(&fsp);
-            Array<int> null_array;
-            lf.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&sin_coeff, &rand_coeff), null_array);
-            lf.Assemble();
 
 //            out1.Print(cout << "out1: ", fsp.GetVSize());
 //            lf  .Print(cout << "lf  : ", fsp.GetVSize());
@@ -1171,12 +1172,12 @@ namespace _DGSelfTraceIntegrator
             Vector out1(fsp.GetVSize());
 
             LinearForm lf(&fsp);
-            Array<int> null_array;
-            lf.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_sin_cos, &rand_gf), null_array);
+            lf.AddFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_sin_cos, &rand_gf));
             lf.Assemble();
 
             BilinearForm blf1(&fsp);
             blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_6(&sin_cos));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_6(&sin_cos));
             blf1.Assemble();
             blf1.Finalize();
             blf1.Mult(rand_gf, out1);

@@ -77,10 +77,9 @@ void LinearForm::AddBdrFaceIntegrator(LinearFormIntegrator *lfi,
 }
 
 // added by fan
-void LinearForm::AddInteriorFaceIntegrator(LinearFormIntegrator *lfi, Array<int> face_attr_marker)
+void LinearForm::AddFaceIntegrator(LinearFormIntegrator *lfi)
 {
-    iflfi.Append(lfi);
-    iflfi_marker.Append(&face_attr_marker);
+    _flfi.Append(lfi);
 }
 
 void LinearForm::Assemble()
@@ -201,7 +200,7 @@ void LinearForm::Assemble()
          }
       }
    }
-   if (iflfi.Size()) // added by fan. Interior face linear form integrator
+   if (_flfi.Size()) // added by fan. Interior and boundary face linear form integrator
    {
        Mesh* mesh = fes->GetMesh();
        FaceElementTransformations* tr;
@@ -210,8 +209,8 @@ void LinearForm::Assemble()
 
        for (size_t i=0; i<mesh->GetNumFaces(); i++) // 对所有的facet循环:interior facet, boundary facet
        {
-           tr = mesh->GetInteriorFaceTransformations(i);
-           if (tr != NULL) // facet位于interior,否则位于区域边界
+           tr = mesh->GetFaceElementTransformations(i);
+           if (tr->Elem2No >= 0)
            {
                fes -> GetElementVDofs (tr -> Elem1No, vdofs1);
                fes -> GetElementVDofs (tr -> Elem2No, vdofs2);
@@ -220,10 +219,22 @@ void LinearForm::Assemble()
                const FiniteElement* fe1 = fes->GetFE(tr->Elem1No); // 与该内部facet相连的两个 FiniteElement (与Element区分)
                const FiniteElement* fe2 = fes->GetFE(tr->Elem2No);
 
-               for (size_t k=0; k<iflfi.Size(); k++)
+               for (size_t k=0; k<_flfi.Size(); k++)
                {
-                   iflfi[k]->AssembleRHSElementVect(*fe1, *fe2,
-                                                    *tr, elemvect);
+                   _flfi[k]->AssembleRHSElementVect(*fe1, *fe2,*tr, elemvect);
+                   AddElementVector(vdofs1, elemvect);
+               }
+           }
+           else
+           {
+               fes -> GetElementVDofs (tr -> Elem1No, vdofs1);
+
+               const FiniteElement* fe1 = fes->GetFE(tr->Elem1No); // 与该内部facet相连的两个 FiniteElement (与Element区分)
+               const FiniteElement* fe2;
+
+               for (size_t k=0; k<_flfi.Size(); k++)
+               {
+                   _flfi[k]->AssembleRHSElementVect(*fe1, *fe2,*tr, elemvect); // 为了使接口统一: 第二个参数其实没有意义
                    AddElementVector(vdofs1, elemvect);
                }
            }
