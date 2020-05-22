@@ -2787,11 +2787,22 @@ public:
         g->Assemble();
 
         g1 = new ParLinearForm(fsp);
-        //
+        // sigma * <c1_D, (D1 * grad(v1)).n>
         g1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, 0.0));
+        // kappa * <h^{-1} [c1_D], [v1]>
         g1->AddFaceIntegrator(new DGSelfTraceIntegrator_4_bdr(&kappa_coeff, &c1_D_coeff));
+        // kappa * <h^{-1} [phi_D], [v1]>
         g1->AddFaceIntegrator(new DGSelfTraceIntegrator_4_bdr(&kappa_coeff, &phi_D_coeff));
         g1->Assemble();
+
+        g2 = new ParLinearForm(fsp);
+        // sigma * <c2_D, (D2 * grad(v2)).n>
+        g2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_coeff, D_Cl_, sigma, 0.0));
+        // kappa * <h^{-1} [c2_D], [v2]>
+        g2->AddFaceIntegrator(new DGSelfTraceIntegrator_4_bdr(&kappa_coeff, &c2_D_coeff));
+        // kappa * <h^{-1} [phi_D], [v2]>
+        g2->AddFaceIntegrator(new DGSelfTraceIntegrator_4_bdr(&kappa_coeff, &phi_D_coeff));
+        g2->Assemble();
 
         f  = new ParLinearForm(fsp);
         f1  = new ParLinearForm(fsp);
