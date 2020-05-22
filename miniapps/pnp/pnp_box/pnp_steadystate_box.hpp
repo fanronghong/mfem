@@ -188,5 +188,17 @@ ConstantCoefficient zero(0.0);
 ConstantCoefficient one(1.0);
 ConstantCoefficient two(2.0);
 ConstantCoefficient neg(-1.0);
+ProductCoefficient epsilon_water_prod_kappa(epsilon_water, kappa_coeff);
+ProductCoefficient neg_epsilon_water(neg, epsilon_water);
+ProductCoefficient sigma_epsilon_water(sigma_coeff, epsilon_water);
+ProductCoefficient neg_D1(neg, D_K_);
+ProductCoefficient sigma_D1(sigma_coeff, D_K_);
+ProductCoefficient neg_D2(neg, D_Cl_);
+ProductCoefficient sigma_D2(sigma_coeff, D_Cl_);
+ProductCoefficient neg_D1_z1(neg, D_K_prod_v_K);
+ProductCoefficient sigma_D1_z1(sigma_coeff, D_K_prod_v_K);
+ProductCoefficient neg_D2_z2(neg, D_Cl_prod_v_Cl);
+ProductCoefficient sigma_D2_z2(sigma_coeff, D_Cl_prod_v_Cl);
+ProductCoefficient kappa_D1(kappa_coeff, D_K_);
 
 #endif
