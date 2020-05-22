@@ -434,6 +434,129 @@ public:
 
     }
 };
+class DGSelfTraceIntegrator_7_bdr : public LinearFormIntegrator
+{
+protected:
+    Coefficient *Q, *u;
+    Vector nor, shape1, shape2, tmp1, tmp2;
+    DenseMatrix adjJ1, adjJ2, dshape1, dshape2;
+
+public:
+    DGSelfTraceIntegrator_7_bdr(Coefficient &q, Coefficient &u_) : Q(&q), u(&u_) {}
+    ~DGSelfTraceIntegrator_7_bdr() {}
+
+    virtual void AssembleRHSElementVect(const FiniteElement &el,
+                                        ElementTransformation &Tr,
+                                        Vector &elvect) {}
+
+    virtual void AssembleRHSElementVect(const FiniteElement &el1,
+                                        const FiniteElement &el2,
+                                        FaceElementTransformations &Trans,
+                                        Vector &elvect)
+    {
+        int dim, ndof1, ndof2, ndofs;
+
+        dim = el1.GetDim();
+        ndof1 = el1.GetDof();
+        nor.SetSize(dim);
+        tmp1.SetSize(dim);
+        tmp2.SetSize(dim);
+        adjJ1.SetSize(dim);
+        dshape1.SetSize(ndof1, dim);
+
+        if (Trans.Elem2No >= 0)
+        {
+            ndof2 = el2.GetDof();
+            adjJ2.SetSize(dim);
+            dshape2.SetSize(ndof2, dim);
+        } else
+        {
+            ndof2 = 0;
+        }
+
+        ndofs = ndof1 + ndof2;
+        elvect.SetSize(ndofs);
+        elvect = 0.0;
+        if (ndof2 != 0) return;
+
+        const IntegrationRule *ir = IntRule;
+        if (ir == NULL)
+        {
+            // a simple choice for the integration order; is this OK?
+            int order;
+            if (ndof2)
+            {
+                order = 2*max(el1.GetOrder(), el2.GetOrder());
+            }
+            else
+            {
+                order = 2*el1.GetOrder();
+            }
+            ir = &IntRules.Get(Trans.GetGeometryType(), order);
+        }
+
+        for (int p=0; p<ir->GetNPoints(); ++p)
+        {
+            const IntegrationPoint& ip = ir->IntPoint(p);
+            IntegrationPoint eip1, eip2;
+
+            Trans.Loc1.Transform(ip, eip1);
+            Trans.SetIntPoint(&ip);
+            if (dim == 1)
+            {
+                nor(0) = 2*eip1.x - 1.0;
+            }
+            else
+            {
+                CalcOrtho(Trans.Face->Jacobian(), nor);
+            }
+
+            Trans.Elem1->SetIntPoint(&eip1);
+            el1.CalcDShape(eip1, dshape1);
+            CalcAdjugate(Trans.Elem1->Jacobian(), adjJ1);
+            double j1 = Trans.Elem1->Weight();
+
+            if (Trans.Elem2No >= 0)
+            {
+                Trans.Loc2.Transform(ip, eip2);
+                Trans.Elem2->SetIntPoint(&eip2);
+
+                double u_val = 0.5 * (u->Eval(*Trans.Elem1, eip1)
+                                      - u->Eval(*Trans.Elem2, eip2));
+                double w = ip.weight * Q->Eval(*Trans.Elem1, eip1) * u_val;
+                double j2 = Trans.Elem2->Weight();
+
+                el2.CalcDShape(eip2, dshape2);
+                CalcAdjugate(Trans.Elem2->Jacobian(), adjJ2);
+
+                Vector dummy1(ndof1), dummy2(ndof2);
+
+                adjJ1.Mult(nor, tmp1);
+                dshape1.Mult(tmp1, dummy1);
+
+                adjJ2.Mult(nor, tmp2);
+                dshape2.Mult(tmp2, dummy2);
+
+                for (int i=0; i<ndof1; ++i)
+                    elvect(i) += w * dummy1(i) / j1;
+
+                for (int i=0; i<ndof2; ++i)
+                    elvect(i + ndof1) += w * dummy2(i) / j2;
+            }
+            else
+            {
+                double w = ip.weight * Q->Eval(*Trans.Elem1, eip1)
+                           * u->Eval(*Trans.Elem1, eip1) / j1;
+
+                adjJ1.Mult(nor, tmp1);
+                Vector dummy(ndof1);
+                dshape1.Mult(tmp1, dummy);
+                elvect.Add(w, dummy);
+            }
+        }
+
+    }
+};
 
 
 /* 计算(边界或者内部Face都可以): q <h^{-1} [u], [v]>_E,
@@ -847,7 +970,7 @@ public:
 
 
 /* 计算(边界或者内部Face都可以): q <{grad(u).n}, [v]>_E,
- * u is Coefficient, v is test function; q are Coefficient, q在边E的两边连续 */
+ * u is GridFunction, v is test function; q are Coefficient, q在边E的两边连续 */
 class DGSelfTraceIntegrator_5 : public LinearFormIntegrator
 {
 protected:

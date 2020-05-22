@@ -2840,7 +2840,7 @@ public:
 
     virtual void Mult(const Vector& x, Vector& y) const
     {
-//        cout << "\nin PNP_Newton_Operator::Mult(), l2 norm of x: " << x.Norml2() << endl;
+        cout << "\nin PNP_DG_Newton_Operator::Mult(), l2 norm of x: " << x.Norml2() << endl;
 //        cout << "l2 norm of y: " << y.Norml2() << endl;
         int sc = height / 3;
         Vector& x_ = const_cast<Vector&>(x);
@@ -2913,30 +2913,61 @@ public:
         f1 = new ParLinearForm(fsp);
         f1->Update(fsp, rhs_k->GetBlock(1), 0);
         ProductCoefficient D1_prod_z1_prod_c1_k(D_K_prod_v_K, c1_k_coeff);
+        ProductCoefficient neg_D1_prod_z1_prod_c1_k(neg, D1_prod_z1_prod_c1_k);
+        ProductCoefficient neg_D1(neg, D_K_);
+        ProductCoefficient sigma_D1(sigma_coeff, D_K_);
+        ProductCoefficient sigma_D1_prod_z1_prod_c1_k(sigma_coeff, D1_prod_z1_prod_c1_k);
+        ProductCoefficient neg_sigma_D1_prod_z1_prod_c1_k(neg, sigma_D1_prod_z1_prod_c1_k);
         // D1 * (grad(c1^k), grad(v1))
         f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D_K_, c1_k));
         // -D1 * <{grad(c1^k)}, [v1]>
+        f1->AddFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D1, c1_k));
         // sigma * <[c1^k], {D1 * grad(v1).n}>
+        f1->AddFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D1, c1_k_coeff));
         // kappa * <h^{-1} [c1^k], [v1]>
+        f1->AddFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_k_coeff));
         // D1 * z1 * c1^k * (grad(phi^k), grad(v1))
         f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D1_prod_z1_prod_c1_k, phi));
         // -D1 * z1 * c1^k * <{grad(phi^k).n}, [v1]>
+        f1->AddFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D1_prod_z1_prod_c1_k, phi));
         // sigma * D1 * z1 * c1^k * <[phi^k], {grad(v1).n}>
+        f1->AddFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D1_prod_z1_prod_c1_k, phi_coeff));
         // kappa * <h^{-1} [phi^k], [v1]>
+        f1->AddFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_coeff));
         // -sigma * D1 * z1 * c1^k * <phi_D, grad(v1).n>
+        f1->AddFaceIntegrator(new DGSelfTraceIntegrator_7_bdr(neg_sigma_D1_prod_z1_prod_c1_k, phi_D_coeff));
         f1->Assemble();
-        f1->SetSubVector(ess_tdof_list, 0.0);
-//        for (int i=0; i<ess_tdof_list.Size(); ++i) (*f1)[ess_tdof_list[i]] = 0.0;
+        (*f1) -= (*g1);
 
         delete f2;
         f2 = new ParLinearForm(fsp);
         f2->Update(fsp, rhs_k->GetBlock(2), 0);
-        GradientGridFunctionCoefficient grad_c2_k(c2_k);
-        f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D_Cl_, c2_k));
         ProductCoefficient D2_prod_z2_prod_c2_k(D_Cl_prod_v_Cl, c2_k_coeff);
+        ProductCoefficient neg_D2_prod_z2_prod_c2_k(neg, D2_prod_z2_prod_c2_k);
+        ProductCoefficient neg_D2(neg, D_Cl_);
+        ProductCoefficient sigma_D2(sigma_coeff, D_Cl_);
+        ProductCoefficient sigma_D2_prod_z2_prod_c2_k(sigma_coeff, D2_prod_z2_prod_c2_k);
+        ProductCoefficient neg_sigma_D2_prod_z2_prod_c2_k(neg, sigma_D2_prod_z2_prod_c2_k);
+        // D2 * (grad(c2^k), grad(v2))
+        f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D_Cl_, c2_k));
+        // -D2 * <{grad(c2^k)}, [v2]>
+        f2->AddFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D2, c2_k));
+        // sigma * <[c2^k], {D2 * grad(v2).n}>
+        f2->AddFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D2, c2_k_coeff));
+        // kappa * <h^{-1} [c2^k], [v2]>
+        f2->AddFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_k_coeff));
+        // D2 * z2 * c2^k * (grad(phi^k), grad(v2))
         f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D2_prod_z2_prod_c2_k, phi));
+        // -D2 * z2 * c2^k * <{grad(phi^k).n}, [v2]>
+        f2->AddFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D2_prod_z2_prod_c2_k, phi));
+        // sigma * D2 * z2 * c2^k * <[phi^k], {grad(v2).n}>
+        f2->AddFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D2_prod_z2_prod_c2_k, phi_coeff));
+        // kappa * <h^{-1} [phi^k], [v2]>
+        f2->AddFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_coeff));
+        // -sigma * D2 * z2 * c2^k * <phi_D, grad(v2).n>
+        f2->AddFaceIntegrator(new DGSelfTraceIntegrator_7_bdr(neg_sigma_D2_prod_z2_prod_c2_k, phi_D_coeff));
         f2->Assemble();
-        f2->SetSubVector(ess_tdof_list, 0.0);
+        (*f2) -= (*g2);
 
 //        cout << "in Mult(), l2 norm of Residual: " << rhs_k->Norml2() << endl;
     }
@@ -3141,7 +3172,7 @@ public:
 
     void Solve(Array<double> phiL2errornomrs, Array<double> c1L2errornorms, Array<double> c2L2errornorms, Array<double> meshsizes)
     {
-        cout << "\n---------------------- CG1, Newton, box, parallel ----------------------" << endl;
+        cout << "\n---------------------- DG" << p_order << ", Newton, box, parallel ----------------------" << endl;
 //        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
         Vector zero_vec;
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
