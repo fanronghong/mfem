@@ -200,5 +200,7 @@ ProductCoefficient sigma_D1_z1(sigma_coeff, D_K_prod_v_K);
 ProductCoefficient neg_D2_z2(neg, D_Cl_prod_v_Cl);
 ProductCoefficient sigma_D2_z2(sigma_coeff, D_Cl_prod_v_Cl);
 ProductCoefficient kappa_D1(kappa_coeff, D_K_);
+ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl(neg, alpha2_prod_alpha3_prod_v_Cl);
+ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K(neg, alpha2_prod_alpha3_prod_v_K);
 
 #endif
