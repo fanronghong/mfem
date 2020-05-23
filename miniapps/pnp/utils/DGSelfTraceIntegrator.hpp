@@ -194,8 +194,8 @@ public:
 };
 
 
-/* 计算(边界或者内部Face都可以): q <[u], {v grad(w).n}>_E,
- * u is trial function, v is test function; q are Coefficient, q在边E的两边连续;w is GridFunction, 但是w是不连续的(至少grad_w是不连续的) */
+/* 计算(边界或者内部Face都可以): <[u], {q v grad(w).n}>_E,
+ * u is trial function, v is test function; q is Coefficient, w is GridFunction */
 class DGSelfTraceIntegrator_2 : public BilinearFormIntegrator
 {
 protected:
@@ -311,8 +311,8 @@ public:
 };
 
 
-/* 计算(边界或者内部Face都可以): q <[u], {grad(v).n}>_E,
- * u is Coefficient, v is test function; q is Coefficient, q在边E的两边连续; */
+/* 计算(边界或者内部Face都可以): <[u], {q grad(v).n}>_E,
+ * u is Coefficient, v is test function; q is Coefficient */
 class DGSelfTraceIntegrator_7 : public LinearFormIntegrator
 {
 protected:
@@ -392,7 +392,7 @@ public:
             Trans.Elem1->SetIntPoint(&eip1);
             el1.CalcDShape(eip1, dshape1);
             CalcAdjugate(Trans.Elem1->Jacobian(), adjJ1);
-            double j1 = Trans.Elem1->Weight();
+            double j1 = Trans.Elem1->Weight() / Q->Eval(*Trans.Elem1, eip1);
 
             if (Trans.Elem2No >= 0)
             {
@@ -401,8 +401,8 @@ public:
 
                 double u_val = 0.5 * (u->Eval(*Trans.Elem1, eip1)
                                     - u->Eval(*Trans.Elem2, eip2));
-                double w = ip.weight * Q->Eval(*Trans.Elem1, eip1) * u_val;
-                double j2 = Trans.Elem2->Weight();
+                double w = ip.weight * u_val;
+                double j2 = Trans.Elem2->Weight() / Q->Eval(*Trans.Elem2, eip2);
 
                 el2.CalcDShape(eip2, dshape2);
                 CalcAdjugate(Trans.Elem2->Jacobian(), adjJ2);
@@ -423,8 +423,7 @@ public:
             }
             else
             {
-                double w = ip.weight * Q->Eval(*Trans.Elem1, eip1)
-                                     * u->Eval(*Trans.Elem1, eip1) / j1;
+                double w = ip.weight * u->Eval(*Trans.Elem1, eip1) / j1;
 
                 adjJ1.Mult(nor, tmp1);
                 Vector dummy(ndof1);
@@ -1884,8 +1883,8 @@ namespace _DGSelfTraceIntegrator
             lf.AddFaceIntegrator(new DGSelfTraceIntegrator_7_bdr(one,sin_coeff));
             lf.Assemble();
 
-//            out3.Print(cout << "out3: ", size);
-//            lf.Print(cout << "lf  : ", size);
+            out3.Print(cout << "out3: ", size);
+            lf.Print(cout << "lf  : ", size);
             for (int i=0; i<size; ++i)
                 assert(abs(out3[i] - lf[i]) < 1E-4); // 内部计算的精度比边界高
         }
