@@ -2914,10 +2914,11 @@ public:
         f->Assemble();
         (*f) -= (*g);
 
-        delete f1; // goon 从这里开始排查
+        delete f1;
         f1 = new ParLinearForm(fsp);
         f1->Update(fsp, rhs_k->GetBlock(1), 0);
         ProductCoefficient D1_prod_z1_prod_c1_k(D_K_prod_v_K, c1_k_coeff);
+        ProductCoefficient kappa_prod_D1_prod_z1_prod_c1_k(kappa_coeff, D1_prod_z1_prod_c1_k);
         ProductCoefficient neg_D1_prod_z1_prod_c1_k(neg, D1_prod_z1_prod_c1_k);
         ProductCoefficient sigma_D1_prod_z1_prod_c1_k(sigma_coeff, D1_prod_z1_prod_c1_k);
         ProductCoefficient neg_sigma_D1_prod_z1_prod_c1_k(neg, sigma_D1_prod_z1_prod_c1_k);
@@ -2931,13 +2932,13 @@ public:
         f1->AddFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_D1, &c1_k_coeff));
         // D1 z1 c1^k (grad(phi^k), grad(v1))
         f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D1_prod_z1_prod_c1_k, phi));
-        // -D1 z1 c1^k <{grad(phi^k).n}, [v1]>  fff c1^k is not continuous
+        // -<{D1 z1 c1^k grad(phi^k)}, [v1]>
         f1->AddFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D1_prod_z1_prod_c1_k, phi));
-        // sigma D1 z1 c1^k <[phi^k], {grad(v1).n}> fff c1^k is not continuous
+        // sigma <[phi^k], {D1 z1 c1^k grad(v1)}>
         f1->AddFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D1_prod_z1_prod_c1_k, phi_coeff));
-        // kappa * <h^{-1} [phi^k], [v1]>
-        f1->AddFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_coeff));
-        // sigma * <phi_D, D1 z1 c1^k grad(v1).n> + kappa D1 z1 c1^k <h^{-1} phi_D, v1>. 人为添加的系数: D1 z1 c1^k
+        // kappa <{h^{-1} D1 z1 c1^k}[phi^k], [v1]>
+        f1->AddFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D1_prod_z1_prod_c1_k, &phi_coeff));
+        // sigma <phi_D, D1 z1 c1^k grad(v1).n> + kappa D1 z1 c1^k <h^{-1} phi_D, v1>
         f1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D1_prod_z1_prod_c1_k, sigma, kappa));
         f1->Assemble();
 
@@ -2945,25 +2946,26 @@ public:
         f2 = new ParLinearForm(fsp);
         f2->Update(fsp, rhs_k->GetBlock(2), 0);
         ProductCoefficient D2_prod_z2_prod_c2_k(D_Cl_prod_v_Cl, c2_k_coeff);
+        ProductCoefficient kappa_prod_D2_prod_z2_prod_c2_k(kappa_coeff, D2_prod_z2_prod_c2_k);
         ProductCoefficient neg_D2_prod_z2_prod_c2_k(neg, D2_prod_z2_prod_c2_k);
         ProductCoefficient sigma_D2_prod_z2_prod_c2_k(sigma_coeff, D2_prod_z2_prod_c2_k);
         ProductCoefficient neg_sigma_D2_prod_z2_prod_c2_k(neg, sigma_D2_prod_z2_prod_c2_k);
-        // D2 * (grad(c2^k), grad(v2))
+        // D2 (grad(c2^k), grad(v2))
         f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D_Cl_, c2_k));
-        // -D2 * <{grad(c2^k)}, [v2]>
+        // -D2 <{grad(c2^k)}, [v2]>
         f2->AddFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D2, c2_k));
-        // sigma * <[c2^k], {D2 * grad(v2).n}>
+        // sigma <[c2^k], {D2 grad(v2)}>
         f2->AddFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D2, c2_k_coeff));
-        // kappa * <h^{-1} [c2^k], [v2]>
-        f2->AddFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_k_coeff));
-        // D2 * z2 * c2^k * (grad(phi^k), grad(v2))
+        // kappa D2 <h^{-1} [c2^k], [v2]>
+        f2->AddFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_D2, &c2_k_coeff));
+        // D2 z2 c2^k (grad(phi^k), grad(v2))
         f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D2_prod_z2_prod_c2_k, phi));
-        // -D2 * z2 * c2^k * <{grad(phi^k).n}, [v2]>
+        // -<{D2 z2 c2^k grad(phi^k)}, [v2]>
         f2->AddFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D2_prod_z2_prod_c2_k, phi));
-        // sigma * D2 * z2 * c2^k * <[phi^k], {grad(v2).n}>
+        // sigma <{D2 z2 c2^k}[phi^k], {grad(v2)}>
         f2->AddFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D2_prod_z2_prod_c2_k, phi_coeff));
-        // kappa * <h^{-1} [phi^k], [v2]>
-        f2->AddFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_coeff));
+        // kappa * <{h^{-1} D2 z2 c2^k} [phi^k], [v2]>
+        f2->AddFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D2_prod_z2_prod_c2_k, &phi_coeff));
         // sigma * <phi_D, D2 z2 c2^k grad(v2).n> + kappa D2 z2 c2^k <h^{-1} phi_D, v2>. 人为添加的系数: D2 z2 c2^k
         f2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D1_prod_z1_prod_c1_k, sigma, kappa));
         f2->Assemble();
@@ -2989,10 +2991,11 @@ public:
         a21 = new ParBilinearForm(fsp);
         GridFunctionCoefficient c1_k_coeff(c1_k);
         ProductCoefficient D1_prod_z1_prod_c1_k(D_K_prod_v_K, c1_k_coeff);
-        // D1 * z1 * c1^k * (grad(phi), grad(v1))
+        // D1 z1 c1^k (grad(phi), grad(v1))
         a21->AddDomainIntegrator(new DiffusionIntegrator(D1_prod_z1_prod_c1_k));
-        // - D1 * z1 * c1^k * <{grad(phi).n}, [v1]> + sigma * D1 * z1 * c1^k * <[phi], {grad(v1).n}> + kappa * D1 * z1 * c1^k * <h^{-1} [phi], [v1]>
+        // - <{D1 z1 c1^k grad(phi)}, [v1]> + sigma <[phi], {D1 z1 c1^k grad(v1)}> + kappa <{h^{-1} D1 z1 c1^k} [phi], [v1]>
         a21->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D1_prod_z1_prod_c1_k, sigma, kappa));
+        a21->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D1_prod_z1_prod_c1_k, sigma, kappa));
         a21->Assemble(0);
         a21->Finalize(0);
         a21->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3000,31 +3003,34 @@ public:
 
         delete a22;
         a22 = new ParBilinearForm(fsp);
-        // D1 * (grad(c1), grad(v1))
+        // D1 (grad(c1), grad(v1))
         a22->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
-        // - D1 * <{grad(c1).n}, [v1]> + sigma * D1 * <[c1], {grad(v1).n}> + kappa * D_1 * <h^{-1} [c1], [v1]>
+        // - <{D1 grad(c1)}, [v1]> + sigma <[c1], {D1 grad(v1)}> + kappa <{h^{-1} D1} [c1], [v1]>
         a22->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
         a22->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
-        // D1 * z1 * (c1 . grad(phi^k), grad(v1))
-        a22->AddDomainIntegrator(new GradConvectionIntegrator(*phi, &D_K_prod_v_K));
-        // - D1 * z1 * <{c1 * grad(phi^k).n}, [v1]>
-        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi));
-        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi));
-        // sigma * D1 * z1 * <[c1], {v1 * grad(phi^k).n}>  fffgoon bug in DGSelfTraceIntegrator_2()
-        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi));
-        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi));
+        // (D1 z1 c1 grad(phi^k), grad(v1))
+//        a22->AddDomainIntegrator(new GradConvectionIntegrator(*phi, &D_K_prod_v_K));
+        // - <{D1 z1 c1 grad(phi^k)}, [v1]>
+//        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi));
+//        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi));
+        // sigma <[c1], {D1 z1 v1 grad(phi^k)}>  fffgoon bug in DGSelfTraceIntegrator_2()
+//        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi));
+//        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi));
+        // kappa <h^{-1} [c1], [v1]>
+//        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
+//        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
         a22->Assemble(0);
         a22->Finalize(0);
         a22->SetOperatorType(Operator::PETSC_MATAIJ);
-        a22->FormSystemMatrix(ess_tdof_list, A22);
+        a22->FormSystemMatrix(null_array, A22);
 
         delete a31;
         a31 = new ParBilinearForm(fsp);
         GridFunctionCoefficient c2_k_coeff(c2_k);
         ProductCoefficient D2_prod_z2_prod_c2_k(D_Cl_prod_v_Cl, c2_k_coeff);
-        // D2 * z2 * c2^k * (grad(phi), grad(v2))
+        // D2 z2 c2^k (grad(phi), grad(v2))
         a31->AddDomainIntegrator(new DiffusionIntegrator(D2_prod_z2_prod_c2_k));
-        // - D2 * z2 * c2^k * <{grad(phi).n}, [v2]> + sigma * D2 * z2 * c2^k * <[phi], {grad(v2).n}> + kappa * D2 * z2 * c2^k * <h^{-1} [phi], [v2]>
+        // - <{D2 z2 c2^k grad(phi)}, [v2]> + sigma <[phi], {D2 z2 c2^k grad(v2)}> + kappa <{h^{-1} D2 z2 c2^k} [phi], [v2]>
         a31->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D2_prod_z2_prod_c2_k, sigma, kappa));
         a31->Assemble(0);
         a31->Finalize(0);
@@ -3033,23 +3039,26 @@ public:
 
         delete a33;
         a33 = new ParBilinearForm(fsp);
-        // D2 * (grad(c2), grad(v2))
+        // D2 (grad(c2), grad(v2))
         a33->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
-        // D2 * z2 * (c2 . grad(phi^k), grad(v2))
-        a33->AddDomainIntegrator(new GradConvectionIntegrator(*phi, &D_Cl_prod_v_Cl));
-        // - D2 * <{grad(c2).n}, [v2]> + sigma * D2 * <[c2], {grad(v2).n}> + kappa * <[c2], [v2]>
+        // - <{D2 grad(c2)}, [v2]> + sigma <[c2], {D2 grad(v2)}> + kappa <{h^{-1} D2} [c2], [v2]>
         a33->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_Cl_, sigma, kappa));
         a33->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_Cl_, sigma, kappa));
-        // - D2 * z2 * <{c2 * grad(phi^k).n}, [v2]>
+        // (D2 z2 c2 grad(phi^k), grad(v2))
+        a33->AddDomainIntegrator(new GradConvectionIntegrator(*phi, &D_Cl_prod_v_Cl));
+        // - <{D2 z2 c2 grad(phi^k)}, [v2]>
         a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D2_z2, *phi));
         a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D2_z2, *phi));
-        // sigma * D2 * z2 * <[c2], {v2 * grad(phi^k).n}>
+        // sigma <[c2], {D2 z2 v2 grad(phi^k)}>
         a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi));
         a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi));
+        // kappa <h^{-1} [c2], [v2]>
+        a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
+        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
         a33->Assemble(0);
         a33->Finalize(0);
         a33->SetOperatorType(Operator::PETSC_MATAIJ);
-        a33->FormSystemMatrix(ess_tdof_list, A33);
+        a33->FormSystemMatrix(null_array, A33);
 
         jac_k = new BlockOperator(block_trueoffsets);
         jac_k->SetBlock(0, 0, &A11);

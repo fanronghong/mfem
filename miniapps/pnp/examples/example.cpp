@@ -9,5 +9,5 @@ using namespace mfem;
 int main()
 {
     using namespace _DGSelfTraceIntegrator;
-    Test_DGSelfTraceIntegrator_7();
+    Test_DGSelfTraceIntegrator();
 }

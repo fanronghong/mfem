@@ -193,6 +193,7 @@ public:
     }
 };
 
+
 /* 计算(边界或者内部Face都可以): q <[u], {v grad(w).n}>_E,
  * u is trial function, v is test function; q are Coefficient, q在边E的两边连续;w is GridFunction, 但是w是不连续的(至少grad_w是不连续的) */
 class DGSelfTraceIntegrator_2 : public BilinearFormIntegrator
@@ -431,7 +432,6 @@ public:
                 elvect.Add(w, dummy);
             }
         }
-
     }
 };
 class DGSelfTraceIntegrator_7_bdr : public LinearFormIntegrator
@@ -557,10 +557,133 @@ public:
 
     }
 };
+class DGSelfTraceIntegrator_7_int : public LinearFormIntegrator
+{
+protected:
+    Coefficient *Q, *u;
+    Vector nor, shape1, shape2, tmp1, tmp2;
+    DenseMatrix adjJ1, adjJ2, dshape1, dshape2;
+
+public:
+    DGSelfTraceIntegrator_7_int(Coefficient &q, Coefficient &u_) : Q(&q), u(&u_) {}
+    ~DGSelfTraceIntegrator_7_int() {}
+
+    virtual void AssembleRHSElementVect(const FiniteElement &el,
+                                        ElementTransformation &Tr,
+                                        Vector &elvect) {}
+
+    virtual void AssembleRHSElementVect(const FiniteElement &el1,
+                                        const FiniteElement &el2,
+                                        FaceElementTransformations &Trans,
+                                        Vector &elvect)
+    {
+        int dim, ndof1, ndof2, ndofs;
+
+        dim = el1.GetDim();
+        ndof1 = el1.GetDof();
+        nor.SetSize(dim);
+        tmp1.SetSize(dim);
+        tmp2.SetSize(dim);
+        adjJ1.SetSize(dim);
+        dshape1.SetSize(ndof1, dim);
+
+        if (Trans.Elem2No >= 0)
+        {
+            ndof2 = el2.GetDof();
+            adjJ2.SetSize(dim);
+            dshape2.SetSize(ndof2, dim);
+        } else
+        {
+            ndof2 = 0;
+        }
+
+        ndofs = ndof1 + ndof2;
+        elvect.SetSize(ndofs);
+        elvect = 0.0;
+        if (ndof2 == 0) return;
+
+        const IntegrationRule *ir = IntRule;
+        if (ir == NULL)
+        {
+            // a simple choice for the integration order; is this OK?
+            int order;
+            if (ndof2)
+            {
+                order = 2*max(el1.GetOrder(), el2.GetOrder());
+            }
+            else
+            {
+                order = 2*el1.GetOrder();
+            }
+            ir = &IntRules.Get(Trans.GetGeometryType(), order);
+        }
+
+        for (int p=0; p<ir->GetNPoints(); ++p)
+        {
+            const IntegrationPoint& ip = ir->IntPoint(p);
+            IntegrationPoint eip1, eip2;
+
+            Trans.Loc1.Transform(ip, eip1);
+            Trans.SetIntPoint(&ip);
+            if (dim == 1)
+            {
+                nor(0) = 2*eip1.x - 1.0;
+            }
+            else
+            {
+                CalcOrtho(Trans.Face->Jacobian(), nor);
+            }
+
+            Trans.Elem1->SetIntPoint(&eip1);
+            el1.CalcDShape(eip1, dshape1);
+            CalcAdjugate(Trans.Elem1->Jacobian(), adjJ1);
+            double j1 = Trans.Elem1->Weight();
+
+            if (Trans.Elem2No >= 0)
+            {
+                Trans.Loc2.Transform(ip, eip2);
+                Trans.Elem2->SetIntPoint(&eip2);
+
+                double u_val = 0.5 * (u->Eval(*Trans.Elem1, eip1)
+                                      - u->Eval(*Trans.Elem2, eip2));
+                double w = ip.weight * Q->Eval(*Trans.Elem1, eip1) * u_val;
+                double j2 = Trans.Elem2->Weight();
+
+                el2.CalcDShape(eip2, dshape2);
+                CalcAdjugate(Trans.Elem2->Jacobian(), adjJ2);
+
+                Vector dummy1(ndof1), dummy2(ndof2);
+
+                adjJ1.Mult(nor, tmp1);
+                dshape1.Mult(tmp1, dummy1);
+
+                adjJ2.Mult(nor, tmp2);
+                dshape2.Mult(tmp2, dummy2);
+
+                for (int i=0; i<ndof1; ++i)
+                    elvect(i) += w * dummy1(i) / j1;
+
+                for (int i=0; i<ndof2; ++i)
+                    elvect(i + ndof1) += w * dummy2(i) / j2;
+            }
+            else
+            {
+                double w = ip.weight * Q->Eval(*Trans.Elem1, eip1)
+                           * u->Eval(*Trans.Elem1, eip1) / j1;
+
+                adjJ1.Mult(nor, tmp1);
+                Vector dummy(ndof1);
+                dshape1.Mult(tmp1, dummy);
+                elvect.Add(w, dummy);
+            }
+        }
+
+    }
+};
 
 
-/* 计算(边界或者内部Face都可以): q <h^{-1} [u], [v]>_E,
- * u is trial function, v is test function; q are Coefficient, q在边E的两边连续 */
+/* 计算(边界或者内部Face都可以): <{h^{-1} q} [u], [v]>_E,
+ * u is trial function, v is test function; q are Coefficient */
 class DGSelfTraceIntegrator_3: public BilinearFormIntegrator
 {
 protected:
@@ -588,6 +711,7 @@ public:
             ndof2 = el2.GetDof();
             shape2.SetSize(ndof2);
         }
+        else ndof2 = 0;
 
         ndofs = ndof1 + ndof2;
         elmat.SetSize(ndofs);
@@ -629,18 +753,30 @@ public:
             Trans.Elem1->SetIntPoint(&eip1);
             double h_E = Trans.Elem1->Weight() / nor.Norml2();
 
-            double w = ip.weight * Q->Eval(*Trans.Elem1, eip1) * nor.Norml2() / h_E;
-
             el1.CalcShape(eip1, shape1);
-            for (int i=0; i<ndof1; ++i)
-                for (int j=0; j<ndof1; ++j)
-                    elmat(i, j) += w * shape1(i) * shape1(j);
 
-            // interior facet
-            if (ndof2 > 0)
+            if (ndof2 == 0)
+            {
+                double w = ip.weight * Q->Eval(*Trans.Elem1, eip1)
+                           * nor.Norml2() / h_E;
+
+                for (int i=0; i<ndof1; ++i)
+                    for (int j=0; j<ndof1; ++j)
+                        elmat(i, j) += w * shape1(i) * shape1(j);
+            }
+            else
             {
                 Trans.Loc2.Transform(ip, eip2);
+                Trans.Elem2->SetIntPoint(&eip2);
                 el2.CalcShape(eip2, shape2);
+
+                double w = ip.weight
+                            * 0.5 * (Q->Eval(*Trans.Elem1, eip1) + Q->Eval(*Trans.Elem2, eip2))
+                            * nor.Norml2() / h_E;
+
+                for (int i=0; i<ndof1; ++i)
+                    for (int j=0; j<ndof1; ++j)
+                        elmat(i, j) += w * shape1(i) * shape1(j);
 
                 for (int i=0; i<ndof1; ++i)
                     for (int j=0; j<ndof2; ++j)
@@ -659,8 +795,8 @@ public:
 };
 
 
-/* 计算(边界或者内部Face都可以): q <h^{-1} [u], [v]>_E,
- * u is Coefficient, v is test function; q are Coefficient, q在边E的两边连续 */
+/* 计算(边界或者内部Face都可以): <{h^{-1} q} [u], [v]>_E,
+ * u is Coefficient, v is test function; q are Coefficient */
 class DGSelfTraceIntegrator_4: public LinearFormIntegrator
 {
 protected:
@@ -736,15 +872,17 @@ public:
             Trans.Elem1->SetIntPoint(&eip1);
             double h_E = Trans.Elem1->Weight() / nor.Norml2();
 
-            double w = ip.weight * Q->Eval(*Trans.Elem1, eip1) * nor.Norml2() / h_E;
 
             el1.CalcShape(eip1, shape1);
             if (ndof2 > 0)
             {
                 Trans.Loc2.Transform(ip, eip2);
                 el2.CalcShape(eip2, shape2);
-
                 Trans.Elem2->SetIntPoint(&eip2);
+
+                double w = ip.weight
+                        * 0.5 * (Q->Eval(*Trans.Elem1, eip1) + Q->Eval(*Trans.Elem2, eip2))
+                        * nor.Norml2() / h_E;
                 double u_val = u->Eval(*Trans.Elem1, eip1) - u->Eval(*Trans.Elem2, eip2);
 
                 for (int i=0; i<ndof1; ++i)
@@ -755,7 +893,10 @@ public:
             }
             else
             {
+                double w = ip.weight * Q->Eval(*Trans.Elem1, eip1) * nor.Norml2() / h_E;
+
                 double u_val = u->Eval(*Trans.Elem1, eip1);
+
                 elvect.Add(w * u_val, shape1);
             }
         }
@@ -799,9 +940,7 @@ public:
         ndofs = ndof1 + ndof2;
         elvect.SetSize(ndofs);
         elvect = 0.0;
-
-        if (el2.GetDof() == 0)
-            return;
+        if (ndof2 == 0) return;
 
         const IntegrationRule *ir = IntRule;
         if (ir == NULL)
@@ -839,15 +978,17 @@ public:
             Trans.Elem1->SetIntPoint(&eip1);
             double h_E = Trans.Elem1->Weight() / nor.Norml2();
 
-            double w = ip.weight * Q->Eval(*Trans.Elem1, eip1) * nor.Norml2() / h_E;
 
             el1.CalcShape(eip1, shape1);
             if (ndof2 > 0)
             {
                 Trans.Loc2.Transform(ip, eip2);
                 el2.CalcShape(eip2, shape2);
-
                 Trans.Elem2->SetIntPoint(&eip2);
+
+                double w = ip.weight
+                           * 0.5 * (Q->Eval(*Trans.Elem1, eip1) + Q->Eval(*Trans.Elem2, eip2))
+                           * nor.Norml2() / h_E;
                 double u_val = u->Eval(*Trans.Elem1, eip1) - u->Eval(*Trans.Elem2, eip2);
 
                 for (int i=0; i<ndof1; ++i)
@@ -858,7 +999,10 @@ public:
             }
             else
             {
+                double w = ip.weight * Q->Eval(*Trans.Elem1, eip1) * nor.Norml2() / h_E;
+
                 double u_val = u->Eval(*Trans.Elem1, eip1);
+
                 elvect.Add(w * u_val, shape1);
             }
         }
@@ -902,9 +1046,7 @@ public:
         ndofs = ndof1 + ndof2;
         elvect.SetSize(ndofs);
         elvect = 0.0;
-
-        if (el2.GetDof() != 0)
-            return;
+        if (ndof2 != 0) return;
 
         const IntegrationRule *ir = IntRule;
         if (ir == NULL)
@@ -942,15 +1084,17 @@ public:
             Trans.Elem1->SetIntPoint(&eip1);
             double h_E = Trans.Elem1->Weight() / nor.Norml2();
 
-            double w = ip.weight * Q->Eval(*Trans.Elem1, eip1) * nor.Norml2() / h_E;
 
             el1.CalcShape(eip1, shape1);
             if (ndof2 > 0)
             {
                 Trans.Loc2.Transform(ip, eip2);
                 el2.CalcShape(eip2, shape2);
-
                 Trans.Elem2->SetIntPoint(&eip2);
+
+                double w = ip.weight
+                           * 0.5 * (Q->Eval(*Trans.Elem1, eip1) + Q->Eval(*Trans.Elem2, eip2))
+                           * nor.Norml2() / h_E;
                 double u_val = u->Eval(*Trans.Elem1, eip1) - u->Eval(*Trans.Elem2, eip2);
 
                 for (int i=0; i<ndof1; ++i)
@@ -961,7 +1105,10 @@ public:
             }
             else
             {
+                double w = ip.weight * Q->Eval(*Trans.Elem1, eip1) * nor.Norml2() / h_E;
+
                 double u_val = u->Eval(*Trans.Elem1, eip1);
+
                 elvect.Add(w * u_val, shape1);
             }
         }
@@ -969,8 +1116,8 @@ public:
 };
 
 
-/* 计算(边界或者内部Face都可以): q <{grad(u).n}, [v]>_E,
- * u is GridFunction, v is test function; q are Coefficient, q在边E的两边连续 */
+/* 计算(边界或者内部Face都可以): <{q grad(u).n}, [v]>_E,
+ * u is GridFunction, v is test function; q are Coefficient */
 class DGSelfTraceIntegrator_5 : public LinearFormIntegrator
 {
 protected:
@@ -1052,21 +1199,20 @@ public:
             }
 
             Trans.Elem1->SetIntPoint(&eip1);
-            double w = ip.weight * Q->Eval(*Trans.Elem1, eip1);
 
             if (ndof2 > 0)
             {
                 gradu->Eval(grad_u, *Trans.Elem1, eip1);
-                double tmp = (grad_u * nor);
+                double tmp = (grad_u * nor) * Q->Eval(*Trans.Elem1, eip1);
 
                 Trans.Loc2.Transform(ip, eip2);
                 el2.CalcShape(eip2, shape2);
 
                 Trans.Elem2->SetIntPoint(&eip2);
                 gradu->Eval(grad_u, *Trans.Elem2, eip2);
-                tmp += (grad_u * nor);
+                tmp += (grad_u * nor) * Q->Eval(*Trans.Elem2, eip2);
 
-                w *= 0.5 * tmp;
+                double w = 0.5 * tmp * ip.weight;
 
                 for (int i=0; i<ndof1; ++i)
                     elvect(i) += w * shape1(i);
@@ -1076,6 +1222,7 @@ public:
             }
             else
             {
+                double w = ip.weight * Q->Eval(*Trans.Elem1, eip1);
                 gradu->Eval(grad_u, *Trans.Elem1, eip1);
                 w *= (grad_u * nor);
                 elvect.Add(w, shape1);
@@ -1086,11 +1233,11 @@ public:
 
 
 /* 计算(边界或者内部Face都可以): - <{Q grad(u).n}, [v]>_E,
- * u is trial function, v is test function */
+ * u is trial function, v is test function, Q is Coefficient */
 class DGSelfTraceIntegrator_6 : public BilinearFormIntegrator
 {
 protected:
-    Coefficient *Q, *q;
+    Coefficient *Q;
     double sigma=0.0, kappa=0.0;
 
     Vector shape1, shape2, dshape1dn, dshape2dn, nor, nh, ni;
@@ -1333,30 +1480,58 @@ namespace _DGSelfTraceIntegrator
     {
         Mesh* mesh = new Mesh(50, 50, Element::TRIANGLE, true, 1.0, 1.0);
 
-        DG_FECollection h1_fec(1, mesh->Dimension());
-        FiniteElementSpace h1_space(mesh, &h1_fec);
+        DG_FECollection fec(1, mesh->Dimension());
+        FiniteElementSpace fsp(mesh, &fec);
 
         ConstantCoefficient one(1.0);
         ConstantCoefficient neg(-1.0);
         FunctionCoefficient sin_coeff(sin_cfun);
         FunctionCoefficient cos_coeff(cos_cfun);
-        GridFunction sin_gf(&h1_space), one_gf(&h1_space);
+        GridFunction sin_gf(&fsp), one_gf(&fsp);
         sin_gf.ProjectCoefficient(sin_coeff);
         one_gf.ProjectCoefficient(one);
         GradientGridFunctionCoefficient grad_sin(&sin_gf);
 
+        GridFunction rand_gf(&fsp);
+        for (int i=0; i<fsp.GetNDofs(); ++i) rand_gf[i] = rand() % 10;
+        GridFunctionCoefficient rand_coeff(&rand_gf);
+        GradientGridFunctionCoefficient grad_rand(&rand_gf);
+
         {
-            LinearForm lf1(&h1_space);
+            LinearForm lf1(&fsp);
+            // (alpha/2) < (u.n) f, w > - beta < |u.n| f, w >, f=cos, u = grad(sin)
+            // i.e., 1 <grad(sin).n cos, w>
             lf1.AddBdrFaceIntegrator(new BoundaryFlowIntegrator(cos_coeff, grad_sin, 2.0, 0.0));
             lf1.Assemble();
 
-            LinearForm lf2(&h1_space);
+            LinearForm lf2(&fsp);
+            // one <cos, v grad(sin).n>
             lf2.AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&one, &cos_coeff, &sin_gf));
             lf2.Assemble();
 
-//        lf1.Print(cout << "lf1: " , h1_space.GetVSize());
-//        lf2.Print(cout << "lf2: ", h1_space.GetVSize());
-            for (int i=0; i<h1_space.GetVSize(); ++i)
+//            lf1.Print(cout << "lf1: ", fsp.GetVSize());
+//            lf2.Print(cout << "lf2: ", fsp.GetVSize());
+            for (int i=0; i<fsp.GetVSize(); ++i)
+            {
+                assert(abs(lf1[i] - lf2[i]) < 1E-10);
+            }
+        }
+
+        {
+            LinearForm lf1(&fsp);
+            // (alpha/2) < (u.n) f, w > - beta < |u.n| f, w >,
+            // f=rand_coeff, u = grad(rand_gf), i.e., 1 <grad(rand_gf).n rand_coeff, w>
+            lf1.AddBdrFaceIntegrator(new BoundaryFlowIntegrator(rand_coeff, grad_rand, 2.0, 0.0));
+            lf1.Assemble();
+
+            LinearForm lf2(&fsp);
+            // one <rand_coeff, v grad(sin).n>
+            lf2.AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&one, &rand_coeff, &rand_gf));
+            lf2.Assemble();
+
+//            lf1.Print(cout << "lf1: ", fsp.GetVSize());
+//            lf2.Print(cout << "lf2: ", fsp.GetVSize());
+            for (int i=0; i<fsp.GetVSize(); ++i)
             {
                 assert(abs(lf1[i] - lf2[i]) < 1E-10);
             }
@@ -1369,52 +1544,105 @@ namespace _DGSelfTraceIntegrator
     {
         Mesh* mesh = new Mesh(50, 50, Element::TRIANGLE, true, 1.0, 1.0);
 
-//    H1_FECollection h1_fec(1, mesh->Dimension());
-        DG_FECollection h1_fec(1, mesh->Dimension());
-        FiniteElementSpace h1_space(mesh, &h1_fec);
+        DG_FECollection fec(1, mesh->Dimension());
+        FiniteElementSpace fsp(mesh, &fec);
 
         ConstantCoefficient one(1.0);
         ConstantCoefficient neg(-1.0);
         FunctionCoefficient sin_coeff(sin_cfun);
-        GridFunction sin_gf(&h1_space), one_gf(&h1_space);
+        GridFunction sin_gf(&fsp), one_gf(&fsp);
         sin_gf.ProjectCoefficient(sin_coeff);
         one_gf.ProjectCoefficient(one);
 
-        { // 只在内部边积分, test DGSelfTraceIntegrator_1
-            Vector out1(h1_space.GetVSize()), out2(h1_space.GetVSize());
+        GridFunction rand_gf(&fsp);
+        for (int i=0; i<fsp.GetNDofs(); ++i) rand_gf[i] = rand() % 10;
+        GridFunctionCoefficient rand_coeff(&rand_gf);
+        GradientGridFunctionCoefficient grad_rand(&rand_gf);
 
-            BilinearForm blf1(&h1_space);
+        { // 只在内部边积分, test DGSelfTraceIntegrator_1
+            Vector out1(fsp.GetVSize()), out2(fsp.GetVSize());
+
+            BilinearForm blf1(&fsp);
+            // q <{u grad(w).n}, [v]>_E, q=neg, w=sin
             blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg, sin_gf));
             blf1.Assemble();
             blf1.Finalize();
             blf1.Mult(one_gf, out1);
 
-            BilinearForm blf2(&h1_space);
+            BilinearForm blf2(&fsp);
+            // - < {(Q grad(u)).n}, [v] >, Q=one
             blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(one, 0.0, 0.0));
             blf2.Assemble();
             blf2.Finalize();
             blf2.Mult(sin_gf, out2);
 
-            for (int i=0; i<h1_space.GetVSize(); ++i)
+            for (int i=0; i<fsp.GetVSize(); ++i)
                 assert(abs(out1[i] - out2[i]) < 1E-10);
         }
+        { // 只在内部边积分, test DGSelfTraceIntegrator_1
+            Vector out1(fsp.GetVSize()), out2(fsp.GetVSize());
 
+            BilinearForm blf1(&fsp);
+            // q <{u grad(w).n}, [v]>_E, q=neg, w=rand_gf
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg, rand_gf));
+            blf1.Assemble();
+            blf1.Finalize();
+            blf1.Mult(one_gf, out1);
+
+            BilinearForm blf2(&fsp);
+            // - < {(Q grad(u)).n}, [v] >, Q=one
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(one, 0.0, 0.0));
+            blf2.Assemble();
+            blf2.Finalize();
+            blf2.Mult(rand_gf, out2);
+
+//            out1.Print(cout << "out1: ", fsp.GetVSize());
+//            out2.Print(cout << "out2: ", fsp.GetVSize());
+            for (int i=0; i<fsp.GetVSize(); ++i)
+                assert(abs(out1[i] - out2[i]) < 1E-10);
+        }
         { // 只在边界积分, test DGSelfTraceIntegrator_1
-            Vector out1(h1_space.GetVSize()), out2(h1_space.GetVSize());
+            Vector out1(fsp.GetVSize()), out2(fsp.GetVSize());
 
-            BilinearForm blf1(&h1_space);
+            BilinearForm blf1(&fsp);
+            //  q <{u grad(w).n}, [v]>, q=neg, w=sin_gf
             blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg, sin_gf));
             blf1.Assemble();
             blf1.Finalize();
             blf1.Mult(one_gf, out1);
 
-            BilinearForm blf2(&h1_space);
+            BilinearForm blf2(&fsp);
+            // - < {(Q grad(u)).n}, [v] >, Q=one
             blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(one, 0.0, 0.0));
             blf2.Assemble();
             blf2.Finalize();
             blf2.Mult(sin_gf, out2);
 
-            for (int i=0; i<h1_space.GetVSize(); ++i)
+            for (int i=0; i<fsp.GetVSize(); ++i)
+                assert(abs(out1[i] - out2[i]) < 1E-10);
+        }
+        {
+            Vector out1(fsp.GetVSize()), out2(fsp.GetVSize());
+
+            BilinearForm blf1(&fsp);
+            // q <{u grad(w).n}, [v]>_E, q=neg, w=rand_gf
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg, rand_gf));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg, rand_gf));
+            blf1.Assemble();
+            blf1.Finalize();
+            blf1.Mult(one_gf, out1);
+
+            BilinearForm blf2(&fsp);
+            // - < {(Q grad(u)).n}, [v] >, Q=one
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(one, 0.0, 0.0));
+            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(one, 0.0, 0.0));
+            blf2.Assemble();
+            blf2.Finalize();
+            blf2.Mult(rand_gf, out2);
+
+//            out1.Print(cout << "out1: ", fsp.GetVSize());
+//            out2.Print(cout << "out2: ", fsp.GetVSize());
+            for (int i=0; i<fsp.GetVSize(); ++i)
                 assert(abs(out1[i] - out2[i]) < 1E-10);
         }
 
@@ -1425,42 +1653,47 @@ namespace _DGSelfTraceIntegrator
     {
         Mesh* mesh = new Mesh(20, 20, Element::TRIANGLE, true, 1.0, 1.0);
 
-        DG_FECollection h1_fec(1, mesh->Dimension());
-        FiniteElementSpace h1_space(mesh, &h1_fec);
-        int size = h1_space.GetVSize();
+        DG_FECollection fec(1, mesh->Dimension());
+        FiniteElementSpace fsp(mesh, &fec);
+        int size = fsp.GetVSize();
 
         ConstantCoefficient one(1.0);
         ConstantCoefficient neg(-1.0);
         FunctionCoefficient sin_coeff(sin_cfun);
-        GridFunction sin_gf(&h1_space), one_gf(&h1_space);
+        GridFunction sin_gf(&fsp), one_gf(&fsp);
         sin_gf.ProjectCoefficient(sin_coeff);
         one_gf.ProjectCoefficient(one);
+
+        GridFunction rand_gf(&fsp);
+        for (int i=0; i<fsp.GetNDofs(); ++i) rand_gf[i] = rand() % 10;
+        GridFunctionCoefficient rand_coeff(&rand_gf);
+        GradientGridFunctionCoefficient grad_rand(&rand_gf);
 
         { // test: DGSelfTraceIntegrator_2
             Vector out1(size), out2(size), out3(size);
 
-            BilinearForm blf1(&h1_space);
-            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(neg, sin_gf));
-            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(neg, sin_gf));
-            blf1.Assemble();
-            blf1.Finalize();
-            blf1.Mult(sin_gf, out1);
+            BilinearForm blf1(&fsp);
+            // q <[u], {v grad(w).n}>, q=neg, w=sin_gf
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(one, sin_gf));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(one, sin_gf));
+            blf1.Assemble(); blf1.Finalize();
+            blf1.Mult(sin_gf, out1); // <[sin], {v grad(sin).n}>
 
-            BilinearForm blf2(&h1_space);
+            BilinearForm blf2(&fsp);
+            // - < {(Q grad(u)).n}, [v] > + sigma < [u], {(Q grad(v)).n} >, Q=one, sigma=1.0,
             blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(one, 1.0, 0.0));
             blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(one, 1.0, 0.0));
-            blf2.Assemble();
-            blf2.Finalize();
-            blf2.Mult(sin_gf, out2);
+            blf2.Assemble(); blf2.Finalize();
+            blf2.Mult(sin_gf, out2); // -<{grad(sin).n}, [v]> + <[sin], {grad(v).n}>
 
-            BilinearForm blf3(&h1_space);
+            BilinearForm blf3(&fsp);
+            // q <{u grad(w).n}, [v]>, q=one, w=sin_gf
             blf3.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(one, sin_gf));
             blf3.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(one, sin_gf));
-            blf3.Assemble();
-            blf3.Finalize();
-            blf3.Mult(one_gf, out3);
+            blf3.Assemble(); blf3.Finalize();
+            blf3.Mult(one_gf, out3); // <{grad(sin).n}, [v]>
 
-            out3 += out2;
+            out3 += out2; // <[sin], {grad(v).n}>
             for (int i=0; i<size; ++i)
             {
 //            assert(abs(out1[i] - out2[i]) < 1E-10);
@@ -1473,41 +1706,98 @@ namespace _DGSelfTraceIntegrator
 
     void Test_DGSelfTraceIntegrator_7()
     {
-        Mesh* mesh = new Mesh(20, 20, Element::TRIANGLE, true, 1.0, 1.0);
+        Mesh* mesh = new Mesh(100, 100, Element::TRIANGLE, true, 1.0, 1.0);
 
-        DG_FECollection h1_fec(1, mesh->Dimension());
-        FiniteElementSpace h1_space(mesh, &h1_fec);
-        int size = h1_space.GetVSize();
+        DG_FECollection fec(1, mesh->Dimension());
+        FiniteElementSpace fsp(mesh, &fec);
+        int size = fsp.GetVSize();
 
         ConstantCoefficient one(1.0);
         ConstantCoefficient neg(-1.0);
         FunctionCoefficient sin_coeff(sin_cfun);
-        GridFunction sin_gf(&h1_space), one_gf(&h1_space);
+        GridFunction sin_gf(&fsp), one_gf(&fsp);
         sin_gf.ProjectCoefficient(sin_coeff);
         one_gf.ProjectCoefficient(one);
 
+        Vector out1(size), out2(size), out3(size);
         {
-            Vector out1(size);
+            BilinearForm blf2(&fsp);
+            // - < {(Q grad(u)).n}, [v] > + sigma < [u], {(Q grad(v)).n} >, Q=one, sigma=1.0,
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(one, 1.0, 0.0));
+//            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(one, 1.0, 0.0));
+            blf2.Assemble(); blf2.Finalize();
+            blf2.Mult(sin_gf, out2); // -<{grad(sin).n}, [v]> + <[sin], {grad(v).n}>
 
-            BilinearForm blf1(&h1_space);
+            BilinearForm blf3(&fsp);
+            // q <{u grad(w).n}, [v]>, q=one, w=sin_gf
+            blf3.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(one, sin_gf));
+//            blf3.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(one, sin_gf));
+            blf3.Assemble(); blf3.Finalize();
+            blf3.Mult(one_gf, out3); // <{grad(sin).n}, [v]>
+
+            out3 += out2; // <[sin], {grad(v).n}>
+
+            LinearForm lf(&fsp);
+            // q <[u], {grad(v).n}>, q=one, u=sin, i.e., <[sin], {grad(v).n}>
+            lf.AddFaceIntegrator(new DGSelfTraceIntegrator_7_int(one,sin_coeff));
+//            lf.AddFaceIntegrator(new DGSelfTraceIntegrator_7_bdr(one,sin_coeff));
+            lf.Assemble();
+
+//            out3.Print(cout << "out3: ", size);
+//            lf.Print(cout << "lf  : ", size);
+            for (int i=0; i<size; ++i)
+                assert(abs(out3[i] - lf[i]) < 1E-7); // 内部计算的精度比边界高
+        }
+        {
+            BilinearForm blf2(&fsp);
+            // - < {(Q grad(u)).n}, [v] > + sigma < [u], {(Q grad(v)).n} >, Q=one, sigma=1.0,
+//            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(one, 1.0, 0.0));
+            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(one, 1.0, 0.0));
+            blf2.Assemble(); blf2.Finalize();
+            blf2.Mult(sin_gf, out2); // -<{grad(sin).n}, [v]> + <[sin], {grad(v).n}>
+
+            BilinearForm blf3(&fsp);
+            // q <{u grad(w).n}, [v]>, q=one, w=sin_gf
+//            blf3.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(one, sin_gf));
+            blf3.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(one, sin_gf));
+            blf3.Assemble(); blf3.Finalize();
+            blf3.Mult(one_gf, out3); // <{grad(sin).n}, [v]>
+
+            out3 += out2; // <[sin], {grad(v).n}>
+
+            LinearForm lf(&fsp);
+            // q <[u], {grad(v).n}>, q=one, u=sin, i.e., <[sin], {grad(v).n}>
+//            lf.AddFaceIntegrator(new DGSelfTraceIntegrator_7_int(one,sin_coeff));
+            lf.AddFaceIntegrator(new DGSelfTraceIntegrator_7_bdr(one,sin_coeff));
+            lf.Assemble();
+
+//            out3.Print(cout << "out3: ", size);
+//            lf.Print(cout << "lf  : ", size);
+            for (int i=0; i<size; ++i)
+                assert(abs(out3[i] - lf[i]) < 1E-4); // 内部计算的精度比边界高
+        }
+        {
+            BilinearForm blf1(&fsp);
+            // - < {(Q grad(u)).n}, [v] > + sigma < [u], {(Q grad(v)).n} >
+            // Q=one, sigma=-1.0, i.e., -<{grad(u).n}, [v]> - <[u], {grad(v).n}>
             blf1.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(one, -1.0, 0.0));
             blf1.AddBdrFaceIntegrator(new DGDiffusionIntegrator(one, -1.0, 0.0));
+            // - <{Q grad(u).n}, [v]>, Q=neg, i.e., <{grad(u).n}j, [v]>
             blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_6(&neg));
             blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_6(&neg));
             blf1.Assemble();
             blf1.Finalize();
-            blf1.Mult(sin_gf, out1);
+            blf1.Mult(sin_gf, out1); // -<[sin], {grad(v).n}>
 
-            LinearForm lf(&h1_space);
+            LinearForm lf(&fsp);
+            // q <[u], {grad(v).n}>, q=neg, u=sin, i.e., -<[sin], {grad(v).n}>
             lf.AddFaceIntegrator(new DGSelfTraceIntegrator_7(neg,sin_coeff));
             lf.Assemble();
 
-            out1.Print(cout << "out1: ", size);
-            lf.Print(cout << "lf  : ", size);
+//            out1.Print(cout << "out1: ", size);
+//            lf.Print(cout << "lf  : ", size);
             for (int i=0; i<size; ++i)
-            {
-                assert(abs(out1[i] - lf[i]) < 1E-10);
-            }
+                assert(abs(out1[i] - lf[i]) < 1E-4);
         }
     }
 
@@ -1517,59 +1807,67 @@ namespace _DGSelfTraceIntegrator
 
         DG_FECollection fec(1, mesh->Dimension());
         FiniteElementSpace fsp(mesh, &fec);
+        int size = fsp.GetVSize();
 
+        ConstantCoefficient neg(-1.0);
         FunctionCoefficient sin_coeff(sin_cfun);
         GridFunction sin_gf(&fsp);
         sin_gf.ProjectCoefficient(sin_coeff);
 
         GridFunction rand_gf(&fsp);
         for (int i=0; i<fsp.GetNDofs(); ++i) rand_gf[i] = rand() % 10;
+        GridFunctionCoefficient rand_coeff(&rand_gf);
 
+        Vector out1(size), out2(size);
         {
-            Vector out1(fsp.GetVSize()), out2(fsp.GetVSize());
-
             BilinearForm blf1(&fsp);
-            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(sin_coeff));
-            blf1.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0, 0));
-            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(sin_coeff));
-            blf1.AddBdrFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0, 0));
+            // <{h^{-1} q} [u], [v]>, q=rand
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(rand_coeff));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(rand_coeff));
+            // - < {(Q grad(u)).n}, [v] >, Q=rand
+            blf1.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, 0, 0));
+            blf1.AddBdrFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, 0, 0));
             blf1.Assemble();
             blf1.Finalize();
-            blf1.Mult(rand_gf, out1);
+            blf1.Mult(rand_gf, out1); // <{h^{-1} rand} [rand], [v]> - <{rand grad(rand).n}, [v]>
 
             BilinearForm blf2(&fsp);
-            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 1.0));
-            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 1.0));
+            // - < {(Q grad(u)).n}, [v] > + + kappa < {h^{-1} Q} [u], [v] >, Q=rand
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, 0.0, 1.0));
+            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, 0.0, 1.0));
             blf2.Assemble();
             blf2.Finalize();
-            blf2.Mult(rand_gf, out2);
+            blf2.Mult(rand_gf, out2); // -<{rand grad(rand).n}, [v]> + <{h^{-1} rand} [rand], [v]>
 
-            for (int i=0; i<fsp.GetVSize(); ++i)
+//            out1.Print(cout << "out1: ", size);
+//            out2.Print(cout << "out2: ", size);
+            for (int i=0; i<size; ++i)
                 assert(abs(out1[i] - out2[i]) < 1E-10);
         }
 
         {
-            ConstantCoefficient neg(-1.0);
-
-            Vector out1(fsp.GetVSize()), out2(fsp.GetVSize());
-
             BilinearForm blf1(&fsp);
-            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(sin_coeff));
-            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_6(&sin_coeff));
-            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(sin_coeff));
-            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_6(&sin_coeff));
+            // <{h^{-1} q} [u], [v]>, q=rand
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(rand_coeff));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(rand_coeff));
+            // - <{Q grad(u).n}, [v]>, Q=rand
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_6(&rand_coeff));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_6(&rand_coeff));
             blf1.Assemble();
             blf1.Finalize();
-            blf1.Mult(rand_gf, out1);
+            blf1.Mult(rand_gf, out1); // <{h^{-1} rand} [rand], [v]> - <{rand grad(rand).n}, [v]>
 
             BilinearForm blf2(&fsp);
-            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 1.0));
-            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 1.0));
+            // - < {(Q grad(u)).n}, [v] > + kappa < {h^{-1} Q} [u], [v] >, Q=rand, kappa=1
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, 0.0, 1.0));
+            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, 0.0, 1.0));
             blf2.Assemble();
             blf2.Finalize();
-            blf2.Mult(rand_gf, out2);
+            blf2.Mult(rand_gf, out2); // - <{(rand grad(rand)).n}, [v]> + < {h^{-1} rand} [rand], [v] >
 
-            for (int i=0; i<fsp.GetVSize(); ++i)
+//            out1.Print(cout << "out1: ", size);
+//            out2.Print(cout << "out2: ", size);
+            for (int i=0; i<size; ++i)
                 assert(abs(out1[i] - out2[i]) < 1E-10);
         }
     }
@@ -1580,6 +1878,7 @@ namespace _DGSelfTraceIntegrator
 
         DG_FECollection fec(1, mesh->Dimension());
         FiniteElementSpace fsp(mesh, &fec);
+        int size = fsp.GetVSize();
 
         FunctionCoefficient sin_coeff(sin_cfun);
         GridFunction sin_gf(&fsp);
@@ -1589,24 +1888,24 @@ namespace _DGSelfTraceIntegrator
         for (int i=0; i<fsp.GetNDofs(); ++i) rand_gf[i] = rand() % 10;
         GridFunctionCoefficient rand_coeff(&rand_gf);
 
+        Vector out1(size), out2(size);
         {
-            Vector out1(fsp.GetVSize()), out2(fsp.GetVSize());
-
             LinearForm lf(&fsp);
-            Array<int> null_array;
-            lf.AddFaceIntegrator(new DGSelfTraceIntegrator_4(&sin_coeff, &rand_coeff));
+            // <{h^{-1} q} [u], [v]>, q=rand, u=rand
+            lf.AddFaceIntegrator(new DGSelfTraceIntegrator_4(&rand_coeff, &rand_coeff));
             lf.Assemble();
 
             BilinearForm blf1(&fsp);
-            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(sin_coeff));
-            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(sin_coeff));
+            // <{h^{-1} q} [u], [v]>, q=rand
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(rand_coeff));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(rand_coeff));
             blf1.Assemble();
             blf1.Finalize();
-            blf1.Mult(rand_gf, out1);
+            blf1.Mult(rand_gf, out1); // <{h^{-1} sin} [rand], [v]>
 
-//            out1.Print(cout << "out1: ", fsp.GetVSize());
-//            lf  .Print(cout << "lf  : ", fsp.GetVSize());
-            for (int i=0; i<fsp.GetVSize(); ++i)
+//            out1.Print(cout << "out1: ", size);
+//            lf  .Print(cout << "lf  : ", size);
+            for (int i=0; i<size; ++i)
                 assert(abs(out1[i] - lf[i]) < 1E-10);
         }
     }
@@ -1617,6 +1916,7 @@ namespace _DGSelfTraceIntegrator
 
         DG_FECollection fec(1, mesh->Dimension());
         FiniteElementSpace fsp(mesh, &fec);
+        int size = fsp.GetVSize();
 
         ConstantCoefficient neg(-1.0);
         FunctionCoefficient sin_coeff(sin_cfun);
@@ -1625,28 +1925,53 @@ namespace _DGSelfTraceIntegrator
 
         GridFunction rand_gf(&fsp);
         for (int i=0; i<fsp.GetNDofs(); ++i) rand_gf[i] = rand() % 10;
+        GridFunctionCoefficient rand_coeff(&rand_gf);
 
-        Vector out1(fsp.GetVSize()), out2(fsp.GetVSize());
+        Vector out1(size), out2(size);
+        {
+            BilinearForm blf1(&fsp);
+            // - <{Q grad(u).n}, [v]>, Q=sin
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_6(&sin_coeff));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_6(&sin_coeff));
+            blf1.Assemble();
+            blf1.Finalize();
+            blf1.Mult(rand_gf, out1); // - <{sin grad(rand).n}, [v]>
 
-        BilinearForm blf1(&fsp);
-        blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_6(&sin_coeff));
-        blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_6(&sin_coeff));
-        blf1.Assemble();
-        blf1.Finalize();
-        blf1.Mult(rand_gf, out1);
+            BilinearForm blf2(&fsp);
+            // - < {(Q grad(u)).n}, [v] >, Q=sin
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 0.0));
+            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 0.0));
+            blf2.Assemble();
+            blf2.Finalize();
+            blf2.Mult(rand_gf, out2); // - <{(sin grad(rand)).n}, [v]>
 
-        BilinearForm blf2(&fsp);
-        blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 0.0));
-        blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(sin_coeff, 0.0, 0.0));
-        blf2.Assemble();
-        blf2.Finalize();
-        blf2.Mult(rand_gf, out2);
+    //        out1.Print(cout << "out1: ", fsp.GetTrueVSize());
+    //        out2.Print(cout << "out2: ", fsp.GetTrueVSize());
+            for (int i=0; i<size; ++i)
+                assert(abs(out1[i] - out2[i]) < 1E-10);
+        }
+        {
+            BilinearForm blf1(&fsp);
+            // - <{Q grad(u).n}, [v]>, Q=rand
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_6(&rand_coeff));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_6(&rand_coeff));
+            blf1.Assemble();
+            blf1.Finalize();
+            blf1.Mult(rand_gf, out1); // - <{rand grad(rand).n}, [v]>
 
-//        out1.Print(cout << "out1: ", fsp.GetTrueVSize());
-//        out2.Print(cout << "out2: ", fsp.GetTrueVSize());
-        for (int i=0; i<fsp.GetVSize(); ++i)
-            assert(abs(out1[i] - out2[i]) < 1E-10);
+            BilinearForm blf2(&fsp);
+            // - < {(Q grad(u)).n}, [v] >, Q=rand
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, 0.0, 0.0));
+            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, 0.0, 0.0));
+            blf2.Assemble();
+            blf2.Finalize();
+            blf2.Mult(rand_gf, out2); // - <{(rand grad(rand)).n}, [v]>
 
+//            out1.Print(cout << "out1: ", fsp.GetTrueVSize());
+//            out2.Print(cout << "out2: ", fsp.GetTrueVSize());
+            for (int i=0; i<size; ++i)
+                assert(abs(out1[i] - out2[i]) < 1E-10);
+        }
     }
 
     void Test_DGSelfTraceIntegrator_5()
@@ -1655,6 +1980,7 @@ namespace _DGSelfTraceIntegrator
 
         DG_FECollection fec(1, mesh->Dimension());
         FiniteElementSpace fsp(mesh, &fec);
+        int size = fsp.GetVSize();
 
         FunctionCoefficient sin_coeff(sin_cfun);
         FunctionCoefficient cos_coeff(cos_cfun);
@@ -1668,25 +1994,47 @@ namespace _DGSelfTraceIntegrator
         GridFunction rand_gf(&fsp), sin_gf(&fsp);
         for (int i=0; i<fsp.GetNDofs(); ++i) rand_gf[i] = rand() % 10;
         sin_gf.ProjectCoefficient(sin_coeff);
+        GridFunctionCoefficient rand_coeff(&rand_gf);
 
+        Vector out1(size);
         {
-            Vector out1(fsp.GetVSize());
-
             LinearForm lf(&fsp);
+            // <{q grad(u).n}, [v]>, q=neg_sin_cos, u=rand
             lf.AddFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_sin_cos, &rand_gf));
-            lf.Assemble();
+            lf.Assemble(); // <{- sin cos grad(rand).n}, [v]>
 
             BilinearForm blf1(&fsp);
+            // - <{Q grad(u).n}, [v]>, Q=sin_cos
             blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_6(&sin_cos));
             blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_6(&sin_cos));
             blf1.Assemble();
             blf1.Finalize();
-            blf1.Mult(rand_gf, out1);
+            blf1.Mult(rand_gf, out1); // -<{sin cos grad(rand).n}, [v]>
 
-//            out1.Print(cout << "out1: ", fsp.GetVSize());
-//            lf  .Print(cout << "lf  : ", fsp.GetVSize());
-            for (int i=0; i<fsp.GetVSize(); ++i)
+//            out1.Print(cout << "out1: ", size);
+//            lf  .Print(cout << "lf  : ", size);
+            for (int i=0; i<size; ++i)
                 assert(abs(out1[i] - lf[i]) < 1E-10);
+        }
+        {
+            LinearForm lf(&fsp);
+            // <{q grad(u).n}, [v]>, q=rand, u=rand
+            lf.AddFaceIntegrator(new DGSelfTraceIntegrator_5(&rand_coeff, &rand_gf));
+            lf.Assemble(); // <{rand grad(rand).n}, [v]>
+
+            BilinearForm blf1(&fsp);
+            // - <{Q grad(u).n}, [v]>, Q=rand
+            blf1.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_6(&rand_coeff));
+            blf1.AddBdrFaceIntegrator(new DGSelfTraceIntegrator_6(&rand_coeff));
+            blf1.Assemble();
+            blf1.Finalize();
+            blf1.Mult(rand_gf, out1); // -<{sin cos grad(rand).n}, [v]>
+
+            out1 += lf;
+
+//            out1.Print(cout << "out1: ", size);
+            for (int i=0; i<size; ++i)
+                assert(abs(out1[i]) < 1E-10);
         }
     }
 
@@ -1698,11 +2046,12 @@ void Test_DGSelfTraceIntegrator()
     Test_DGSelfBdrFaceIntegrator_1();
 
     Test_DGSelfTraceIntegrator_1();
-    Test_DGSelfTraceIntegrator_2();
+//    Test_DGSelfTraceIntegrator_2(); // no tests
     Test_DGSelfTraceIntegrator_3();
     Test_DGSelfTraceIntegrator_4();
     Test_DGSelfTraceIntegrator_5();
     Test_DGSelfTraceIntegrator_6();
+    Test_DGSelfTraceIntegrator_7();
 
     cout << "===> Test Pass: DGSelfTraceIntegrator.hpp" << endl;
 }

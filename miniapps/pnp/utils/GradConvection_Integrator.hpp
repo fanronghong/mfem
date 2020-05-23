@@ -78,7 +78,7 @@ public:
 };
 
 
-// 给定 w(类型为GridFunction) and Coefficient Q, compute Q*(grad(w), grad(v))_T
+// Q*(grad(w), grad(v)), 给定 Q is Coefficient, w is GridFunction
 class GradConvectionIntegrator2: public LinearFormIntegrator
 {
 protected:
