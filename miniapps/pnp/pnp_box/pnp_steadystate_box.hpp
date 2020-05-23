@@ -12,7 +12,7 @@ using namespace mfem;
 //#define SELF_VERBOSE
 
 const char* mesh_file       = "./translate_translate.msh";
-int refine_times            = 3;
+int refine_times            = 0;
 const int bottom_attr       = 1;
 const int top_attr          = 6;
 const int left_attr         = 5;

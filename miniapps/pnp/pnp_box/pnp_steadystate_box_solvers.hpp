@@ -3009,16 +3009,16 @@ public:
         a22->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
         a22->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
         // (D1 z1 c1 grad(phi^k), grad(v1))
-//        a22->AddDomainIntegrator(new GradConvectionIntegrator(*phi, &D_K_prod_v_K));
+        a22->AddDomainIntegrator(new GradConvectionIntegrator(*phi, &D_K_prod_v_K));
         // - <{D1 z1 c1 grad(phi^k)}, [v1]>
-//        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi));
-//        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi));
-        // sigma <[c1], {D1 z1 v1 grad(phi^k)}>  fffgoon bug in DGSelfTraceIntegrator_2()
-//        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi));
-//        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi));
+        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi));
+        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi));
+        // sigma <[c1], {D1 z1 v1 grad(phi^k)}>
+        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi));
+        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi));
         // kappa <h^{-1} [c1], [v1]>
-//        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
-//        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
+        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
+        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
         a22->Assemble(0);
         a22->Finalize(0);
         a22->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3187,7 +3187,7 @@ public:
         newton_solver->SetRelTol(newton_rtol);
         newton_solver->SetMaxIter(newton_maxitr);
         newton_solver->SetPrintLevel(newton_printlvl);
-//        newton_solver->SetPreconditionerFactory(jac_factory);
+        newton_solver->SetPreconditionerFactory(jac_factory);
     }
     virtual ~PNP_DG_Newton_box_Solver_par()
     {
