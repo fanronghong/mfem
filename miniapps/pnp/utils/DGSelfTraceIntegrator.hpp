@@ -10,7 +10,7 @@
 #include <cassert>
 #include <random>
 #include <numeric>
-
+#include "./GradConvection_Integrator.hpp"
 using namespace std;
 using namespace mfem;
 
@@ -1230,6 +1230,119 @@ public:
         }
     }
 };
+class DGSelfTraceIntegrator_5_int : public LinearFormIntegrator
+{
+protected:
+    Coefficient *Q;
+    GradientGridFunctionCoefficient *gradu;
+
+    Vector shape1, shape2, nor, grad_u;
+
+public:
+    DGSelfTraceIntegrator_5_int(Coefficient* q, GridFunction* u): Q(q)
+    {
+        gradu = new GradientGridFunctionCoefficient(u);
+    }
+    ~DGSelfTraceIntegrator_5_int() { delete gradu; }
+
+    virtual void AssembleRHSElementVect(const FiniteElement &el,
+                                        ElementTransformation &Tr,
+                                        Vector &elvect)
+    {
+        MFEM_ABORT("not support!");
+    }
+
+    virtual void AssembleRHSElementVect(const FiniteElement& el1,
+                                        const FiniteElement& el2,
+                                        FaceElementTransformations &Trans,
+                                        Vector &elvect)
+    {
+        int dim, ndof1, ndof2, ndofs;
+
+        dim = el1.GetDim();
+        grad_u.SetSize(dim);
+        nor.SetSize(dim);
+
+        ndof1 = el1.GetDof();
+        shape1.SetSize(ndof1);
+        if (Trans.Elem2No >= 0)
+        {
+            ndof2 = el2.GetDof();
+            shape2.SetSize(ndof2);
+        }
+        else ndof2 = 0;
+
+        ndofs = ndof1 + ndof2;
+        elvect.SetSize(ndofs);
+        elvect = 0.0;
+        if (ndof2 == 0) return;
+
+        const IntegrationRule *ir = IntRule;
+        if (ir == NULL)
+        {
+            // a simple choice for the integration order; is this OK?
+            int order;
+            if (ndof2)
+            {
+                order = 2*max(el1.GetOrder(), el2.GetOrder());
+            }
+            else
+            {
+                order = 2*el1.GetOrder();
+            }
+            ir = &IntRules.Get(Trans.GetGeometryType(), order);
+        }
+
+        for (int p=0; p<ir->GetNPoints(); ++p)
+        {
+            const IntegrationPoint& ip = ir->IntPoint(p);
+            IntegrationPoint eip1, eip2;
+
+            Trans.Loc1.Transform(ip, eip1);
+            el1.CalcShape(eip1, shape1);
+
+            Trans.Face->SetIntPoint(&ip);
+            if (dim == 1)
+            {
+                nor(0) = 2*eip1.x - 1.0;
+            }
+            else
+            {
+                CalcOrtho(Trans.Face->Jacobian(), nor);
+            }
+
+            Trans.Elem1->SetIntPoint(&eip1);
+
+            if (ndof2 > 0)
+            {
+                gradu->Eval(grad_u, *Trans.Elem1, eip1);
+                double tmp = (grad_u * nor) * Q->Eval(*Trans.Elem1, eip1);
+
+                Trans.Loc2.Transform(ip, eip2);
+                el2.CalcShape(eip2, shape2);
+
+                Trans.Elem2->SetIntPoint(&eip2);
+                gradu->Eval(grad_u, *Trans.Elem2, eip2);
+                tmp += (grad_u * nor) * Q->Eval(*Trans.Elem2, eip2);
+
+                double w = 0.5 * tmp * ip.weight;
+
+                for (int i=0; i<ndof1; ++i)
+                    elvect(i) += w * shape1(i);
+
+                for (int i=0; i<ndof2; ++i)
+                    elvect(i + ndof1) -= w * shape2(i);
+            }
+            else
+            {
+                double w = ip.weight * Q->Eval(*Trans.Elem1, eip1);
+                gradu->Eval(grad_u, *Trans.Elem1, eip1);
+                w *= (grad_u * nor);
+                elvect.Add(w, shape1);
+            }
+        }
+    }
+};
 
 
 /* 计算(边界或者内部Face都可以): - <{Q grad(u).n}, [v]>_E,
@@ -2038,6 +2151,52 @@ namespace _DGSelfTraceIntegrator
         }
     }
 
+    void Test_DGSelfTraceIntegrator_several()
+    {
+        Mesh* mesh = new Mesh(100, 100, Element::TRIANGLE, true, 1.0, 1.0);
+
+        DG_FECollection fec(2, mesh->Dimension());
+        FiniteElementSpace fsp(mesh, &fec);
+        int size = fsp.GetVSize();
+
+        ConstantCoefficient one(1.0);
+        ConstantCoefficient neg(-1.0);
+        FunctionCoefficient sin_coeff(sin_cfun);
+        GridFunction sin_gf(&fsp), one_gf(&fsp);
+        sin_gf.ProjectCoefficient(sin_coeff);
+        one_gf.ProjectCoefficient(one);
+
+        Vector out1(size), out2(size), out3(size);
+        { // 在区域边界估计不准确很正常ffff
+            BilinearForm blf1(&fsp);
+            // (Q grad(u), grad(v))
+            blf1.AddDomainIntegrator(new DiffusionIntegrator(one));
+            // - <{(Q grad(u)).n}, [v]> + sigma <[u], {(Q grad(v)).n}> + kappa <{h^{-1} Q} [u], [v]>
+            // i.e., (grad(u), grad(v)) - <{grad(u).n}, [v]> + <[u], {grad(v).n}> + <h^{-1}, [u], [v]>
+            blf1.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(one, 1.0, 1.0));
+//            blf1.AddBdrFaceIntegrator(new DGDiffusionIntegrator(one, 1.0, 1.0));
+            blf1.Assemble();
+            blf1.Finalize();
+            blf1.Mult(sin_gf, out1); // (grad(sin), grad(v)) - <{grad(sin).n}, [v]> + <[sin], {grad(v).n}> + <h^{-1} [sin], [v]>
+
+            LinearForm lf(&fsp);
+            // Q (grad(u), grad(v)), Q=one, u=sin
+            lf.AddDomainIntegrator(new GradConvectionIntegrator2(&one, &sin_gf));
+            // <{q grad(u).n}, [v]>, q=neg, u=sin
+            lf.AddFaceIntegrator(new DGSelfTraceIntegrator_5_int(&neg, &sin_gf));
+            // q <[u], {grad(v).n}>, q=neg, u=sin, i.e., -<[sin], {grad(v).n}>
+            lf.AddFaceIntegrator(new DGSelfTraceIntegrator_7_int(neg,sin_coeff));
+            // <{h^{-1} q} [u], [v]>, q=one, u=sin
+            lf.AddFaceIntegrator(new DGSelfTraceIntegrator_4_int(&one, &sin_coeff));
+            lf.Assemble();
+
+            out1 -= lf;
+//            out1.Print(cout << "out1: ", size);
+            for (int i=0; i<size; ++i)
+                assert(abs(out1[i]) < 1E-6);
+        }
+    }
+
 }
 
 void Test_DGSelfTraceIntegrator()
@@ -2052,7 +2211,7 @@ void Test_DGSelfTraceIntegrator()
     Test_DGSelfTraceIntegrator_5();
     Test_DGSelfTraceIntegrator_6();
     Test_DGSelfTraceIntegrator_7();
-
+    Test_DGSelfTraceIntegrator_several();
     cout << "===> Test Pass: DGSelfTraceIntegrator.hpp" << endl;
 }
 

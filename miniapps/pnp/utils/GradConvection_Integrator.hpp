@@ -12,7 +12,7 @@ using namespace mfem;
 using namespace std;
 
 
-// 给定w(类型为GridFunction), 计算 Q * (u \cdot grad(w), grad(v)), u是trial, v是test
+// Q (u grad(w), grad(v)), given w(类型为GridFunction), u是trial, v是test
 // the stiffness matrix of GradConvectionIntegrator is just the transpose of ConvectionIntegrator (ref: Test_gradConvectionIntegrator2)
 vector<double> local_peclet; // for more info
 class GradConvectionIntegrator: public BilinearFormIntegrator
@@ -78,7 +78,7 @@ public:
 };
 
 
-// Q*(grad(w), grad(v)), 给定 Q is Coefficient, w is GridFunction
+// Q*(grad(w), grad(v)), given Q is Coefficient, w is GridFunction
 class GradConvectionIntegrator2: public LinearFormIntegrator
 {
 protected:
