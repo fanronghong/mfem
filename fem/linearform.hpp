@@ -46,7 +46,6 @@ protected:
 
    /// added by fan. Set of Interior Face Integrators to be applied
    Array<LinearFormIntegrator*> _flfi; // 只对网格中的部分facet做积分
-   Array<Array<int>*>           _flfi_marker;
 
    /// The element ids where the centers of the delta functions lie
    Array<int> dlfi_delta_elem_id;
