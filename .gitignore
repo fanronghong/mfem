@@ -253,3 +253,12 @@ tests/scripts/*.msg
 
 # VPATH builds
 build-*/*
+
+# added by fan
+cmake-build-debug*/*
+build*/*
+install*/*
+.idea/
+
+
+
