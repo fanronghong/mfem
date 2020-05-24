@@ -138,7 +138,7 @@ public:
 
    // added by fan. boundary faces and interior faces
    // 如果想对特定的face积分, 请在自定义的积分子里面实现这个功能: 比如跳过特定attribute的face
-   void AddFaceIntegrator(LinearFormIntegrator *lfi);
+   void AddInteriorFaceIntegrator(LinearFormIntegrator *lfi);
 
    /** @brief Access all integrators added with AddDomainIntegrator() which are
        not DeltaLFIntegrator%s or they are DeltaLFIntegrator%s with non-delta

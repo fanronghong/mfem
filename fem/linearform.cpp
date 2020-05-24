@@ -77,7 +77,7 @@ void LinearForm::AddBdrFaceIntegrator(LinearFormIntegrator *lfi,
 }
 
 // added by fan
-void LinearForm::AddFaceIntegrator(LinearFormIntegrator *lfi)
+void LinearForm::AddInteriorFaceIntegrator(LinearFormIntegrator *lfi)
 {
     _flfi.Append(lfi);
 }
@@ -222,19 +222,6 @@ void LinearForm::Assemble()
                for (size_t k=0; k<_flfi.Size(); k++)
                {
                    _flfi[k]->AssembleRHSElementVect(*fe1, *fe2,*tr, elemvect);
-                   AddElementVector(vdofs1, elemvect);
-               }
-           }
-           else
-           {
-               fes -> GetElementVDofs (tr -> Elem1No, vdofs1);
-
-               const FiniteElement* fe1 = fes->GetFE(tr->Elem1No); // 与该内部facet相连的两个 FiniteElement (与Element区分)
-               const FiniteElement* fe2;
-
-               for (size_t k=0; k<_flfi.Size(); k++)
-               {
-                   _flfi[k]->AssembleRHSElementVect(*fe1, *fe2,*tr, elemvect); // 为了使接口统一: 第二个参数其实没有意义
                    AddElementVector(vdofs1, elemvect);
                }
            }
