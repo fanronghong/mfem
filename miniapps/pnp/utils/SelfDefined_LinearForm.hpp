@@ -682,7 +682,7 @@ void Test_SelfDefined_LFFacetIntegrator10()
     marker[7 - 1] = 1; // interface的标记为7
 
     LinearForm lf1(&h1_space);
-    lf1.AddFaceIntegrator(new SelfDefined_LFFacetIntegrator(&h1_space, grad_sin_coeff, 1, 2)); //(g \cdot n, v)
+    lf1.AddInteriorFaceIntegrator(new SelfDefined_LFFacetIntegrator(&h1_space, grad_sin_coeff, 1, 2)); //(g \cdot n, v)
     lf1.Assemble();
 
     SelfDefined_LinearForm lf2(&h1_space);
