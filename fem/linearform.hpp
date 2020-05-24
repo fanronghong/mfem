@@ -44,6 +44,9 @@ protected:
    Array<LinearFormIntegrator*> flfi;
    Array<Array<int>*>           flfi_marker; ///< Entries are not owned.
 
+   /// added by fan. Set of Interior Face Integrators to be applied
+   Array<LinearFormIntegrator*> _flfi; // 只对网格中的部分facet做积分
+
    /// The element ids where the centers of the delta functions lie
    Array<int> dlfi_delta_elem_id;
 
@@ -131,6 +134,10 @@ public:
        internally as a pointer to the given Array<int> object. */
    void AddBdrFaceIntegrator(LinearFormIntegrator *lfi,
                              Array<int> &bdr_attr_marker);
+
+   // added by fan. boundary faces and interior faces
+   // 如果想对特定的face积分, 请在自定义的积分子里面实现这个功能: 比如跳过特定attribute的face
+   void AddInteriorFaceIntegrator(LinearFormIntegrator *lfi);
 
    /** @brief Access all integrators added with AddDomainIntegrator() which are
        not DeltaLFIntegrator%s or they are DeltaLFIntegrator%s with non-delta
