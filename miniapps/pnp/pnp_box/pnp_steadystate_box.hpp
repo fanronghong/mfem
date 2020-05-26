@@ -11,7 +11,7 @@ using namespace mfem;
 
 //#define SELF_VERBOSE
 
-const char* mesh_file       = "./translate_translate.msh";
+const char* mesh_file       = "./4_4_4_translate.msh";
 int refine_times            = 0;
 const int bottom_attr       = 1;
 const int top_attr          = 6;
@@ -154,7 +154,7 @@ const double relax_c1  = 0.2;
 const double relax_c2  = 0.2;
 
 double sigma = -1.0;
-double kappa = 200;
+double kappa = 2;
 
 // 必须足够精确
 double phi_solver_atol = 1E-20;
@@ -174,7 +174,7 @@ int np2_solver_printlv = -1;
 
 const double newton_rtol   = 1.0e-8;
 const double newton_atol   = 1.0e-20;
-const double newton_maxitr = 20;
+const double newton_maxitr = 50;
 const int newton_printlvl  = 1;
 
 const double jacobi_rtol = 1.0e-8;

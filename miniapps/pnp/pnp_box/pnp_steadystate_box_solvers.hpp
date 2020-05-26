@@ -3195,7 +3195,9 @@ public:
     void Solve(Array<double> phiL2errornomrs, Array<double> c1L2errornorms, Array<double> c2L2errornorms, Array<double> meshsizes)
     {
         cout.precision(14);
-        cout << "\n---------------------- DG" << p_order << ", Newton, box, parallel ----------------------" << endl;
+        cout << "\nNewton, box, parallel, DG" << p_order
+             << ", sigma: " << sigma << ", kappa: " << kappa
+             << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 //        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
         Vector zero_vec;
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
