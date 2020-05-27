@@ -154,7 +154,7 @@ const double relax_c1  = 0.2;
 const double relax_c2  = 0.2;
 
 double sigma = -1.0;
-double kappa = 2;
+double kappa = 10;
 
 // 必须足够精确
 double phi_solver_atol = 1E-20;
