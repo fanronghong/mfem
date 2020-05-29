@@ -468,7 +468,10 @@ private:
     map<string, Array<double>> out1;
     map<string, double> out2;
     Array<double> poisson_iter, poisson_time, np1_iter, np1_time, np2_iter, np2_time;
-    double poisson_avg_iter, poisson_avg_time, np1_avg_iter, np1_avg_time, np2_avg_iter, np2_avg_time, linearize_iter, total_time;
+    double poisson_avg_iter, poisson_avg_time,
+            np1_avg_iter, np1_avg_time,
+            np2_avg_iter, np2_avg_time,
+            linearize_iter, total_time, ndofs;
 
 public:
     PNP_CG_Gummel_Solver_par(Mesh& mesh_) : mesh(mesh_)
@@ -602,14 +605,20 @@ public:
             Solve_NP2();
             (*c2_n) = (*c2);
 
+#ifdef SELF_VERBOSE
             cout << "===> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
+#endif
             if (tol < Gummel_rel_tol)
             {
+#ifdef SELF_VERBOSE
                 cout << "------> Gummel iteration converge: " << iter+1 << " times." << endl;
+#endif
                 break;
             }
             iter++;
+#ifdef SELF_VERBOSE
             cout << endl;
+#endif
         }
         if (iter == Gummel_max_iters) MFEM_ABORT("------> Gummel iteration Failed!!!");
 
@@ -622,8 +631,10 @@ public:
 
         linearize_iter = (iter + 1);
         total_time = poisson_time.Sum() + np1_time.Sum() + np2_time.Sum();
+        ndofs = fsp->GetVSize() * 3;
         out2["linearize_iter"] = linearize_iter;
         out2["total_time"] = total_time;
+        out2["ndofs"] = ndofs;
         poisson_avg_iter = round(poisson_iter.Sum() / poisson_iter.Size());
         poisson_avg_time = poisson_time.Sum() / poisson_time.Size();
         out2["poisson_avg_iter"] = poisson_avg_iter;
@@ -680,48 +691,12 @@ public:
         (*c1)  *= (alpha3);
         (*c2)  *= (alpha3);
 
-#ifdef CLOSE
-        {
-            ShowMesh(mesh, "coarse mesh");
-//            (*phi) += (*phi1); //把总的电势全部加到phi上面
-//            (*phi) += (*phi2);
-            (*phi) /= alpha1;
-            (*c1)   /= alpha3;
-            (*c2)   /= alpha3;
-            Visualize(*dc, "phi", "phi (with units, added by phi1 and phi2)");
-            Visualize(*dc, "c1", "c1 (with units)");
-            Visualize(*dc, "c2", "c2 (with units)");
-            cout << "solution vector size on mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
-
-            ofstream results("phi_c1_c2.vtk");
-            results.precision(14);
-            int ref = 0;
-            mesh.PrintVTK(results, ref);
-            phi->SaveVTK(results, "phi", ref);
-            c1->SaveVTK(results, "c1", ref);
-            c2->SaveVTK(results, "c2", ref);
-
-            (*phi) *= (alpha1);
-            (*c1)   *= (alpha3);
-            (*c2)   *= (alpha3);
-
-            // for Two-Grid algm
-            mesh.UniformRefinement();
-            ShowMesh(mesh, "fine mesh: after 1 uniform refinement");
-            fsp->Update();
-            phi->Update();
-            c1->Update();
-            c2->Update();
-            Visualize(*dc, "phi", "phi: project from coarse mesh to fine mesh");
-            Visualize(*dc, "c1", "c1: project from coarse mesh to fine mesh");
-            Visualize(*dc, "c2", "c2: project from coarse mesh to fine mesh");
-            cout << "solution vector size on fine mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
-        }
-#endif
         cout << endl;
+#ifdef SELF_VERBOSE
         map<string, Array<double>>::iterator it1;
         for (it1=out1.begin(); it1!=out1.end(); ++it1)
             (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
+#endif
         map<string, double>::iterator it2;
         for (it2=out2.begin(); it2!=out2.end(); ++it2)
             cout << (*it2).first << ": " << (*it2).second << endl;
@@ -777,10 +752,12 @@ private:
 //        cout << "l2 norm of phi: " << phi->Norml2() << endl;
 //        MFEM_ABORT("PNP_CG_Gummel_Solver_par: Stop!");
 
+#ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1)
             cout << "phi solver: Converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
             cerr << "phi solver: Not Converge, taking " << chrono.RealTime() << " s." << endl;
+#endif
 
         poisson_iter.Append(solver->GetNumIterations());
         poisson_time.Append(chrono.RealTime());
@@ -838,10 +815,12 @@ private:
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *c1);
 
+#ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1)
             cout << "np1 solver: Converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
             cerr << "np1 solver: Not Converge, taking " << chrono.RealTime() << " s." << endl;
+#endif
 
         np1_iter.Append(solver->GetNumIterations());
         np1_time.Append(chrono.RealTime());
@@ -895,10 +874,12 @@ private:
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *c2);
 
+#ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1)
             cout << "np2 solver: Converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
             cerr << "np2 solver: Not Converge, taking " << chrono.RealTime() << " s." << endl;
+#endif
 
         np2_iter.Append(solver->GetNumIterations());
         np2_time.Append(chrono.RealTime());
@@ -1838,8 +1819,16 @@ private:
     VisItDataCollection* dc;
     Array<int> Dirichlet;
     Array<int> ess_tdof_list;
+
     StopWatch chrono;
     int num_procs, myid;
+    map<string, Array<double>> out1;
+    map<string, double> out2;
+    Array<double> poisson_iter, poisson_time, np1_iter, np1_time, np2_iter, np2_time;
+    double poisson_avg_iter, poisson_avg_time,
+            np1_avg_iter, np1_avg_time,
+            np2_avg_iter, np2_avg_time,
+            linearize_iter, total_time, ndofs;
 
 public:
     PNP_DG_Gummel_Solver_par(Mesh& mesh_): mesh(mesh_)
@@ -1905,13 +1894,17 @@ public:
             Solve_NP2();
             (*c2_n) = (*c2);
 
+#ifdef SELF_VERBOSE
             cout << "======> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
+#endif
             if (tol < Gummel_rel_tol)
             {
                 break;
             }
             iter++;
-            cout << endl;
+      #ifdef SELF_VERBOSE
+      cout << endl;
+#endif
         }
         if (iter == Gummel_max_iters)
             cerr << "===> Gummel Not converge!!!" << endl;
@@ -1931,6 +1924,32 @@ public:
             meshsizes_.Append(totle_size / mesh.GetNE());
 #endif
         }
+
+        out1["poisson_iter"] = poisson_iter;
+        out1["poisson_time"] = poisson_time;
+        out1["np1_iter"] = np1_iter;
+        out1["np1_time"] = np1_time;
+        out1["np2_iter"] = np2_iter;
+        out1["np2_time"] = np2_time;
+
+        linearize_iter = (iter + 1);
+        total_time = poisson_time.Sum() + np1_time.Sum() + np2_time.Sum();
+        ndofs = fsp->GetVSize() * 3;
+        out2["linearize_iter"] = linearize_iter;
+        out2["total_time"] = total_time;
+        out2["ndofs"] = ndofs;
+        poisson_avg_iter = round(poisson_iter.Sum() / poisson_iter.Size());
+        poisson_avg_time = poisson_time.Sum() / poisson_time.Size();
+        out2["poisson_avg_iter"] = poisson_avg_iter;
+        out2["poisson_avg_time"] = poisson_avg_time;
+        np1_avg_iter     = round(np1_iter.Sum() / np1_iter.Size());
+        np1_avg_time     = np1_time.Sum() / np1_iter.Size();
+        out2["np1_avg_iter"] = np1_avg_iter;
+        out2["np1_avg_time"] = np1_avg_time;
+        np2_avg_iter     = round(np2_iter.Sum() / np2_iter.Size());
+        np2_avg_time     = np2_time.Sum() / np2_iter.Size();
+        out2["np2_avg_iter"] = np2_avg_iter;
+        out2["np2_avg_time"] = np2_avg_time;
 
         cout.precision(14);
         cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
@@ -1955,24 +1974,15 @@ public:
         (*c1)  *= (alpha3);
         (*c2)  *= (alpha3);
 
-#ifdef CLOSE
-        {
-            (*phi)/= alpha1;
-            (*c1) /= alpha3;
-            (*c2) /= alpha3;
-            Visualize(*dc, "phi", "phi (with units)");
-            Visualize(*dc, "c1", "c1 (with units)");
-            Visualize(*dc, "c2", "c2 (with units)");
-
-            ofstream results("phi_c1_c2.vtk");
-            results.precision(14);
-            int ref = 0;
-            mesh.PrintVTK(results, ref);
-            phi->SaveVTK(results, "phi", ref);
-            c1  ->SaveVTK(results, "c1", ref);
-            c2  ->SaveVTK(results, "c2", ref);
-        }
+        cout << endl;
+#ifdef SELF_VERBOSE
+        map<string, Array<double>>::iterator it1;
+        for (it1=out1.begin(); it1!=out1.end(); ++it1)
+            (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
 #endif
+        map<string, double>::iterator it2;
+        for (it2=out2.begin(); it2!=out2.end(); ++it2)
+            cout << (*it2).first << ": " << (*it2).second << endl;
     }
 
 private:
@@ -2027,12 +2037,15 @@ private:
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *phi);
 
+#ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1 && myid == 0)
             cout << "phi solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
             cerr << "phi solver: failed to converged" << endl;
-#ifdef SELF_VERBOSE
 #endif
+
+        poisson_iter.Append(solver->GetNumIterations());
+        poisson_time.Append(chrono.RealTime());
 
         delete blf;
         delete lf;
@@ -2092,20 +2105,16 @@ private:
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *c1);
 
+#ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1 && myid == 0)
             cout << "np1 solver : successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
             cerr << "np1 solver : failed to converged" << endl;
-#ifdef SELF_VERBOSE
 #endif
-#ifdef CLOSE
-        {
-            for (int i=0; i<protein_dofs.Size(); ++i)
-            {
-                assert(abs((*c1)[protein_dofs[i]]) < 1E-10);
-            }
-        }
-#endif
+
+        np1_iter.Append(solver->GetNumIterations());
+        np1_time.Append(chrono.RealTime());
+
         delete blf;
         delete lf;
         delete solver;
@@ -2164,20 +2173,16 @@ private:
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *c2);
 
+#ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1 && myid == 0)
             cout << "np2 solver : successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
             cerr << "np2 solver : failed to converged" << endl;
-#ifdef SELF_VERBOSE
 #endif
-#ifdef CLOSE
-        {
-            for (int i=0; i<protein_dofs.Size(); ++i)
-            {
-                assert(abs((*c2)[protein_dofs[i]]) < 1E-10);
-            }
-        }
-#endif
+
+        np2_iter.Append(solver->GetNumIterations());
+        np2_time.Append(chrono.RealTime());
+
         delete blf;
         delete lf;
         delete solver;
@@ -2689,6 +2694,13 @@ protected:
     ParGridFunction phi, c1_k, c2_k;
 
     StopWatch chrono;
+    SNES snes;
+    map<string, Array<double>> out1;
+    map<string, double> out2;
+    Array<double> linear_iter;
+    double linearize_iter, total_time, ndofs, linear_avg_iter;
+    PetscInt *its=0, num_its=100;
+    PetscReal *residual_norms=0;
 
 public:
     PNP_CG_Newton_box_Solver_par(Mesh* mesh_): mesh(mesh_)
@@ -2745,10 +2757,16 @@ public:
         newton_solver->SetMaxIter(newton_maxitr);
         newton_solver->SetPrintLevel(newton_printlvl);
         newton_solver->SetPreconditionerFactory(jac_factory);
+        snes = SNES(*newton_solver);
+        PetscMalloc(num_its * sizeof(PetscInt), &its);
+        PetscMalloc(num_its * sizeof(PetscReal), &residual_norms);
+        SNESSetConvergenceHistory(snes, residual_norms, its, num_its, PETSC_TRUE);
     }
     virtual ~PNP_CG_Newton_box_Solver_par()
     {
         delete newton_solver, op, jac_factory, u_k, mesh, pmesh;
+        PetscFree(its);
+        PetscFree(residual_norms);
     }
 
     void Solve(Array<double> phiL2errornomrs, Array<double> c1L2errornorms, Array<double> c2L2errornorms, Array<double> meshsizes)
@@ -2757,7 +2775,24 @@ public:
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 //        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
         Vector zero_vec;
+        chrono.Start();
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
+        chrono.Stop();
+        linearize_iter = newton_solver->GetNumIterations();
+        total_time = chrono.RealTime();
+        ndofs = u_k->Size();
+        out2["linearize_iter"] = linearize_iter;
+        out2["total_time"] = total_time;
+        out2["ndofs"] = ndofs;
+
+        SNESGetConvergenceHistory(snes, &residual_norms, &its, &num_its);
+//        for (int i=0; i<num_its; ++i)
+//            cout << residual_norms[i] << endl;
+        for (int i=1; i<num_its; ++i)
+            linear_iter.Append(its[i]);
+        out1["linear_iter"] = linear_iter;
+        linear_avg_iter = round(linear_iter.Sum() / linear_iter.Size());
+        out2["linear_avg_iter"] = linear_avg_iter;
 
         phi .MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
         c1_k.MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
@@ -2770,6 +2805,16 @@ public:
         cout << "l2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
         cout << "l2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
         cout << "solution vector size on mesh: phi, " << phi.Size() << "; c1, " << c1_k.Size() << "; c2, " << c2_k.Size() << endl;
+
+        cout << endl;
+        map<string, Array<double>>::iterator it1;
+        for (it1=out1.begin(); it1!=out1.end(); ++it1)
+            (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
+#ifdef SELF_VERBOSE
+#endif
+        map<string, double>::iterator it2;
+        for (it2=out2.begin(); it2!=out2.end(); ++it2)
+            cout << (*it2).first << ": " << (*it2).second << endl;
     }
 };
 
@@ -3189,6 +3234,13 @@ private:
     ParGridFunction phi, c1_k, c2_k;
 
     StopWatch chrono;
+    SNES snes;
+    map<string, Array<double>> out1;
+    map<string, double> out2;
+    Array<double> linear_iter;
+    double linearize_iter, total_time, ndofs, linear_avg_iter;
+    PetscInt *its=0, num_its=100;
+    PetscReal *residual_norms=0;
 
 public:
     PNP_DG_Newton_box_Solver_par(Mesh& mesh_): mesh(&mesh_)
@@ -3235,10 +3287,15 @@ public:
         newton_solver->SetMaxIter(newton_maxitr);
         newton_solver->SetPrintLevel(newton_printlvl);
         newton_solver->SetPreconditionerFactory(jac_factory);
+        snes = SNES(*newton_solver);
+        PetscMalloc(num_its * sizeof(PetscInt), &its);
+        PetscMalloc(num_its * sizeof(PetscReal), &residual_norms);
+        SNESSetConvergenceHistory(snes, residual_norms, its, num_its, PETSC_TRUE);
     }
     virtual ~PNP_DG_Newton_box_Solver_par()
     {
         delete newton_solver, op, jac_factory, u_k, mesh, pmesh;
+        PetscFree(its);
     }
 
     void Solve(Array<double> phiL2errornomrs, Array<double> c1L2errornorms, Array<double> c2L2errornorms, Array<double> meshsizes)
@@ -3249,7 +3306,24 @@ public:
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 //        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
         Vector zero_vec;
+        chrono.Start();
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
+        chrono.Stop();
+        linearize_iter = newton_solver->GetNumIterations();
+        total_time = chrono.RealTime();
+        ndofs = u_k->Size();
+        out2["linearize_iter"] = linearize_iter;
+        out2["total_time"] = total_time;
+        out2["ndofs"] = ndofs;
+
+        SNESGetConvergenceHistory(snes, &residual_norms, &its, &num_its);
+//        for (int i=0; i<num_its; ++i)
+//            cout << residual_norms[i] << endl;
+        for (int i=1; i<num_its; ++i)
+            linear_iter.Append(its[i]);
+        out1["linear_iter"] = linear_iter;
+        linear_avg_iter = round(linear_iter.Sum() / linear_iter.Size());
+        out2["linear_avg_iter"] = linear_avg_iter;
 
         phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
         c1_k.MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
@@ -3261,6 +3335,16 @@ public:
         cout << "l2 norm of  c1: " << c1_k.ComputeL2Error(zero) << endl;
         cout << "l2 norm of  c2: " << c2_k.ComputeL2Error(zero) << endl;
         cout << "solution vector size on mesh: phi, " << phi.Size() << "; c1, " << c1_k.Size() << "; c2, " << c2_k.Size() << endl;
+
+        cout << endl;
+        map<string, Array<double>>::iterator it1;
+        for (it1=out1.begin(); it1!=out1.end(); ++it1)
+            (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
+#ifdef SELF_VERBOSE
+#endif
+        map<string, double>::iterator it2;
+        for (it2=out2.begin(); it2!=out2.end(); ++it2)
+            cout << (*it2).first << ": " << (*it2).second << endl;
     }
 };
 

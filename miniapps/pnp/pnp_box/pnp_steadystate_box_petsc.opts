@@ -49,11 +49,11 @@
 -newton_snes_linesearch_type basic
 -newton_snes_linesearch_monitor
 -newton_snes_linesearch_maxstep 0
--newton_snes_monitor
+#-newton_snes_monitor
 #-newton_snes_monitor_solution
 #-newton_snes_monitor_residual
 #-newton_snes_monitor_solution_update
--newton_snes_converged_reason
+#-newton_snes_converged_reason
 #-newton_snes_view
 #
 -newton_ksp_type gmres
@@ -66,7 +66,7 @@
 #-newton_ksp_monitor
 #-newton_ksp_monitor_true_residual
 #-newton_ksp_monitor_short
--newton_ksp_converged_reason
+#-newton_ksp_converged_reason
 #-newton_ksp_view
 
 -sub_block1_ksp_type cg
