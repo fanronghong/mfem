@@ -1,6 +1,7 @@
 #ifndef _PNP_STEADYSTATE_BOX_GUMMEL_SOLVERS_HPP_
 #define _PNP_STEADYSTATE_BOX_GUMMEL_SOLVERS_HPP_
 
+#include <map>
 #include "../utils/EAFE_ModifyStiffnessMatrix.hpp"
 #include "../utils/GradConvection_Integrator.hpp"
 #include "../utils/mfem_utils.hpp"
@@ -464,6 +465,10 @@ private:
 
     StopWatch chrono;
     int num_procs, myid;
+    map<string, Array<double>> out1;
+    map<string, double> out2;
+    Array<double> poisson_iter, poisson_time, np1_iter, np1_time, np2_iter, np2_time;
+    double poisson_avg_iter, poisson_avg_time, np1_avg_iter, np1_avg_time, np2_avg_iter, np2_avg_time, linearize_iter, total_time;
 
 public:
     PNP_CG_Gummel_Solver_par(Mesh& mesh_) : mesh(mesh_)
@@ -577,7 +582,8 @@ public:
     void Solve(Array<double>& phiL2errornorms_, Array<double>& c1L2errornorms_,
                Array<double>& c2L2errornorms_, Array<double>& meshsizes_)
     {
-        cout << "\n------> Begin Gummel iteration: CG" << p_order << ", box model\n";
+        cout << "\nGummel, CG" << p_order << ", box, parallel"
+             << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
         int iter = 0;
         while (iter < Gummel_max_iters)
         {
@@ -606,6 +612,30 @@ public:
             cout << endl;
         }
         if (iter == Gummel_max_iters) MFEM_ABORT("------> Gummel iteration Failed!!!");
+
+        out1["poisson_iter"] = poisson_iter;
+        out1["poisson_time"] = poisson_time;
+        out1["np1_iter"] = np1_iter;
+        out1["np1_time"] = np1_time;
+        out1["np2_iter"] = np2_iter;
+        out1["np2_time"] = np2_time;
+
+        linearize_iter = (iter + 1);
+        total_time = poisson_time.Sum() + np1_time.Sum() + np2_time.Sum();
+        out2["linearize_iter"] = linearize_iter;
+        out2["total_time"] = total_time;
+        poisson_avg_iter = round(poisson_iter.Sum() / poisson_iter.Size());
+        poisson_avg_time = poisson_time.Sum() / poisson_time.Size();
+        out2["poisson_avg_iter"] = poisson_avg_iter;
+        out2["poisson_avg_time"] = poisson_avg_time;
+        np1_avg_iter     = round(np1_iter.Sum() / np1_iter.Size());
+        np1_avg_time     = np1_time.Sum() / np1_iter.Size();
+        out2["np1_avg_iter"] = np1_avg_iter;
+        out2["np1_avg_time"] = np1_avg_time;
+        np2_avg_iter     = round(np2_iter.Sum() / np2_iter.Size());
+        np2_avg_time     = np2_time.Sum() / np2_iter.Size();
+        out2["np2_avg_iter"] = np2_avg_iter;
+        out2["np2_avg_time"] = np2_avg_time;
 
 #ifndef PhysicalModel
         {
@@ -688,6 +718,13 @@ public:
             cout << "solution vector size on fine mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
         }
 #endif
+        cout << endl;
+        map<string, Array<double>>::iterator it1;
+        for (it1=out1.begin(); it1!=out1.end(); ++it1)
+            (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
+        map<string, double>::iterator it2;
+        for (it2=out2.begin(); it2!=out2.end(); ++it2)
+            cout << (*it2).first << ": " << (*it2).second << endl;
     }
 
 private:
@@ -744,6 +781,9 @@ private:
             cout << "phi solver: Converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
             cerr << "phi solver: Not Converge, taking " << chrono.RealTime() << " s." << endl;
+
+        poisson_iter.Append(solver->GetNumIterations());
+        poisson_time.Append(chrono.RealTime());
 
 //        cout.precision(14);
 //        cout << "l2 error norm of |phi_h - phi_e|: " << phi->ComputeL2Error(phi_exact) << endl;
@@ -803,6 +843,9 @@ private:
         else if (solver->GetConverged() != 1)
             cerr << "np1 solver: Not Converge, taking " << chrono.RealTime() << " s." << endl;
 
+        np1_iter.Append(solver->GetNumIterations());
+        np1_time.Append(chrono.RealTime());
+
 //        cout.precision(14);
 //        cout << "l2 error norm of |c1_h - c1_e|: " << c1->ComputeL2Error(c1_exact) << endl;
 //        MFEM_ABORT("Stop here for test convergence rate!");
@@ -856,6 +899,9 @@ private:
             cout << "np2 solver: Converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
             cerr << "np2 solver: Not Converge, taking " << chrono.RealTime() << " s." << endl;
+
+        np2_iter.Append(solver->GetNumIterations());
+        np2_time.Append(chrono.RealTime());
 
 //        cout.precision(14);
 //        cout << "l2 error norm of |c2_h - c2_e|: " << c2->ComputeL2Error(c2_exact) << endl;
@@ -1838,7 +1884,9 @@ public:
     void Solve(Array<double>& phiL2errornorms_, Array<double>& c1L2errornorms_,
                Array<double>& c2L2errornorms_, Array<double>& meshsizes_)
     {
-        cout << "\n------> Begin Gummel iteration: DG" << p_order << ", box model, parallel\n";
+        cout << "\nGummel, DG" << p_order << ", box, parallel"
+             << ", sigma: " << sigma << ", kappa: " << kappa
+             << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
         int iter = 1;
         while (iter < Gummel_max_iters)
         {
@@ -2705,7 +2753,8 @@ public:
 
     void Solve(Array<double> phiL2errornomrs, Array<double> c1L2errornorms, Array<double> c2L2errornorms, Array<double> meshsizes)
     {
-        cout << "\n---------------------- CG1, Newton, box, parallel ----------------------" << endl;
+        cout << "\nNewton, CG" << p_order << ", box, parallel"
+             << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 //        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
         Vector zero_vec;
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
@@ -3195,7 +3244,7 @@ public:
     void Solve(Array<double> phiL2errornomrs, Array<double> c1L2errornorms, Array<double> c2L2errornorms, Array<double> meshsizes)
     {
         cout.precision(14);
-        cout << "\nNewton, box, parallel, DG" << p_order
+        cout << "\nNewton, DG" << p_order << ", box, parallel"
              << ", sigma: " << sigma << ", kappa: " << kappa
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 //        cout << "u_k l2 norm: " << u_k->Norml2() << endl;

@@ -1,0 +1,12 @@
+
+-advdiff_ksp_type gmres
+-advdiff_pc_type ilu # ilu,jacobi...
+-advdiff_ksp_rtol 1e-10
+-advdiff_ksp_atol 1e-20
+-advdiff_ksp_divtol 1e+5
+-advdiff_ksp_max_it 10000
+#-advdiff_ksp_monitor
+#-advdiff_ksp_monitor_short
+-advdiff_ksp_monitor_true_residual
+-advdiff_ksp_converged_reason
+#-advdiff_ksp_view

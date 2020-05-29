@@ -13,21 +13,24 @@ using namespace std;
 
 
 // Q (u grad(w), grad(v)), given w(类型为GridFunction), u是trial, v是test
+// or Q (u adv, grad(v)), adv is VectorCoefficient (advection velocity)
 // the stiffness matrix of GradConvectionIntegrator is just the transpose of ConvectionIntegrator (ref: Test_gradConvectionIntegrator2)
 vector<double> local_peclet; // for more info
 class GradConvectionIntegrator: public BilinearFormIntegrator
 {
 protected:
-    GridFunction& w;
     GradientGridFunctionCoefficient* grad_w;
+    VectorCoefficient* adv;
+    bool param = false;
     Coefficient* Q;
 
     DenseMatrix dshape, dshapedxt;
     Vector gradw, shape, vec1;
 
 public:
-    GradConvectionIntegrator(GridFunction& w_, Coefficient* Q_): w(w_), Q(Q_)
-    { grad_w = new GradientGridFunctionCoefficient(&w); }
+    GradConvectionIntegrator(GridFunction& w_, Coefficient* Q_): Q(Q_)
+    { grad_w = new GradientGridFunctionCoefficient(&w_); }
+    GradConvectionIntegrator(VectorCoefficient* adv_, Coefficient* Q_): Q(Q_), adv(adv_) { param = true; }
     ~GradConvectionIntegrator() { delete grad_w; }
 
     virtual void AssembleElementMatrix(const FiniteElement& el,
@@ -64,7 +67,11 @@ public:
 
             Mult(dshape, eltran.AdjugateJacobian(), dshapedxt);
 
-            grad_w->Eval(gradw, eltran, ip); // low precision for gradw
+            if (param) {
+                adv->Eval(gradw, eltran, ip);
+            } else {
+                grad_w->Eval(gradw, eltran, ip); // low precision for gradw
+            }
 
             elem_peclet.push_back(gradw.Norml1());
 
