@@ -20,3 +20,21 @@ exec &> >(tee "./out")
 ./pnp_steadystate_box -p 3 -ref 0 -lin gummel -des dg
 ./pnp_steadystate_box -p 3 -ref 0 -lin newton -des cg
 ./pnp_steadystate_box -p 3 -ref 0 -lin newton -des dg
+
+
+
+
+./pnp_steadystate_box -p 1 -ref 1 -lin gummel -des cg
+./pnp_steadystate_box -p 1 -ref 1 -lin gummel -des dg
+./pnp_steadystate_box -p 1 -ref 1 -lin newton -des cg
+./pnp_steadystate_box -p 1 -ref 1 -lin newton -des dg
+
+./pnp_steadystate_box -p 2 -ref 1 -lin gummel -des cg
+./pnp_steadystate_box -p 2 -ref 1 -lin gummel -des dg
+./pnp_steadystate_box -p 2 -ref 1 -lin newton -des cg
+./pnp_steadystate_box -p 2 -ref 1 -lin newton -des dg
+
+./pnp_steadystate_box -p 3 -ref 1 -lin gummel -des cg
+./pnp_steadystate_box -p 3 -ref 1 -lin gummel -des dg
+./pnp_steadystate_box -p 3 -ref 1 -lin newton -des cg
+./pnp_steadystate_box -p 3 -ref 1 -lin newton -des dg
