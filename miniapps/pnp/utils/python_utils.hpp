@@ -271,7 +271,7 @@ void PlotSparseMatrix(const SparseMatrix& sp, const std::string& title)
     std::string change_path_command = "os.chdir('" + module_path + "')";
     PyRun_SimpleString(change_path_command.c_str());
     PyRun_SimpleString("sys.path.append(os.getcwd())"); //把下面要导入的模块的路径加入到Python的搜索路径
-//    PyRun_SimpleString("pprint.pprint(sys.path)");
+    PyRun_SimpleString("pprint.pprint(sys.path)");
 
     // 导入需要的python模块
     PyObject* pModuleName = PyUnicode_FromString(module_name.c_str());

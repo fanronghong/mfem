@@ -13,8 +13,9 @@ using namespace mfem;
 
 const char* mesh_file       = "./4_4_4_translate.msh";
 int refine_times            = 0;
-const char* Linearize       = "newton"; // newton, gummel
+const char* Linearize       = "gummel"; // newton, gummel
 const char* Descretize      = "cg"; // cg, dg
+int p_order                 = 1; //有限元基函数的多项式次数
 const int bottom_attr       = 1;
 const int top_attr          = 6;
 const int left_attr         = 5;
@@ -22,7 +23,6 @@ const int front_attr        = 2;
 const int back_attr         = 4;
 const int right_attr        = 3;
 
-int p_order                 = 1; //有限元基函数的多项式次数
 const int Gummel_max_iters  = 20;
 const double Gummel_rel_tol = 1e-8;
 const double TOL            = 1e-10;
