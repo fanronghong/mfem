@@ -161,17 +161,17 @@ double kappa = 10;
 // 必须足够精确
 double phi_solver_atol = 1E-20;
 double phi_solver_rtol = 1E-14;
-int phi_solver_maxiter = 1000;
+int phi_solver_maxiter = 100000;
 int phi_solver_printlv = -1;
 
 double np1_solver_atol = 1E-20;
 double np1_solver_rtol = 1E-14;
-int np1_solver_maxiter = 1000;
+int np1_solver_maxiter = 100000;
 int np1_solver_printlv = -1;
 
 double np2_solver_atol = 1E-20;
 double np2_solver_rtol = 1E-14;
-int np2_solver_maxiter = 1000;
+int np2_solver_maxiter = 100000;
 int np2_solver_printlv = -1;
 
 const double newton_rtol   = 1.0e-8;
@@ -181,7 +181,7 @@ const int newton_printlvl  = 0;
 
 const double jacobi_rtol = 1.0e-8;
 const double jacobi_atol = 1.0e-20;
-const int jacobi_maxiter = 1000;
+const int jacobi_maxiter = 10000;
 const int jacobi_printlv = -1;
 
 ConstantCoefficient sigma_coeff(sigma);

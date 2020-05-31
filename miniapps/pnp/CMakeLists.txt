@@ -15,3 +15,5 @@ add_subdirectory(pnp_protein)
 add_subdirectory(utils)
 
 add_subdirectory(examples)
+
+add_subdirectory(EAFE_SUPG_advection_diffusion)

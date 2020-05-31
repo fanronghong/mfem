@@ -83,7 +83,7 @@
 #-sub_block1_ksp_view
 
 -sub_block2_ksp_type gmres
--sub_block2_pc_type lu
+-sub_block2_pc_type ilu
 -sub_block2_ksp_rtol 1e-8
 -sub_block2_ksp_atol 1e-10
 -sub_block2_ksp_divtol 1e5
@@ -95,7 +95,7 @@
 #-sub_block2_ksp_view
 
 -sub_block3_ksp_type gmres
--sub_block3_pc_type lu
+-sub_block3_pc_type ilu
 -sub_block3_ksp_rtol 1e-8
 -sub_block3_ksp_atol 1e-10
 -sub_block3_ksp_divtol 1e5
