@@ -2,54 +2,26 @@
 
 
 -phi_ksp_type cg
--phi_pc_type ilu # ilu,jacobi...
-#-phi_ksp_rtol 1e-8
-#-phi_ksp_atol 1e-20
-#-phi_ksp_divtol 1e5
-#-phi_ksp_max_it 1000
-#-phi_ksp_monitor
-#-phi_ksp_monitor_short
-#-phi_ksp_monitor_true_residual
--phi_ksp_converged_reson
-#-phi_ksp_view
-
+#-phi_pc_type ilu # ilu,jacobi...
+-phi_pc_type gamg -phi_pc_gamg_type classical -phi_pc_gamg_agg_nsmooths 1
 
 -np1_ksp_type gmres
-#-np1_pc_type ilu # ilu,jacobi...
-#-np1_ksp_rtol 1e-8
-#-np1_ksp_atol 1e-20
-#-np1_ksp_divtol 1e5
-#-np1_ksp_max_it 1000
-#-np1_ksp_monitor
-#-np1_ksp_monitor_short
-#-np1_ksp_monitor_true_residual
-#-np1_ksp_converged_reson
-#-np1_ksp_view
+-np1_ksp_monitor_true_residual
+-np1_pc_type ilu # ilu,jacobi...
+-np1_ksp_view
 
--np1_spdpc_ksp_type cg
--np1_spdpc_pc_type jacobi # ilu,jacobi...
-#-np1_spdpc_ksp_rtol 1e-8
-#-np1_spdpc_ksp_atol 1e-20
-#-np1_spdpc_ksp_divtol 1e5
-#-np1_spdpc_ksp_max_it 1000
-#-np1_spdpc_ksp_monitor
--np1_spdpc_ksp_monitor_short
-#-np1_spdpc_ksp_monitor_true_residual
--np1_spdpc_ksp_converged_reson
--np1_spdpc_ksp_view
-
+-np1spdpc_ksp_type cg
+-np1spdpc_pc_type ilu
+#-np1spdpc_pc_type gamg -np1spdpc_pc_gamg_type classical -np1spdpc_pc_gamg_agg_nsmooths 1
+#-np1spdpc_ksp_monitor_true_residual
+-np1spdpc_ksp_converged_reason
+-np1spdpc_ksp_view
 
 -np2_ksp_type gmres
--np2_pc_type ilu # ilu,jacobi...
-#-np2_ksp_rtol 1e-8
-#-np2_ksp_atol 1e-20
-#-np2_ksp_divtol 1e5
-#-np2_ksp_max_it 1000
-#-np2_ksp_monitor
-#-np2_ksp_monitor_short
-#-np2_ksp_monitor_true_residual
--np2_ksp_converged_reson
-#-np2_ksp_view
+#-np2_pc_type ilu # ilu,jacobi...
+
+-np2spdpc_ksp_type cg
+-np2spdpc_pc_type gamg -np2spdpc_pc_gamg_type classical -np2spdpc_pc_gamg_agg_nsmooths 1
 
 
 -newton_snes_type newtonls

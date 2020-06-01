@@ -12,7 +12,7 @@ using namespace mfem;
 //#define SELF_VERBOSE
 
 const char* mesh_file       = "./4_4_4_translate.msh";
-int refine_times            = 0;
+int refine_times            = 2;
 const char* Linearize       = "gummel"; // newton, gummel
 const char* Descretize      = "cg"; // cg, dg
 int p_order                 = 1; //有限元基函数的多项式次数

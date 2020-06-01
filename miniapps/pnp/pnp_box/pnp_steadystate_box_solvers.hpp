@@ -1379,7 +1379,7 @@ public:
 
         ierr = KSPCreate(MPI_COMM_WORLD, &ksp); PCHKERRQ(ksp, ierr);
         ierr = KSPSetOperators(ksp, pc, pc); PCHKERRQ(ksp, ierr);
-        KSPAppendOptionsPrefix(ksp, "np1_spdpc_");
+        KSPAppendOptionsPrefix(ksp, "np1spdpc_");
         KSPSetFromOptions(ksp);
         KSPSetUp(ksp);
 
@@ -1427,7 +1427,6 @@ public:
         return new SPD_PreconditionerSolver(oh);
     }
 };
-
 
 
 class PNP_CG_Gummel_Solver_par
@@ -1787,29 +1786,30 @@ private:
         blf->SetOperatorType(Operator::PETSC_MATAIJ);
         blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
 
-        PetscParMatrix* spd_mat;
-        OperatorHandle spd_handle(Operator::PETSC_MATAIJ);
-        ParBilinearForm* spd_prec = new ParBilinearForm(fsp);
-        spd_prec->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
-        spd_prec->Assemble();
-        spd_prec->Finalize();
-        spd_prec->ParallelAssemble(spd_handle);
-        spd_handle.Get(spd_mat);
+        ParBilinearForm* p_blf = new ParBilinearForm(fsp);
+        p_blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+        p_blf->Assemble(0);
+        p_blf->Finalize(0);
 
-//        SPD_PreconditionerFactory* prec = new SPD_PreconditionerFactory(*spd_mat, "SPD preconditioner for NP1");
-        PetscPreconditioner* pc = new PetscPreconditioner(MPI_COMM_WORLD, *spd_mat, "np1_spdpc");
+        PetscParMatrix* P = new PetscParMatrix();
+        p_blf->SetOperatorType(Operator::PETSC_MATAIJ);
+        p_blf->FormSystemMatrix(ess_tdof_list, *P);
+
+        PetscLinearSolver* pc = new PetscLinearSolver(*P, "np1spdpc_");
+        PetscPreconditioner* pc_ = new PetscPreconditioner(*P, "np1spdpc_");
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
-        solver->SetPreconditioner(*pc);
+//        solver->SetPreconditioner(*pc);
+        solver->SetPreconditioner(*pc_);
         solver->SetAbsTol(np1_solver_atol);
         solver->SetRelTol(np1_solver_rtol);
         solver->SetMaxIter(np1_solver_maxiter);
         solver->SetPrintLevel(np1_solver_printlv);
-//        solver->SetPreconditionerFactory(prec);
 
         chrono.Clear();
         chrono.Start();
         solver->Mult(*b, *x);
+        MFEM_ABORT("stop here111");
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *c1);
 
@@ -1860,7 +1860,19 @@ private:
         blf->SetOperatorType(Operator::PETSC_MATAIJ);
         blf->FormLinearSystem(ess_tdof_list, *c2, *lf, *A, *x, *b);
 
+        ParBilinearForm* p = new ParBilinearForm(fsp);
+        p->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
+        p->Assemble(0);
+        p->Finalize(0);
+
+        PetscParMatrix* P = new PetscParMatrix();
+        p->SetOperatorType(Operator::PETSC_MATAIJ);
+        p->FormSystemMatrix(ess_tdof_list, *P);
+
+        PetscLinearSolver* pc = new PetscLinearSolver(*P, "np2spdpc_");
+
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
+        solver->SetPreconditioner(*pc);
         solver->SetAbsTol(np2_solver_atol);
         solver->SetRelTol(np2_solver_rtol);
         solver->SetMaxIter(np2_solver_maxiter);
