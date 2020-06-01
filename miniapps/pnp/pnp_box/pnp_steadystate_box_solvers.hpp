@@ -1354,6 +1354,80 @@ private:
 };
 
 
+class SPD_PreconditionerSolver: public Solver
+{
+private:
+    KSP ksp;
+    mutable PetscParVector *X, *Y; // Create PetscParVectors as placeholders X and Y
+
+public:
+    SPD_PreconditionerSolver(const OperatorHandle& oh): Solver()
+    {
+        cout << "in SPD_PreconditionerSolver::SPD_PreconditionerSolver()" << endl;
+        PetscErrorCode ierr;
+
+        // Get the PetscParMatrix out of oh.
+        PetscParMatrix *prec;
+        oh.Get(prec);
+        Mat pc = *prec; // type cast to Petsc Mat
+
+        // update base (Solver) class
+        width = prec->Width();
+        height = prec->Height();
+        X = new PetscParVector(PETSC_COMM_WORLD, *this, true, false);
+        Y = new PetscParVector(PETSC_COMM_WORLD, *this, false, false);
+
+        ierr = KSPCreate(MPI_COMM_WORLD, &ksp); PCHKERRQ(ksp, ierr);
+        ierr = KSPSetOperators(ksp, pc, pc); PCHKERRQ(ksp, ierr);
+        KSPAppendOptionsPrefix(ksp, "np1_spdpc_");
+        KSPSetFromOptions(ksp);
+        KSPSetUp(ksp);
+
+        // cout << "in BlockPreconditionerSolver::BlockPreconditionerSolver()" << endl;
+    }
+    virtual ~SPD_PreconditionerSolver()
+    {
+        KSPDestroy(&ksp);
+        delete X;
+        delete Y;
+    }
+
+    virtual void SetOperator(const Operator& op) { MFEM_ABORT("Not support!"); }
+
+    virtual void Mult(const Vector& x, Vector& y) const
+    {
+        cout << "in SPD_PreconditionerSolver::Mult()" << endl;
+        Vec blockx, blocky;
+        Vec blockx0, blocky0;
+
+        X->PlaceArray(x.GetData()); // no copy, only the data pointer is passed to PETSc
+        Y->PlaceArray(y.GetData());
+
+        KSPSolve(ksp, *X, *Y);
+
+        X->ResetArray();
+        Y->ResetArray();
+    }
+};
+class SPD_PreconditionerFactory: public PetscPreconditionerFactory
+{
+private:
+    const Operator& op;
+
+public:
+    SPD_PreconditionerFactory(const Operator& op_, const string& name_): PetscPreconditionerFactory(name_), op(op_)
+    {
+        cout << "in PreconditionerFactory() " << endl;
+    }
+    virtual ~SPD_PreconditionerFactory() {}
+
+    virtual Solver* NewPreconditioner(const OperatorHandle& oh)
+    {
+        cout << "in SPD_PreconditionerFactory::NewPreconditioner()" << endl;
+        return new SPD_PreconditionerSolver(oh);
+    }
+};
+
 
 
 class PNP_CG_Gummel_Solver_par
@@ -1713,11 +1787,25 @@ private:
         blf->SetOperatorType(Operator::PETSC_MATAIJ);
         blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
 
+        PetscParMatrix* spd_mat;
+        OperatorHandle spd_handle(Operator::PETSC_MATAIJ);
+        ParBilinearForm* spd_prec = new ParBilinearForm(fsp);
+        spd_prec->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+        spd_prec->Assemble();
+        spd_prec->Finalize();
+        spd_prec->ParallelAssemble(spd_handle);
+        spd_handle.Get(spd_mat);
+
+//        SPD_PreconditionerFactory* prec = new SPD_PreconditionerFactory(*spd_mat, "SPD preconditioner for NP1");
+        PetscPreconditioner* pc = new PetscPreconditioner(MPI_COMM_WORLD, *spd_mat, "np1_spdpc");
+
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
+        solver->SetPreconditioner(*pc);
         solver->SetAbsTol(np1_solver_atol);
         solver->SetRelTol(np1_solver_rtol);
         solver->SetMaxIter(np1_solver_maxiter);
         solver->SetPrintLevel(np1_solver_printlv);
+//        solver->SetPreconditionerFactory(prec);
 
         chrono.Clear();
         chrono.Start();
