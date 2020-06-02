@@ -16,6 +16,8 @@ int refine_times            = 2;
 const char* Linearize       = "gummel"; // newton, gummel
 const char* Descretize      = "cg"; // cg, dg
 int p_order                 = 1; //有限元基函数的多项式次数
+bool use_np1spd             = true;
+
 const int bottom_attr       = 1;
 const int top_attr          = 6;
 const int left_attr         = 5;
@@ -34,7 +36,7 @@ const char* options_src     = "./pnp_steadystate_box_petsc.opts";
  * Micro_SCALE: 微米尺度
  * PhysicalModel: 真实的模型(没有蛋白区域), 上下边界是Dirichlet, 四周是Neumann边界
  * */
-#define PhysicalModel
+#define Angstrom_SCALE
 
 #if defined(PhysicalModel)
 // use Dirichlet bdc on top and bottom, zero Neumann for other boundaries
@@ -65,7 +67,6 @@ double c2_D_func(const Vector& x)
 FunctionCoefficient phi_D_coeff(phi_D_func);
 FunctionCoefficient c1_D_coeff (c1_D_func);
 FunctionCoefficient c2_D_coeff (c2_D_func);
-
 #elif defined(Angstrom_SCALE) and !defined(PhysicalModel)
 #define COMPUTE_CONVERGENCE_RATE   //运行所有代码内部自己添加的assert检查. Note: 不要修改下面的输入参数, 否则会造成程序中的很多assert不能通过!
 double phi_exact_(Vector& x)
@@ -161,17 +162,17 @@ double kappa = 10;
 // 必须足够精确
 double phi_solver_atol = 1E-20;
 double phi_solver_rtol = 1E-14;
-int phi_solver_maxiter = 100000;
+int phi_solver_maxiter = 1000;
 int phi_solver_printlv = -1;
 
 double np1_solver_atol = 1E-20;
 double np1_solver_rtol = 1E-14;
-int np1_solver_maxiter = 100000;
+int np1_solver_maxiter = 1000;
 int np1_solver_printlv = -1;
 
 double np2_solver_atol = 1E-20;
 double np2_solver_rtol = 1E-14;
-int np2_solver_maxiter = 100000;
+int np2_solver_maxiter = 1000;
 int np2_solver_printlv = -1;
 
 const double newton_rtol   = 1.0e-8;

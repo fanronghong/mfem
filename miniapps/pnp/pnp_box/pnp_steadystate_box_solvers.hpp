@@ -1691,13 +1691,12 @@ private:
     {
         GridFunctionCoefficient* c1_n_coeff = new GridFunctionCoefficient(c1_n);
         GridFunctionCoefficient* c2_n_coeff = new GridFunctionCoefficient(c2_n);
-#ifndef PhysicalModel
-        c1_n->ProjectCoefficient(c1_exact); // for test Poisson convergence rate
-        c2_n->ProjectCoefficient(c2_exact);
-        phi_n->ProjectCoefficient(phi_exact); // for test
-#endif
+//        c1_n->ProjectCoefficient(c1_exact); // for test Poisson convergence rate
+//        c2_n->ProjectCoefficient(c2_exact);
+//        phi_n->ProjectCoefficient(phi_exact); // for test
 
         ParBilinearForm *blf = new ParBilinearForm(fsp);
+        // epsilon_s (grad(phi), grad(psi))
         blf->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water));
         blf->Assemble();
         blf->Finalize();
@@ -1706,11 +1705,14 @@ private:
         ParLinearForm *lf = new ParLinearForm(fsp); //Poisson方程的右端项
         ProductCoefficient rhs1(alpha2_prod_alpha3_prod_v_K , *c1_n_coeff);
         ProductCoefficient rhs2(alpha2_prod_alpha3_prod_v_Cl, *c2_n_coeff);
+        // alpha2 alpha3 z1 (c1^k, psi)
         lf->AddDomainIntegrator(new DomainLFIntegrator(rhs1));
+        // alpha2 alpha3 z2 (c2^k, psi)
         lf->AddDomainIntegrator(new DomainLFIntegrator(rhs2));
-#ifndef PhysicalModel // for Physical model, it's zero Neumann bdc
+#ifndef PhysicalModel // for Physical model, omit zero Neumann bdc: epsilon_s (phi_N, psi)
         GradientGridFunctionCoefficient grad_phi_exact_coeff(phi_exact_gf);
         ScalarVectorProductCoefficient epsilon_s_prod_grad_phi(epsilon_water, grad_phi_exact_coeff);
+        // epsilon_s <grad(phi_e).n, psi>
         lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(epsilon_s_prod_grad_phi), Neumann_attr);
 #endif
         lf->Assemble();
@@ -1764,21 +1766,25 @@ private:
     // 4.求解耦合的方程NP1方程
     void Solve_NP1()
     {
-        ParLinearForm *lf = new ParLinearForm(fsp); //NP1方程的右端项
-        *lf = 0.0;
-#ifndef PhysicalModel // for PhysicalModel, set zero Neumann bdc
-        lf->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
-        GradientGridFunctionCoefficient grad_c1_exact_coeff(c1_exact_gf);
-        ScalarVectorProductCoefficient D_K_prod_grad_c1_exact(D_K_, grad_c1_exact_coeff);
-        lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(D_K_prod_grad_c1_exact), Neumann_attr);
-        lf->Assemble();
-#endif
-
         ParBilinearForm *blf = new ParBilinearForm(fsp);
+        // D1 (grad(c1), grad(v1))
         blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+        // D1 z1 (c1 grad(phi^k), grad(v1))
         blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_K_prod_v_K));
         blf->Assemble(0);
         blf->Finalize(0);
+
+        ParLinearForm *lf = new ParLinearForm(fsp); //NP1方程的右端项
+        *lf = 0.0;
+#ifndef PhysicalModel // for PhysicalModel, omit zero Neumann bdc: -alpha3 <c1_N, v1>
+        GradientGridFunctionCoefficient grad_c1_exact_coeff(c1_exact_gf);
+        ScalarVectorProductCoefficient D_K_prod_grad_c1_exact(D_K_, grad_c1_exact_coeff);
+        // -alpha3 <grad(c1_e).n, v1>
+        lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(D_K_prod_grad_c1_exact), Neumann_attr);
+        // (f1, v1)
+        lf->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+        lf->Assemble();
+#endif
 
         PetscParMatrix *A = new PetscParMatrix();
         PetscParVector *x = new PetscParVector(fsp);
@@ -1786,25 +1792,27 @@ private:
         blf->SetOperatorType(Operator::PETSC_MATAIJ);
         blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
 
-        ParBilinearForm* p_blf = new ParBilinearForm(fsp);
-        p_blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
-        p_blf->Assemble(0);
-        p_blf->Finalize(0);
-
-        PetscParMatrix* P = new PetscParMatrix();
-        p_blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        p_blf->FormSystemMatrix(ess_tdof_list, *P);
-
-        PetscLinearSolver* pc = new PetscLinearSolver(*P, "np1spdpc_");
-        PetscPreconditioner* pc_ = new PetscPreconditioner(*P, "np1spdpc_");
-
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
-//        solver->SetPreconditioner(*pc);
-        solver->SetPreconditioner(*pc_);
         solver->SetAbsTol(np1_solver_atol);
         solver->SetRelTol(np1_solver_rtol);
         solver->SetMaxIter(np1_solver_maxiter);
         solver->SetPrintLevel(np1_solver_printlv);
+
+        if (use_np1spd)
+        {
+            ParBilinearForm* p_blf = new ParBilinearForm(fsp);
+            p_blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+            p_blf->Assemble(0);
+            p_blf->Finalize(0);
+
+            PetscParMatrix* P = new PetscParMatrix();
+            p_blf->SetOperatorType(Operator::PETSC_MATAIJ);
+            p_blf->FormSystemMatrix(ess_tdof_list, *P);
+
+            PetscLinearSolver* pc = new PetscLinearSolver(*P, "np1spdpc_");
+            PetscPreconditioner* pc_ = new PetscPreconditioner(*P, "np1spdpc_");
+            solver->SetPreconditioner(*pc_);
+        }
 
         chrono.Clear();
         chrono.Start();
@@ -1840,7 +1848,7 @@ private:
     {
         ParLinearForm *lf = new ParLinearForm(fsp); //NP2方程的右端项
         *lf = 0.0;
-#ifndef PhysicalModel // for PhysicalModel, set zero Neumann bdc
+#ifndef PhysicalModel // for PhysicalModel, omit zero Neumann bdc: - alpha3 (c2_N, v2)
         lf->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
         GradientGridFunctionCoefficient grad_c2_exact_coeff(c2_exact_gf);
         ScalarVectorProductCoefficient D_Cl_prod_grad_c2_exact(D_Cl_, grad_c2_exact_coeff);
@@ -1849,7 +1857,9 @@ private:
 #endif
 
         ParBilinearForm *blf(new ParBilinearForm(fsp));
+        // D2 (grad(c2), grad(v2))
         blf->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
+        // D2 z2 (c2 grad(phi^k), grad(v2))
         blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_Cl_prod_v_Cl));
         blf->Assemble(0);
         blf->Finalize(0);
