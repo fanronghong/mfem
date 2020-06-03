@@ -33,6 +33,7 @@ elif SCALE == "Micro":
     D1, D2               = 0.196*1E-8, 0.203*1E-8  # µm^2/ps
 else: raise "Not support the computation scale!!!"
 
+
 def SymbolCompute():
     '''
     在验证带蛋白通道的PNP方程的代码的正确性的时候, 利用简化模型, 即不带蛋白的立方体盒子, 来验证.
@@ -60,25 +61,29 @@ def SymbolCompute():
     c2_y   = c2.diff(y, 1)
     c2_z   = c2.diff(z, 1)
 
-    c1_flux = [c1_x + z1 * c1 * phi3_x,
-               c1_y + z1 * c1 * phi3_y,
-               c1_z + z1 * c1 * phi3_z]
-    c2_flux = [c2_x + z2 * c2 * phi3_x,
-               c2_y + z2 * c2 * phi3_y,
-               c2_z + z2 * c2 * phi3_z]
+    phi_flux = [-water_rel_permittivity * phi3_x,
+                -water_rel_permittivity * phi3_y,
+                -water_rel_permittivity * phi3_z]
+    c1_flux = [-D1 * (c1_x + z1 * c1 * phi3_x),
+               -D1 * (c1_y + z1 * c1 * phi3_y),
+               -D1 * (c1_z + z1 * c1 * phi3_z)]
+    c2_flux = [-D2 * (c2_x + z2 * c2 * phi3_x),
+               -D2 * (c2_y + z2 * c2 * phi3_y),
+               -D2 * (c2_z + z2 * c2 * phi3_z)]
 
-    f1 = -D1 * (c1_flux[0].diff(x, 1) + c1_flux[1].diff(y, 1) + c1_flux[2].diff(z, 1))
-    f2 = -D2 * (c2_flux[0].diff(x, 1) + c2_flux[1].diff(y, 1) + c2_flux[2].diff(z, 1))
+    f1 = c1_flux[0].diff(x, 1) + c1_flux[1].diff(y, 1) + c1_flux[2].diff(z, 1)
+    f2 = c2_flux[0].diff(x, 1) + c2_flux[1].diff(y, 1) + c2_flux[2].diff(z, 1)
 
     # 把下面的输出结果复制粘贴到C++源码里面
-    print("\nphi3:\n{}".format(sympy.printing.ccode(phi3)))
-    print("\nc1:\n{}".format(sympy.printing.ccode(c1)))
-    print("\nc2:\n{}".format(sympy.printing.ccode(c2)))
-    print("\nf1:\n{}".format(sympy.printing.ccode(f1)))
-    print("\nf2:\n{}".format(sympy.printing.ccode(f2)))
-    print("\nphi_x:\n{}".format(sympy.printing.ccode(phi3_x)))
-    print("\nphi_y:\n{}".format(sympy.printing.ccode(phi3_y)))
-    print("\nphi_z:\n{}".format(sympy.printing.ccode(phi3_z)))
+    print("\nphi:\nreturn {};".format(sympy.printing.ccode(phi3)))
+    print("\nc1:\nreturn {};".format(sympy.printing.ccode(c1)))
+    print("\nc2:\nreturn {};".format(sympy.printing.ccode(c2)))
+    print("\nf1:\nreturn {};".format(sympy.printing.ccode(f1)))
+    print("\nf2:\nreturn {};".format(sympy.printing.ccode(f2)))
+
+    print("\nphi flux:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(phi_flux[0]), sympy.printing.ccode(phi_flux[1]), sympy.printing.ccode(phi_flux[2])))
+    print("\nc1 flux:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(c1_flux[0]), sympy.printing.ccode(c1_flux[1]), sympy.printing.ccode(c1_flux[2])))
+    print("\nc2 flux:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(c2_flux[0]), sympy.printing.ccode(c2_flux[1]), sympy.printing.ccode(c2_flux[2])))
 
 
 if __name__ == '__main__':

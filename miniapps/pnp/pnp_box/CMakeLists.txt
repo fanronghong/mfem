@@ -1,7 +1,18 @@
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/gummel_cg_box_petsc_opts
+        ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/gummel_cg_box_petsc_opts
+        COPYONLY)
 
-configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/pnp_steadystate_box_petsc.opts
-               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/pnp_steadystate_box_petsc.opts
-               COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/gummel_dg_box_petsc_opts
+        ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/gummel_dg_box_petsc_opts
+        COPYONLY)
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/newton_cg_box_petsc_opts
+        ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/newton_cg_box_petsc_opts
+        COPYONLY)
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/newton_dg_box_petsc_opts
+        ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/newton_dg_box_petsc_opts
+        COPYONLY)
 
 configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/4_4_4_translate.msh
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/4_4_4_translate.msh
