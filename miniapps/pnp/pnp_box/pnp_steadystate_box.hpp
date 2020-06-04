@@ -14,8 +14,8 @@ using namespace mfem;
 const char* mesh_file       = "./4_4_4_translate.msh";
 int refine_times            = 0;
 const char* Linearize       = "newton"; // newton, gummel
-const char* Descretize      = "cg"; // cg, dg
-const char* options_src     = "./newton_cg_box_petsc_opts";
+const char* Descretize      = "dg"; // cg, dg
+const char* options_src     = "./newton_dg_box_petsc_opts";
 int p_order                 = 1; //有限元基函数的多项式次数
 bool ComputeConvergenceRate = false;
 
@@ -177,7 +177,7 @@ const double relax_c1  = 0.2;
 const double relax_c2  = 0.2;
 
 double sigma = -1.0;
-double kappa = 10;
+double kappa = 20;
 
 bool use_np1spd             = false;
 bool use_np2spd             = false;

@@ -21,9 +21,9 @@
 -newton_ksp_atol 1E-20
 -newton_ksp_divtol 1e+5
 #-newton_ksp_monitor
--newton_ksp_monitor_true_residual
+#-newton_ksp_monitor_true_residual
 #-newton_ksp_monitor_short
--newton_ksp_converged_reason
+#-newton_ksp_converged_reason
 #-newton_ksp_view
 
 -sub_block1_ksp_type cg

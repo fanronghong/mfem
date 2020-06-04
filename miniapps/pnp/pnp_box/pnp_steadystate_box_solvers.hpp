@@ -1727,7 +1727,7 @@ private:
         ParLinearForm *lf = new ParLinearForm(fsp); //NP1方程的右端项
         *lf = 0.0;
 #ifndef PhysicalModel // for PhysicalModel, omit zero Neumann bdc: -alpha3 <c1_N, v1>
-        // D1 <(grad(c1_e) + z1 c1_e grad(phi_e)) . n, v1>,    c1_flux = J1 = -D1 (grad(c1_e) + z1 c1_e grad(phi_e))
+        // D1 <(grad(c1_e) + z1 c1_e grad(phi_e)) . n, v1>, c1_flux = J1 = -D1 (grad(c1_e) + z1 c1_e grad(phi_e))
         ScalarVectorProductCoefficient neg_J1(neg, J1);
         lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J1), Neumann_attr);
         // (f1, v1)
@@ -1802,7 +1802,7 @@ private:
         ParLinearForm *lf = new ParLinearForm(fsp); //NP2方程的右端项
         *lf = 0.0;
 #ifndef PhysicalModel // for PhysicalModel, omit zero Neumann bdc: - alpha3 (c2_N, v2)
-        // D2 <(grad(c2_e) + z2 c2_e grad(phi_e)) . n, v2>,    c2_flux = J2 = -D2 (grad(c2_e) + z2 c2_e grad(phi_e))
+        // D2 <(grad(c2_e) + z2 c2_e grad(phi_e)) . n, v2>, c2_flux = J2 = -D2 (grad(c2_e) + z2 c2_e grad(phi_e))
         ScalarVectorProductCoefficient neg_J2(neg, J2);
         lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J2), Neumann_attr);
         // (f2, v2)
@@ -2884,7 +2884,7 @@ protected:
     PetscNonlinearSolver* newton_solver;
 
     Array<int> ess_bdr, ess_tdof_list;
-    Array<int> null_array, Dirichlet;
+    Array<int> null_array, Dirichlet_attr, Neumann_attr;
 
     StopWatch chrono;
     int num_procs, myid;
@@ -2894,6 +2894,23 @@ public:
     {
         MPI_Comm_size(fsp->GetComm(), &num_procs);
         MPI_Comm_rank(fsp->GetComm(), &myid);
+
+        int bdr_size = fsp->GetMesh()->bdr_attributes.Max();
+        {
+            Neumann_attr.SetSize(bdr_size);
+            Neumann_attr = 0;
+//            Neumann_attr[left_attr - 1]  = 1;
+//            Neumann_attr[right_attr - 1] = 1;
+//            Neumann_attr[front_attr - 1] = 1;
+//            Neumann_attr[back_attr - 1]  = 1;
+
+            Dirichlet_attr.SetSize(bdr_size);
+            Dirichlet_attr = 1;
+            Dirichlet_attr[top_attr - 1]    = 1;
+            Dirichlet_attr[bottom_attr - 1] = 1;
+
+            fsp->GetEssentialTrueDofs(Dirichlet_attr, ess_tdof_list);
+        }
 
         block_trueoffsets.SetSize(4); // number of variables + 1;
         block_trueoffsets[0] = 0;
@@ -2916,46 +2933,55 @@ public:
         a31 = new ParBilinearForm(fsp);
         a33 = new ParBilinearForm(fsp);
 
-        Dirichlet.SetSize(fsp->GetMesh()->bdr_attributes.Max());
-        Dirichlet                  = 0;
-        Dirichlet[top_attr - 1]    = 1;
-        Dirichlet[bottom_attr - 1] = 1;
-
         g = new ParLinearForm(fsp);
 #ifdef PhysicalModel
         // including 0 Neumann boundary condition
         // sigma <phi_D, (epsilon_s grad(psi)).n> + kappa <h^{-1} epsilon_s phi_D, psi>
-        g->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, epsilon_water, sigma, kappa), Dirichlet);
+        g->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, epsilon_water, sigma, kappa), Dirichlet_attr);
         // kappa * <h^{-1} [c1_D], [psi]>
-        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_D_coeff), Dirichlet);
+        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_D_coeff), Dirichlet_attr);
         // kappa * <h^{-1} [c2_D], [psi]>
-        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_D_coeff), Dirichlet);
+        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_D_coeff), Dirichlet_attr);
 #else
-        // including 0 Neumann boundary condition
+        // epsilon_s <grad(phi_e).n, psi>, phi_flux = -epsilon_s grad(phi_e)
+        ScalarVectorProductCoefficient neg_J(neg, J);
+        g->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J), Neumann_attr);
         // sigma <phi_D, (epsilon_s grad(psi)).n> + kappa <h^{-1} epsilon_s phi_D, psi>
-        g->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, epsilon_water, sigma, kappa), Dirichlet);
+        g->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, epsilon_water, sigma, kappa), Dirichlet_attr);
         // kappa * <h^{-1} [c1_D], [psi]>
-        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_exact), Dirichlet);
+        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_exact), Dirichlet_attr);
         // kappa * <h^{-1} [c2_D], [psi]>
-        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_exact), Dirichlet);
+        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_exact), Dirichlet_attr);
 #endif
         g->Assemble();
 
         g1 = new ParLinearForm(fsp);
-        // sigma <c1_D, D1 grad(v1).n> + kappa <h^{-1} D1 c1_D, v1>
 #ifdef PhysicalModel
-        g1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, kappa), Dirichlet);
+        // sigma <c1_D, D1 grad(v1).n> + kappa <h^{-1} D1 c1_D, v1>
+        g1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, kappa), Dirichlet_attr);
 #else
-        g1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_exact, D_K_, sigma, kappa), Dirichlet);
+        // sigma <c1_D, D1 grad(v1).n> + kappa <h^{-1} D1 c1_D, v1>
+        g1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_exact, D_K_, sigma, kappa), Dirichlet_attr);
+        // D1 <(grad(c1_e) + z1 c1_e grad(phi_e)) . n, v1>, c1_flux = J1 = -D1 (grad(c1_e) + z1 c1_e grad(phi_e))
+        ScalarVectorProductCoefficient neg_J1(neg, J1);
+        g1->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J1), Neumann_attr);
+        // (f1, v1)
+        g1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
 #endif
         g1->Assemble();
 
         g2 = new ParLinearForm(fsp);
-        // sigma <c2_D, D2 grad(v2).n> + kappa <h^{-1} D2 c2_D, v2>
 #ifdef PhysicalModel
-        g2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_coeff, D_Cl_, sigma, kappa), Dirichlet);
+        // sigma <c2_D, D2 grad(v2).n> + kappa <h^{-1} D2 c2_D, v2>
+       g2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_coeff, D_Cl_, sigma, kappa), Dirichlet_attr);
 #else
-        g2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_exact, D_Cl_, sigma, kappa), Dirichlet);
+        // sigma <c2_D, D2 grad(v2).n> + kappa <h^{-1} D2 c2_D, v2>
+        g2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_exact, D_Cl_, sigma, kappa), Dirichlet_attr);
+        // D2 <(grad(c2_e) + z2 c2_e grad(phi_e)) . n, v2>, c2_flux = J2 = -D2 (grad(c2_e) + z2 c2_e grad(phi_e))
+        ScalarVectorProductCoefficient neg_J2(neg, J2);
+        g2->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J2), Neumann_attr);
+        // (f2, v2)
+        g2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
 #endif
         g2->Assemble();
 
@@ -2965,7 +2991,7 @@ public:
         // - <{epsilon_s grad(dphi)}, [psi]> + sigma <[dphi], {epsilon_s grad(psi)}>
         //                                   + kappa <{h^{-1} epsilon_s} [dphi], [psi]>
         a11->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(epsilon_water, sigma, kappa));
-        a11->AddBdrFaceIntegrator(new DGDiffusionIntegrator(epsilon_water, sigma, kappa), Dirichlet);
+        a11->AddBdrFaceIntegrator(new DGDiffusionIntegrator(epsilon_water, sigma, kappa), Dirichlet_attr);
         a11->Assemble(0);
         a11->Finalize(0);
         a11->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -2976,7 +3002,7 @@ public:
         a12->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_K));
         // kappa <h^{-1} [dc1], [psi]>
         a12->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
-        a12->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff), Dirichlet);
+        a12->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff), Dirichlet_attr);
         a12->Assemble(0);
         a12->Finalize(0);
         a12->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -2987,7 +3013,7 @@ public:
         a13->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_Cl));
         // kappa <h^{-1} [dc2], [psi]>
         a13->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
-        a13->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff), Dirichlet);
+        a13->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff), Dirichlet_attr);
         a13->Assemble(0);
         a13->Finalize(0);
         a13->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3006,18 +3032,14 @@ public:
 //        cout << "\nin PNP_DG_Newton_Operator::Mult()" << endl;
         int sc = height / 3;
         Vector& x_ = const_cast<Vector&>(x);
-        Array<int>& Dirichlet_ = const_cast<Array<int>&>(Dirichlet);
+        Array<int>& Dirichlet_attr_ = const_cast<Array<int>&>(Dirichlet_attr);
+
         phi ->MakeTRef(fsp, x_, 0);
         c1_k->MakeTRef(fsp, x_, sc);
         c2_k->MakeTRef(fsp, x_, 2*sc);
         phi ->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
-//        cout << "in Mult(), l2 norm of   x: " << x.Norml2() << endl;
-//        cout << "in Mult(), l2 norm of phi: " <<  phi->Norml2() << endl;
-//        cout << "in Mult(), l2 norm of  c1: " << c1_k->Norml2() << endl;
-//        cout << "in Mult(), l2 norm of  c2: " << c2_k->Norml2() << endl;
-//        cout << "in Mult(), l2 norm of Residual: " << rhs_k->Norml2() << endl;
 
         GridFunctionCoefficient phi_coeff(phi), c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
@@ -3037,25 +3059,25 @@ public:
         f->AddDomainIntegrator(new GradConvectionIntegrator2(&epsilon_water, phi));
         // -<{epsilon_s grad(phi^k)}, [psi]>
         f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_epsilon_water, phi));
-        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_epsilon_water, phi), Dirichlet_);
+        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_epsilon_water, phi), Dirichlet_attr_);
         // -alpha2 alpha3 (z1 c1^k + z2 c2^k, psi)
         f->AddDomainIntegrator(new DomainLFIntegrator(neg_term));
         // sigma <[phi^k], {epsilon_s grad(psi)}>
         f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_epsilon_water, phi_coeff));
-        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_epsilon_water, phi_coeff), Dirichlet_);
+        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_epsilon_water, phi_coeff), Dirichlet_attr_);
         // kappa epsilon_s <h^{-1} [phi^k], [psi]>
         f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&epsilon_water_prod_kappa, &phi_coeff));
-        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&epsilon_water_prod_kappa, &phi_coeff), Dirichlet_);
+        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&epsilon_water_prod_kappa, &phi_coeff), Dirichlet_attr_);
         // kappa <h^{-1} [c1^k], [psi]>
         f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_k_coeff));
-        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_k_coeff), Dirichlet_);
+        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_k_coeff), Dirichlet_attr_);
         // kappa <h^{-1} [c2^k], [psi]>
 #ifdef PhysicalModel
         f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_D_coeff));
         f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_D_coeff), Dirichlet_);
 #else
         f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_exact));
-        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_exact), Dirichlet_);
+        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_exact), Dirichlet_attr_);
 #endif
         f->Assemble();
         (*f) -= (*g);
@@ -3072,29 +3094,29 @@ public:
         f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D_K_, c1_k));
         // - <{D1 grad(c1^k)}, [v1]>
         f1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D1, c1_k));
-        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D1, c1_k), Dirichlet_);
+        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D1, c1_k), Dirichlet_attr_);
         // sigma <[c1^k], {D1 grad(v1)}>
         f1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D1, c1_k_coeff));
-        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D1, c1_k_coeff), Dirichlet_);
+        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D1, c1_k_coeff), Dirichlet_attr_);
         // kappa D1 <h^{-1} [c1^k], [v1]>
         f1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_D1, &c1_k_coeff));
-        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_D1, &c1_k_coeff), Dirichlet_);
+        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_D1, &c1_k_coeff), Dirichlet_attr_);
         // D1 z1 c1^k (grad(phi^k), grad(v1))
         f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D1_prod_z1_prod_c1_k, phi));
         // -<{D1 z1 c1^k grad(phi^k)}, [v1]>
         f1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D1_prod_z1_prod_c1_k, phi));
-        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D1_prod_z1_prod_c1_k, phi), Dirichlet_);
+        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D1_prod_z1_prod_c1_k, phi), Dirichlet_attr_);
         // sigma <[phi^k], {D1 z1 c1^k grad(v1)}>
         f1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D1_prod_z1_prod_c1_k, phi_coeff));
-        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D1_prod_z1_prod_c1_k, phi_coeff), Dirichlet_);
+        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D1_prod_z1_prod_c1_k, phi_coeff), Dirichlet_attr_);
         // kappa <{h^{-1} D1 z1 c1^k}[phi^k], [v1]>
         f1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D1_prod_z1_prod_c1_k, &phi_coeff));
-        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D1_prod_z1_prod_c1_k, &phi_coeff), Dirichlet_);
+        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D1_prod_z1_prod_c1_k, &phi_coeff), Dirichlet_attr_);
         // - sigma <phi_D, D1 z1 c1^k grad(v1).n> - kappa D1 z1 c1^k <h^{-1} phi_D, v1>
 #ifdef PhysicalModel
         f1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D1_prod_z1_prod_c1_k, -1.0*sigma, -1.0*kappa), Dirichlet_);
 #else
-        f1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, D1_prod_z1_prod_c1_k, -1.0*sigma, -1.0*kappa), Dirichlet_);
+        f1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, D1_prod_z1_prod_c1_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
 #endif
         f1->Assemble();
         (*f1) -= (*g1);
@@ -3111,29 +3133,29 @@ public:
         f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D_Cl_, c2_k));
         // -D2 <{grad(c2^k)}, [v2]>
         f2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D2, c2_k));
-        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D2, c2_k), Dirichlet_);
+        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D2, c2_k), Dirichlet_attr_);
         // sigma <[c2^k], {D2 grad(v2)}>
         f2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D2, c2_k_coeff));
-        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D2, c2_k_coeff), Dirichlet_);
+        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D2, c2_k_coeff), Dirichlet_attr_);
         // kappa D2 <h^{-1} [c2^k], [v2]>
         f2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_D2, &c2_k_coeff));
-        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_D2, &c2_k_coeff), Dirichlet_);
+        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_D2, &c2_k_coeff), Dirichlet_attr_);
         // D2 z2 c2^k (grad(phi^k), grad(v2))
         f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D2_prod_z2_prod_c2_k, phi));
         // -<{D2 z2 c2^k grad(phi^k)}, [v2]>
         f2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D2_prod_z2_prod_c2_k, phi));
-        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D2_prod_z2_prod_c2_k, phi), Dirichlet_);
+        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_5(&neg_D2_prod_z2_prod_c2_k, phi), Dirichlet_attr_);
         // sigma <[phi^k], {D2 z2 c2^k grad(v2)}>
         f2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D2_prod_z2_prod_c2_k, phi_coeff));
-        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D2_prod_z2_prod_c2_k, phi_coeff), Dirichlet_);
+        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_7(sigma_D2_prod_z2_prod_c2_k, phi_coeff), Dirichlet_attr_);
         // kappa * <{h^{-1} D2 z2 c2^k} [phi^k], [v2]>
         f2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D2_prod_z2_prod_c2_k, &phi_coeff));
-        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D2_prod_z2_prod_c2_k, &phi_coeff), Dirichlet_);
+        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D2_prod_z2_prod_c2_k, &phi_coeff), Dirichlet_attr_);
         // - sigma <phi_D, D2 z2 c2^k grad(v2).n> - kappa D2 z2 c2^k <h^{-1} phi_D, v2>
 #ifdef PhysicalModel
         f2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D2_prod_z2_prod_c2_k, -1.0*sigma, -1.0*kappa), Dirichlet_);
 #else
-        f2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, D2_prod_z2_prod_c2_k, -1.0*sigma, -1.0*kappa), Dirichlet_);
+        f2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, D2_prod_z2_prod_c2_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
 #endif
         f2->Assemble();
         (*f2) -= (*g2);
@@ -3145,16 +3167,14 @@ public:
     {
         int sc = height / 3;
         Vector& x_ = const_cast<Vector&>(x);
-        Array<int>& Dirichlet_ = const_cast<Array<int>&>(Dirichlet);
-        phi->MakeTRef(fsp, x_, 0);
+        Array<int>& Dirichlet_attr_ = const_cast<Array<int>&>(Dirichlet_attr);
+
+        phi ->MakeTRef(fsp, x_, 0);
         c1_k->MakeTRef(fsp, x_, sc);
         c2_k->MakeTRef(fsp, x_, 2*sc);
         phi->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
-//        cout << "in GetGradient(), l2 norm of phi: "  << phi->Norml2() << endl;
-//        cout << "in GetGradient(), l2 norm of  c1: " <<   c1_k->Norml2() << endl;
-//        cout << "in GetGradient(), l2 norm of  c2: " <<   c2_k->Norml2() << endl;
 
         delete a21;
         a21 = new ParBilinearForm(fsp);
@@ -3164,7 +3184,7 @@ public:
         a21->AddDomainIntegrator(new DiffusionIntegrator(D1_prod_z1_prod_c1_k));
         // - <{D1 z1 c1^k grad(dphi)}, [v1]> + sigma <[dphi], {D1 z1 c1^k grad(v1)}> + kappa <{h^{-1} D1 z1 c1^k} [dphi], [v1]>
         a21->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D1_prod_z1_prod_c1_k, sigma, kappa));
-        a21->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D1_prod_z1_prod_c1_k, sigma, kappa), Dirichlet_);
+        a21->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D1_prod_z1_prod_c1_k, sigma, kappa), Dirichlet_attr_);
         a21->Assemble(0);
         a21->Finalize(0);
         a21->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3176,18 +3196,18 @@ public:
         a22->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
         // - <{D1 grad(dc1)}, [v1]> + sigma <[dc1], {D1 grad(v1)}> + kappa <{h^{-1} D1} [dc1], [v1]>
         a22->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
-        a22->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa), Dirichlet_);
+        a22->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa), Dirichlet_attr_);
         // (D1 z1 dc1 grad(phi^k), grad(v1))
         a22->AddDomainIntegrator(new GradConvectionIntegrator(*phi, &D_K_prod_v_K));
         // - <{D1 z1 dc1 grad(phi^k)}, [v1]>
         a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi));
-        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi), Dirichlet_);
+        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi), Dirichlet_attr_);
         // sigma <[dc1], {D1 z1 v1 grad(phi^k)}>
         a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi));
-        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi), Dirichlet_);
+        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi), Dirichlet_attr_);
         // kappa <h^{-1} [dc1], [v1]>
         a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
-        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff), Dirichlet_);
+        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff), Dirichlet_attr_);
         a22->Assemble(0);
         a22->Finalize(0);
         a22->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3201,7 +3221,7 @@ public:
         a31->AddDomainIntegrator(new DiffusionIntegrator(D2_prod_z2_prod_c2_k));
         // - <{D2 z2 c2^k grad(dphi)}, [v2]> + sigma <[dphi], {D2 z2 c2^k grad(v2)}> + kappa <{h^{-1} D2 z2 c2^k} [dphi], [v2]>
         a31->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D2_prod_z2_prod_c2_k, sigma, kappa));
-        a31->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D2_prod_z2_prod_c2_k, sigma, kappa), Dirichlet_);
+        a31->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D2_prod_z2_prod_c2_k, sigma, kappa), Dirichlet_attr_);
         a31->Assemble(0);
         a31->Finalize(0);
         a31->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3213,18 +3233,18 @@ public:
         a33->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
         // - <{D2 grad(dc2)}, [v2]> + sigma <[dc2], {D2 grad(v2)}> + kappa <{h^{-1} D2} [dc2], [v2]>
         a33->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_Cl_, sigma, kappa));
-        a33->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_Cl_, sigma, kappa), Dirichlet_);
+        a33->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_Cl_, sigma, kappa), Dirichlet_attr_);
         // (D2 z2 dc2 grad(phi^k), grad(v2))
         a33->AddDomainIntegrator(new GradConvectionIntegrator(*phi, &D_Cl_prod_v_Cl));
         // - <{D2 z2 dc2 grad(phi^k)}, [v2]>
         a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D2_z2, *phi));
-        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D2_z2, *phi), Dirichlet_);
+        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D2_z2, *phi), Dirichlet_attr_);
         // sigma <[dc2], {D2 z2 v2 grad(phi^k)}>
         a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi));
-        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi), Dirichlet_);
+        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi), Dirichlet_attr_);
         // kappa <h^{-1} [dc2], [v2]>
         a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
-        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff), Dirichlet_);
+        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff), Dirichlet_attr_);
         a33->Assemble(0);
         a33->Finalize(0);
         a33->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3366,10 +3386,6 @@ public:
 
         newton_solver = new PetscNonlinearSolver(dg_space->GetComm(), *op, "newton_");
         newton_solver->iterative_mode = true;
-        newton_solver->SetAbsTol(newton_atol);
-        newton_solver->SetRelTol(newton_rtol);
-        newton_solver->SetMaxIter(newton_maxitr);
-        newton_solver->SetPrintLevel(newton_printlvl);
         newton_solver->SetPreconditionerFactory(jac_factory);
         snes = SNES(*newton_solver);
         PetscMalloc(num_its * sizeof(PetscInt), &its);
@@ -3382,13 +3398,14 @@ public:
         PetscFree(its);
     }
 
-    void Solve(Array<double> phiL2errornomrs, Array<double> c1L2errornorms, Array<double> c2L2errornorms, Array<double> meshsizes)
+    void Solve(Array<double>& phiL2errornorms_, Array<double>& c1L2errornorms_,
+               Array<double>& c2L2errornorms_, Array<double>& meshsizes_)
     {
         cout.precision(14);
         cout << "\nNewton, DG" << p_order << ", box, parallel"
              << ", sigma: " << sigma << ", kappa: " << kappa
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
-//        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
+
         Vector zero_vec;
         chrono.Start();
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
@@ -3412,13 +3429,37 @@ public:
         phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
         c1_k.MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
         c2_k.MakeTRef(dg_space, *u_k, block_trueoffsets[2]);
-        phi.SetFromTrueVector();
+        phi .SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
-        cout << "l2 norm of phi: " <<  phi.ComputeL2Error(zero) << endl;
-        cout << "l2 norm of  c1: " << c1_k.ComputeL2Error(zero) << endl;
-        cout << "l2 norm of  c2: " << c2_k.ComputeL2Error(zero) << endl;
-        cout << "solution vector size on mesh: phi, " << phi.Size() << "; c1, " << c1_k.Size() << "; c2, " << c2_k.Size() << endl;
+
+        if (ComputeConvergenceRate)
+        {
+            double phiL2err = phi.ComputeL2Error(phi_exact);
+            double c1L2err = c1_k.ComputeL2Error(c1_exact);
+            double c2L2err = c2_k.ComputeL2Error(c2_exact);
+
+            phiL2errornorms_.Append(phiL2err);
+            c1L2errornorms_.Append(c1L2err);
+            c2L2errornorms_.Append(c2L2err);
+            double totle_size = 0.0;
+            for (int i=0; i<mesh->GetNE(); i++)
+                totle_size += mesh->GetElementSize(0, 1);
+
+            meshsizes_.Append(totle_size / mesh->GetNE());
+            cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << "\n"
+                 << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << "\n"
+                 << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << "\n"
+                 << "mesh size: " << totle_size / mesh->GetNE() << endl;
+        }
+        else
+        {
+            cout.precision(14);
+            cout << "L2 norm of phi3: " << phi.ComputeL2Error(zero) << endl;
+            cout << "L2 norm of   c1: " << c1_k.ComputeL2Error(zero) << endl;
+            cout << "L2 norm of   c2: " << c2_k.ComputeL2Error(zero) << endl;
+            cout << "solution vector size on mesh: phi, " << phi.Size() << "; c1, " << c1_k.Size() << "; c2, " << c2_k.Size() << endl;
+        }
 
         cout << endl;
         map<string, Array<double>>::iterator it1;
