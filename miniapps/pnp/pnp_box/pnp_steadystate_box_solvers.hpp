@@ -1469,12 +1469,13 @@ public:
         Dirichlet_attr.SetSize(bdr_size);
         {
             Neumann_attr = 0;
-//            Neumann_attr[front_attr - 1] = 1;
-//            Neumann_attr[back_attr  - 1] = 1;
-//            Neumann_attr[left_attr  - 1] = 1;
-//            Neumann_attr[right_attr - 1] = 1;
+            Dirichlet_attr = 0;
 
-            Dirichlet_attr = 1;
+            Neumann_attr[front_attr - 1] = 1;
+            Neumann_attr[back_attr  - 1] = 1;
+            Neumann_attr[left_attr  - 1] = 1;
+            Neumann_attr[right_attr - 1] = 1;
+
             Dirichlet_attr[top_attr    - 1] = 1;
             Dirichlet_attr[bottom_attr - 1] = 1;
         }
@@ -1581,7 +1582,7 @@ public:
         out2["np2_avg_iter"] = np2_avg_iter;
         out2["np2_avg_time"] = np2_avg_time;
 
-#ifndef PhysicalModel
+#ifdef COMPUTE_CONVERGENCE_RATE
         {
             double phiL2err = phi->ComputeL2Error(phi_exact);
             double c1L2err = c1->ComputeL2Error(c1_exact);
@@ -1646,6 +1647,7 @@ private:
     {
 //        c1_n->ProjectCoefficient(c1_exact); // for test Poisson convergence rate
 //        c2_n->ProjectCoefficient(c2_exact); // for test Poisson convergence rate
+
         GridFunctionCoefficient* c1_n_coeff = new GridFunctionCoefficient(c1_n);
         GridFunctionCoefficient* c2_n_coeff = new GridFunctionCoefficient(c2_n);
 
@@ -1664,7 +1666,7 @@ private:
         // alpha2 alpha3 z2 (c2^k, psi)
         lf->AddDomainIntegrator(new DomainLFIntegrator(rhs2));
 #ifndef PhysicalModel // for Physical model, omit zero Neumann bdc: epsilon_s (phi_N, psi)
-        // epsilon_s <grad(phi_e).n, psi>,     phi_flux = -epsilon_s grad(phi_e)
+        // epsilon_s <grad(phi_e).n, psi>, phi_flux = -epsilon_s grad(phi_e)
         ScalarVectorProductCoefficient neg_J(neg, J);
         lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J), Neumann_attr);
 #endif
@@ -1695,8 +1697,8 @@ private:
         poisson_iter.Append(solver->GetNumIterations());
         poisson_time.Append(chrono.RealTime());
 
-        cout << "l2 error norm of |phi_h - phi_e|: " << phi->ComputeL2Error(phi_exact) << endl;
-//        MFEM_ABORT("Stop here for testing Poisson convergence rate!");
+//        cout << "L2 error norm of |phi_h - phi_e|: " << phi->ComputeL2Error(phi_exact) << endl;
+//        MFEM_ABORT("Stop here for testing Poisson convergence rate in PNP_CG_Gummel_Solver_par!");
 
         (*phi_n) *= relax_phi;
         (*phi)   *= 1-relax_phi;
@@ -1774,8 +1776,8 @@ private:
         np1_iter.Append(solver->GetNumIterations());
         np1_time.Append(chrono.RealTime());
 
-        cout << "l2 error norm of | c1_h - c1_e |: " << c1->ComputeL2Error(c1_exact) << endl;
-//        MFEM_ABORT("Stop here for test NP1 convergence rate!");
+//        cout << "L2 error norm of | c1_h - c1_e |: " << c1->ComputeL2Error(c1_exact) << endl;
+//        MFEM_ABORT("Stop here for test NP1 convergence rate in PNP_CG_Gummel_Solver_par!");
 
         (*c1_n) *= relax_c1;
         (*c1)   *= 1-relax_c1;
@@ -1788,7 +1790,7 @@ private:
     // 5.求解耦合的方程NP2方程
     void Solve_NP2()
     {
-//        phi_n->ProjectCoefficient(phi_exact); // test NP1 convergence rate
+//        phi_n->ProjectCoefficient(phi_exact); // test NP2 convergence rate
 
         ParBilinearForm *blf(new ParBilinearForm(fsp));
         // D2 (grad(c2), grad(v2))
@@ -1848,8 +1850,8 @@ private:
         np2_iter.Append(solver->GetNumIterations());
         np2_time.Append(chrono.RealTime());
 
-        cout << "l2 error norm of | c2_h - c2_e |: " << c2->ComputeL2Error(c2_exact) << endl;
-//        MFEM_ABORT("Stop here for test convergence rate!");
+//        cout << "L2 error norm of | c2_h - c2_e |: " << c2->ComputeL2Error(c2_exact) << endl;
+//        MFEM_ABORT("Stop here for test convergence rate in PNP_CG_Gummel_Solver_par!");
 
         (*c2_n) *= relax_c2;
         (*c2)   *= 1-relax_c2;
@@ -1872,8 +1874,7 @@ private:
     ParGridFunction *phi_n, *c1_n, *c2_n; // Gummel迭代解
 
     VisItDataCollection* dc;
-    Array<int> Dirichlet;
-    Array<int> ess_tdof_list;
+    Array<int> Dirichlet, Neumann, ess_tdof_list;
 
     StopWatch chrono;
     int num_procs, myid;
@@ -1906,18 +1907,22 @@ public:
         *c2    = 0.0; c2   ->SetTrueVector();
         *c2_n  = 0.0; c2_n ->SetTrueVector();
 
-#ifdef PhysicalModel
-        Dirichlet.SetSize(fsp->GetMesh()->bdr_attributes.Max());
+        int size = fsp->GetMesh()->bdr_attributes.Max();
+        Dirichlet.SetSize(size);
         Dirichlet = 0;
         Dirichlet[top_attr - 1] = 1;
         Dirichlet[bottom_attr - 1] = 1;
-#endif
+        Neumann.SetSize(size);
+        Neumann = 0;
+        Neumann[front_attr - 1] = 1;
+        Neumann[back_attr  - 1] = 1;
+        Neumann[left_attr  - 1] = 1;
+        Neumann[right_attr - 1] = 1;
 
         dc = new VisItDataCollection("data collection", &mesh);
         dc->RegisterField("phi", phi);
         dc->RegisterField("c1",   c1);
         dc->RegisterField("c2",   c2);
-
     }
     ~PNP_DG_Gummel_Solver_par()
     {
@@ -2043,10 +2048,9 @@ public:
 private:
     void Solve_Poisson()
     {
-#ifndef PhysicalModel
         c1_n->ProjectCoefficient(c1_exact); // for test convergence rate
-        c2_n->ProjectCoefficient(c2_exact);
-#endif
+        c2_n->ProjectCoefficient(c2_exact); // for test convergence rate
+
         ParBilinearForm *blf = new ParBilinearForm(fsp);
         // epsilon_s (grad(phi), grad(psi))
         blf->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water));
@@ -2065,12 +2069,16 @@ private:
         lf->AddDomainIntegrator(new DomainLFIntegrator(rhs1));
         // alpha2 alpha3 z2 (c2^k, psi)
         lf->AddDomainIntegrator(new DomainLFIntegrator(rhs2));
-#ifndef PhysicalModel
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, epsilon_water, sigma, kappa)); // 用真解构造Dirichlet边界条件
-#else
-        // zero Neumann bdc and below weak Dirichlet bdc
+#ifdef PhysicalModel
+        // ommit zero Neumann bdc
         // sigma <phi_D, epsilon_s grad(psi).n> + kappa <{h^{-1} epsilon_s} [phi_D], [psi]>
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, epsilon_water, sigma, kappa), Dirichlet);
+#else
+        ScalarVectorProductCoefficient neg_J(neg, J);
+        // epsilon_s <grad(phi_e).n, psi>, phi_flux = -epsilon_s grad(phi_e)
+        lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J), Neumann);
+        // sigma <phi_e, (epsilon_s grad(psi)).n)> + kappa <{h^{-1} Q} phi_e, psi>
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, epsilon_water, sigma, kappa), Dirichlet); // 用真解构造Dirichlet边界条件
 #endif
         lf->Assemble();
 
@@ -2081,10 +2089,6 @@ private:
         blf->FormLinearSystem(ess_tdof_list, *phi, *lf, *A, *x, *b);
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "phi_");
-        solver->SetAbsTol(phi_solver_atol);
-        solver->SetRelTol(phi_solver_rtol);
-        solver->SetMaxIter(phi_solver_maxiter);
-        solver->SetPrintLevel(phi_solver_printlv);
 
         chrono.Clear();
         chrono.Start();
@@ -2101,6 +2105,9 @@ private:
 
         poisson_iter.Append(solver->GetNumIterations());
         poisson_time.Append(chrono.RealTime());
+
+        cout << "L2 error norm of |phi_h - phi_e|: " << phi->ComputeL2Error(phi_exact) << endl;
+        MFEM_ABORT("Stop here for testing Poisson convergence rate in PNP_DG_Gummel_Solver_par!");
 
         delete blf;
         delete lf;

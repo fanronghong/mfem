@@ -15,6 +15,7 @@ const char* mesh_file       = "./4_4_4_translate.msh";
 int refine_times            = 0;
 const char* Linearize       = "gummel"; // newton, gummel
 const char* Descretize      = "cg"; // cg, dg
+const char* options_src     = "./gummel_cg_box_petsc_opts";
 int p_order                 = 1; //有限元基函数的多项式次数
 
 const int bottom_attr       = 1;
@@ -24,10 +25,9 @@ const int front_attr        = 2;
 const int back_attr         = 4;
 const int right_attr        = 3;
 
-const int Gummel_max_iters  = 20;
-const double Gummel_rel_tol = 1e-8;
+const int Gummel_max_iters  = 100;
+const double Gummel_rel_tol = 1e-12;
 const double TOL            = 1e-20;
-const char* options_src     = "";
 
 /* 可以定义如下模型参数: 前三个宏定义参数在其他头文件定义
  * Angstrom_SCALE: 埃米尺度
@@ -67,7 +67,7 @@ FunctionCoefficient phi_D_coeff(phi_D_func);
 FunctionCoefficient c1_D_coeff (c1_D_func);
 FunctionCoefficient c2_D_coeff (c2_D_func);
 #elif defined(Angstrom_SCALE)
-#define COMPUTE_CONVERGENCE_RATE   //运行所有代码内部自己添加的assert检查. Note: 不要修改下面的输入参数, 否则会造成程序中的很多assert不能通过!
+//#define COMPUTE_CONVERGENCE_RATE
 double phi_exact_(const Vector& x)
 {
     return 19.4608742898269*x[2] + 4.31325242019627e-6*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]) + 19.4608742898269;
