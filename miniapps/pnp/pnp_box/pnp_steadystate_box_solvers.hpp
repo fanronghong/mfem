@@ -1941,7 +1941,7 @@ public:
         int iter = 1;
         while (iter < Gummel_max_iters)
         {
-            Solve_NP1();
+            Solve_NP2();
 
             Solve_Poisson();
 
@@ -2124,7 +2124,7 @@ private:
 
     void Solve_NP1()
     {
-        phi_n->ProjectCoefficient(phi_exact); // test convergence rate
+//        phi_n->ProjectCoefficient(phi_exact); // test convergence rate
 
         ParBilinearForm *blf = new ParBilinearForm(fsp);
         ProductCoefficient neg_D_K_v_K(neg, D_K_prod_v_K);
@@ -2189,8 +2189,8 @@ private:
         np1_iter.Append(solver->GetNumIterations());
         np1_time.Append(chrono.RealTime());
 
-        cout << "L2 error norm of | c1_h - c1_e |: " << c1->ComputeL2Error(c1_exact) << endl;
-        MFEM_ABORT("Stop here for test NP1 convergence rate in PNP_DG_Gummel_Solver_par!");
+//        cout << "L2 error norm of | c1_h - c1_e |: " << c1->ComputeL2Error(c1_exact) << endl;
+//        MFEM_ABORT("Stop here for test NP1 convergence rate in PNP_DG_Gummel_Solver_par!");
 
         delete blf;
         delete lf;
@@ -2202,32 +2202,43 @@ private:
 
     void Solve_NP2()
     {
+        phi_n->ProjectCoefficient(phi_exact); // test convergence rate
+
         ParBilinearForm *blf = new ParBilinearForm(fsp);
-        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_Cl_prod_v_Cl));
+        ProductCoefficient sigma_D_Cl_v_Cl(sigma_coeff, D_Cl_prod_v_Cl);
+        ProductCoefficient neg_D_Cl_v_Cl(neg, D_Cl_prod_v_Cl);
+        // D2 (grad(c2), grad(v2))
         blf->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
+        // D2 z2 (c2 grad(phi^k), grad(v2))
+        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_Cl_prod_v_Cl));
+        // -<{D2 grad(c2).n}, [v2]> + sigma <[c2], {D2 grad(v2).n}> + kappa <{h^{-1} D2} [c2], [v2]>
         blf->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_Cl_, sigma, kappa));
         blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_Cl_, sigma, kappa), Dirichlet);
-
-        ProductCoefficient neg_D_Cl_v_Cl(neg, D_Cl_prod_v_Cl);
+        // -D2 z2 <{c2 grad(phi^k).n}, [v2]>
         blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_Cl_v_Cl, *phi_n));
         blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_Cl_v_Cl, *phi_n), Dirichlet);
-
-        ProductCoefficient sigma_D_Cl_v_Cl(sigma_coeff, D_Cl_prod_v_Cl);
+        // sigma D2 z2 <[c2], {v2 grad(phi^k).n}>
         blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_Cl_v_Cl, *phi_n));
         blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_Cl_v_Cl, *phi_n), Dirichlet);
-
         blf->Assemble(0);
         blf->Finalize(0);
 
-
         ParLinearForm *lf = new ParLinearForm(fsp); //NP2方程的右端项
 #ifndef PhysicalModel
+        // D2 <(grad(c2_e) + z2 c2_e grad(phi_e)) . n, v2>, c2_flux = J2 = -D2 (grad(c2_e) + z2 c2_e grad(phi_e))
+        ScalarVectorProductCoefficient neg_J2(neg, J2);
+        lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J2), Neumann);
+        // (f2, v2)
         lf->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
+        // sigma <c2_e, D2 grad(v2).n> + kappa <{h^{-1} D2} c2_e, v2>
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_exact, D_Cl_, sigma, kappa));
+        // sigma D2 z2 <c2_e, v2 grad(phi^k).n>
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_exact, phi_n));
 #else
         // zero Neumann bdc and below weak Dirichlet bdc
+        // sigma <c2_D, D2 grad(v2).n> + kappa <{h^{-1} D2} c2_D, v2>
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_coeff, D_K_, sigma, kappa), Dirichlet);
+        // sigma D2 z2 <c2_D, v2 grad(phi^k).n>
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_D_coeff, phi_n), Dirichlet);
 #endif
         lf->Assemble();
@@ -2239,10 +2250,6 @@ private:
         blf->FormLinearSystem(ess_tdof_list, *c2, *lf, *A, *x, *b);
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
-        solver->SetAbsTol(np2_solver_atol);
-        solver->SetRelTol(np2_solver_rtol);
-        solver->SetMaxIter(np2_solver_maxiter);
-        solver->SetPrintLevel(np2_solver_printlv);
 
         chrono.Clear();
         chrono.Start();
@@ -2259,6 +2266,9 @@ private:
 
         np2_iter.Append(solver->GetNumIterations());
         np2_time.Append(chrono.RealTime());
+
+        cout << "L2 error norm of | c2_h - c2_e |: " << c2->ComputeL2Error(c2_exact) << endl;
+        MFEM_ABORT("Stop here for test NP2 convergence rate in PNP_DG_Gummel_Solver_par!");
 
         delete blf;
         delete lf;
