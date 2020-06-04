@@ -317,7 +317,6 @@ void VectorBoundaryLFIntegrator::AssembleRHSElementVect(
       Tr.Loc1.Transform(ip, eip);
 
       Tr.SetIntPoint(&ip);
-      Tr.SetActiveSide(0);
 
       // Use Tr transformation in case Q depends on boundary attribute
       Q.Eval(vec, Tr, ip);
@@ -528,11 +527,9 @@ void BoundaryFlowIntegrator::AssembleRHSElementVect(
       el.CalcShape(eip, shape);
 
       Tr.SetIntPoint(&ip);
-      Tr.SetActiveSide(0);
 
-      // Use Tr.Elem1 transformation for u so that it matches the
-      // coefficient used with the ConvectionIntegrator and/or the
-      // DGTraceIntegrator.
+      // Use Tr.Elem1 transformation for u so that it matches the coefficient
+      // used with the ConvectionIntegrator and/or the DGTraceIntegrator.
       u->Eval(vu, *Tr.Elem1, eip);
 
       if (dim == 1)
@@ -599,7 +596,6 @@ void DGDirichletLFIntegrator::AssembleRHSElementVect(
 
       Tr.Loc1.Transform(ip, eip);
       Tr.SetIntPoint(&ip);
-      Tr.SetActiveSide(0);
       if (dim == 1)
       {
          nor(0) = 2*eip.x - 1.0;
@@ -611,7 +607,7 @@ void DGDirichletLFIntegrator::AssembleRHSElementVect(
 
       el.CalcShape(eip, shape);
       el.CalcDShape(eip, dshape);
-      Tr.Elem1->SetIntPoint(&eip);
+
       // compute uD through the face transformation
       w = ip.weight * uD->Eval(Tr, ip) / Tr.Elem1->Weight();
       if (!MQ)
@@ -693,8 +689,6 @@ void DGElasticityDirichletLFIntegrator::AssembleRHSElementVect(
       IntegrationPoint eip;
       Tr.Loc1.Transform(ip, eip);
       Tr.SetIntPoint(&ip);
-      Tr.SetActiveSide(0);
-      Tr.Elem1->SetIntPoint(&eip);
 
       // Evaluate the Dirichlet b.c. using the face transformation.
       uD.Eval(u_dir, Tr, ip);
@@ -774,6 +768,60 @@ void DGElasticityDirichletLFIntegrator::AssembleRHSElementVect(
                           t3*dshape_du(idof) + tj*shape(idof));
          }
       }
+   }
+}
+
+void VectorQuadratureLFIntegrator::AssembleRHSElementVect(
+   const FiniteElement &fe, ElementTransformation &Tr, Vector &elvect)
+{
+   const IntegrationRule *ir =
+      &vqfc.GetQuadFunction().GetSpace()->GetElementIntRule(Tr.ElementNo);
+
+   const int nqp = ir->GetNPoints();
+   const int vdim = vqfc.GetVDim();
+   const int ndofs = fe.GetDof();
+   Vector shape(ndofs);
+   Vector temp(vdim);
+   elvect.SetSize(vdim * ndofs);
+   elvect = 0.0;
+   for (int q = 0; q < nqp; q++)
+   {
+      const IntegrationPoint &ip = ir->IntPoint(q);
+      Tr.SetIntPoint(&ip);
+      const double w = Tr.Weight() * ip.weight;
+      vqfc.Eval(temp, Tr, ip);
+      fe.CalcShape(ip, shape);
+      for (int ind = 0; ind < vdim; ind++)
+      {
+         for (int nd = 0; nd < ndofs; nd++)
+         {
+            elvect(nd + ind * ndofs) += w * shape(nd) * temp(ind);
+         }
+      }
+   }
+}
+
+void QuadratureLFIntegrator::AssembleRHSElementVect(const FiniteElement &fe,
+                                                    ElementTransformation &Tr,
+                                                    Vector &elvect)
+{
+   const IntegrationRule *ir =
+      &qfc.GetQuadFunction().GetSpace()->GetElementIntRule(Tr.ElementNo);
+
+   const int nqp = ir->GetNPoints();
+   const int ndofs = fe.GetDof();
+   Vector shape(ndofs);
+   elvect.SetSize(ndofs);
+   elvect = 0.0;
+   for (int q = 0; q < nqp; q++)
+   {
+      const IntegrationPoint &ip = ir->IntPoint(q);
+      Tr.SetIntPoint (&ip);
+      const double w = Tr.Weight() * ip.weight;
+      double temp = qfc.Eval(Tr, ip);
+      fe.CalcShape(ip, shape);
+      shape *= (w * temp);
+      elvect += shape;
    }
 }
 

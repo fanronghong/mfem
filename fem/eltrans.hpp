@@ -50,9 +50,8 @@ protected:
 public:
 
    /** This enumeration declares the values stored in
-       ElementTransformation::ElementType and indicates which group of
-       objects the index stored in ElementTransformation::ElementNo
-       refers:
+       ElementTransformation::ElementType and indicates which group of objects
+       the index stored in ElementTransformation::ElementNo refers:
 
        | ElementType | Range of ElementNo
        +-------------+-------------------------
@@ -60,13 +59,15 @@ public:
        | BDR_ELEMENT | [0, Mesh::GetNBE()    )
        | EDGE        | [0, Mesh::GetNEdges() )
        | FACE        | [0, Mesh::GetNFaces() )
+       | BDR_FACE    | [0, Mesh::GetNBE()    )
    */
    enum
    {
       ELEMENT     = 1,
       BDR_ELEMENT = 2,
       EDGE        = 3,
-      FACE        = 4
+      FACE        = 4,
+      BDR_FACE    = 5
    };
 
    int Attribute, ElementNo, ElementType;
@@ -380,8 +381,9 @@ public:
 class FaceElementTransformations : public IsoparametricTransformation
 {
 private:
-   int side;
    int mask;
+
+   IntegrationPoint eip1, eip2;
 
 public:
    int Elem1No, Elem2No;
@@ -390,39 +392,22 @@ public:
    ElementTransformation *Face; ///< @deprecated No longer necessary
    IntegrationPointTransformation Loc1, Loc2;
 
-   FaceElementTransformations() : side(2), FaceGeom(geom), Face(this) {}
+   FaceElementTransformations() : FaceGeom(geom), Face(this) {}
 
    /** @brief Method to set the geometry type of the face.
 
-       @note This method should only be used when
-       [Par]Mesh::GetFaceTransformation will not be called i.e. when the
-       face transformation will not be needed but the neighboring
-       element transformations will be.
+       @note This method is designed to be used when
+       [Par]Mesh::GetFaceTransformation will not be called i.e. when the face
+       transformation will not be needed but the neighboring element
+       transformations will be.  Using this method to override the GeometryType
+       should only be done with great care.
    */
    void SetGeometryType(Geometry::Type g) { geom = g; }
 
-   /** FaceElementTransformations objects are often used when
-       performing the surface integrals on the interfaces between
-       elements needed by Discontinuous Galerkin methods.  Since the
-       fields are generally multivalued on such interfaces it is
-       important to specify which neighboring element should supply
-       the field values.  This is controlled by setting the "active
-       side" in the FaceElementTransformations object.
-
-       Possible values for s are 0, 1, and 2:
-          0 - Set Elem1No as the active side
-          1 - Set Elem2No as the active side
-          2 - Choose the active side automatically.  This selects Elem1No
-              unless Elem2No exists and has a lower attribute number than
-              Elem1No.
-    */
-   int SetActiveSide(int s);
-   int GetActiveSide() const { return side; }
-
    /// Set the mask indicating which portions of the object have been setup
    /** The argument @a m is a bitmask used in
-       Mesh::GetFaceElementTransformations to indicate which portions
-       of the FaceElement Transformations object have been configured.
+       Mesh::GetFaceElementTransformations to indicate which portions of the
+       FaceElement Transformations object have been configured.
 
        mask &  1: Elem1 is configured
        mask &  2: Elem2 is configured
@@ -433,12 +418,18 @@ public:
    void SetConfigurationMask(int m) { mask = m; }
    int  GetConfigurationMask() const { return mask; }
 
+   /** @brief Set the integration point in the Face and the two neighboring
+       elements, if present. */
+   void SetIntPoint(const IntegrationPoint *ip);
+
    virtual void Transform(const IntegrationPoint &, Vector &);
    virtual void Transform(const IntegrationRule &, DenseMatrix &);
    virtual void Transform(const DenseMatrix &matrix, DenseMatrix &result);
 
-   ElementTransformation * GetActiveElementTransformation();
-   IntegrationPointTransformation * GetActivePointTransformation();
+   ElementTransformation & GetElement1Transformation();
+   ElementTransformation & GetElement2Transformation();
+   IntegrationPointTransformation & GetIntPoint1Transformation();
+   IntegrationPointTransformation & GetIntPoint2Transformation();
 };
 
 /*                 Elem1(Loc1(x)) = Face(x) = Elem2(Loc2(x))
