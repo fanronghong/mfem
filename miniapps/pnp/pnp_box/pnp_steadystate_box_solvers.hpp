@@ -1582,7 +1582,7 @@ public:
         out2["np2_avg_iter"] = np2_avg_iter;
         out2["np2_avg_time"] = np2_avg_time;
 
-#ifdef COMPUTE_CONVERGENCE_RATE
+        if (ComputeConvergenceRate)
         {
             double phiL2err = phi->ComputeL2Error(phi_exact);
             double c1L2err = c1->ComputeL2Error(c1_exact);
@@ -1592,16 +1592,15 @@ public:
             c1L2errornorms_.Append(c1L2err);
             c2L2errornorms_.Append(c2L2err);
             double totle_size = 0.0;
-            for (int i=0; i<mesh.GetNE(); i++) {
+            for (int i=0; i<mesh.GetNE(); i++)
                 totle_size += mesh.GetElementSize(0, 1);
-            }
+
             meshsizes_.Append(totle_size / mesh.GetNE());
             cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
                  << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
                  << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << ", \n"
                  << "mesh size: " << totle_size / mesh.GetNE() << endl;
         }
-#endif
 
         cout.precision(14);
         cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
@@ -1909,15 +1908,18 @@ public:
 
         int size = fsp->GetMesh()->bdr_attributes.Max();
         Dirichlet.SetSize(size);
-        Dirichlet = 0;
-        Dirichlet[top_attr - 1] = 1;
-        Dirichlet[bottom_attr - 1] = 1;
         Neumann.SetSize(size);
-        Neumann = 0;
-        Neumann[front_attr - 1] = 1;
-        Neumann[back_attr  - 1] = 1;
-        Neumann[left_attr  - 1] = 1;
-        Neumann[right_attr - 1] = 1;
+        {
+            Dirichlet = 1;
+            Dirichlet[top_attr - 1]    = 1;
+            Dirichlet[bottom_attr - 1] = 1;
+
+            Neumann = 0;
+//            Neumann[front_attr - 1] = 1;
+//            Neumann[back_attr  - 1] = 1;
+//            Neumann[left_attr  - 1] = 1;
+//            Neumann[right_attr - 1] = 1;
+        }
 
         dc = new VisItDataCollection("data collection", &mesh);
         dc->RegisterField("phi", phi);
@@ -1939,6 +1941,8 @@ public:
         int iter = 1;
         while (iter < Gummel_max_iters)
         {
+            Solve_NP1();
+
             Solve_Poisson();
 
             Vector diff(fsp->GetNDofs());
@@ -2048,8 +2052,8 @@ public:
 private:
     void Solve_Poisson()
     {
-        c1_n->ProjectCoefficient(c1_exact); // for test convergence rate
-        c2_n->ProjectCoefficient(c2_exact); // for test convergence rate
+//        c1_n->ProjectCoefficient(c1_exact); // for test convergence rate
+//        c2_n->ProjectCoefficient(c2_exact); // for test convergence rate
 
         ParBilinearForm *blf = new ParBilinearForm(fsp);
         // epsilon_s (grad(phi), grad(psi))
@@ -2076,6 +2080,7 @@ private:
 #else
         ScalarVectorProductCoefficient neg_J(neg, J);
         // epsilon_s <grad(phi_e).n, psi>, phi_flux = -epsilon_s grad(phi_e)
+        // fff BoundaryNormalLFIntegrator for DG is not OK?
         lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J), Neumann);
         // sigma <phi_e, (epsilon_s grad(psi)).n)> + kappa <{h^{-1} Q} phi_e, psi>
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, epsilon_water, sigma, kappa), Dirichlet); // 用真解构造Dirichlet边界条件
@@ -2106,8 +2111,8 @@ private:
         poisson_iter.Append(solver->GetNumIterations());
         poisson_time.Append(chrono.RealTime());
 
-        cout << "L2 error norm of |phi_h - phi_e|: " << phi->ComputeL2Error(phi_exact) << endl;
-        MFEM_ABORT("Stop here for testing Poisson convergence rate in PNP_DG_Gummel_Solver_par!");
+//        cout << "L2 error norm of |phi_h - phi_e|: " << phi->ComputeL2Error(phi_exact) << endl;
+//        MFEM_ABORT("Stop here for testing Poisson convergence rate in PNP_DG_Gummel_Solver_par!");
 
         delete blf;
         delete lf;
@@ -2119,32 +2124,43 @@ private:
 
     void Solve_NP1()
     {
+        phi_n->ProjectCoefficient(phi_exact); // test convergence rate
+
         ParBilinearForm *blf = new ParBilinearForm(fsp);
-        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_K_prod_v_K));
+        ProductCoefficient neg_D_K_v_K(neg, D_K_prod_v_K);
+        ProductCoefficient sigma_D_K_v_K(sigma_coeff, D_K_prod_v_K);
+        // D1 (grad(c1), grad(v1))
         blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+        // D1 z1 (c1 grad(phi^k), grad(v1))
+        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_K_prod_v_K));
+        // -<{D1 grad(c1).n}, [v1]> + sigma <[c1], {D1 grad(v1).n}> + kappa <{h^{-1} D1} [c1], [v1]>
         blf->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
         blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa), Dirichlet);
-
-        ProductCoefficient neg_D_K_v_K(neg, D_K_prod_v_K);
+        // -D1 z1 <{c1 grad(phi^k).n}, [v1]>
         blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n));
         blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n), Dirichlet);
-
-        ProductCoefficient sigma_D_K_v_K(sigma_coeff, D_K_prod_v_K);
+        // sigma <[c1], {D1 z1 v1 grad(phi^k).n}>
         blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi_n));
         blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi_n), Dirichlet);
-
         blf->Assemble(0);
         blf->Finalize(0);
 
-
         ParLinearForm *lf = new ParLinearForm(fsp); //NP1方程的右端项
 #ifndef PhysicalModel
+        // D1 <(grad(c1_e) + z1 c1_e grad(phi_e)) . n, v1>, c1_flux = J1 = -D1 (grad(c1_e) + z1 c1_e grad(phi_e))
+        ScalarVectorProductCoefficient neg_J1(neg, J1);
+        lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J1), Neumann);
+        // (f1, v1)
         lf->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+        // sigma <c1_e, D1 grad(v1).n> + kappa <{h^{-1} D1} c1_e, v1>
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_exact, D_K_, sigma, kappa));
+        // sigma D1 z1 <c1_e, v1 grad(phi^k).n>
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_exact, phi_n));
 #else
         // zero Neumann bdc and below weak Dirichlet bdc
+        // sigma <c1_D, D1 grad(v1).n> + kappa <{h^{-1} D1} c1_D, v1>
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, kappa), Dirichlet);
+        // sigma D1 z1 <c1_D, v1 grad(phi^k).n>
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_D_coeff, phi_n), Dirichlet);
 #endif
         lf->Assemble();
@@ -2156,10 +2172,6 @@ private:
         blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
-        solver->SetAbsTol(np1_solver_atol);
-        solver->SetRelTol(np1_solver_rtol);
-        solver->SetMaxIter(np1_solver_maxiter);
-        solver->SetPrintLevel(np1_solver_printlv);
 
         chrono.Clear();
         chrono.Start();
@@ -2176,6 +2188,9 @@ private:
 
         np1_iter.Append(solver->GetNumIterations());
         np1_time.Append(chrono.RealTime());
+
+        cout << "L2 error norm of | c1_h - c1_e |: " << c1->ComputeL2Error(c1_exact) << endl;
+        MFEM_ABORT("Stop here for test NP1 convergence rate in PNP_DG_Gummel_Solver_par!");
 
         delete blf;
         delete lf;

@@ -14,9 +14,10 @@ using namespace mfem;
 const char* mesh_file       = "./4_4_4_translate.msh";
 int refine_times            = 0;
 const char* Linearize       = "gummel"; // newton, gummel
-const char* Descretize      = "cg"; // cg, dg
-const char* options_src     = "./gummel_cg_box_petsc_opts";
+const char* Descretize      = "dg"; // cg, dg
+const char* options_src     = "./gummel_dg_box_petsc_opts";
 int p_order                 = 1; //有限元基函数的多项式次数
+bool ComputeConvergenceRate = false;
 
 const int bottom_attr       = 1;
 const int top_attr          = 6;
@@ -67,7 +68,6 @@ FunctionCoefficient phi_D_coeff(phi_D_func);
 FunctionCoefficient c1_D_coeff (c1_D_func);
 FunctionCoefficient c2_D_coeff (c2_D_func);
 #elif defined(Angstrom_SCALE)
-//#define COMPUTE_CONVERGENCE_RATE
 double phi_exact_(const Vector& x)
 {
     return 19.4608742898269*x[2] + 4.31325242019627e-6*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]) + 19.4608742898269;
