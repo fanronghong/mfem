@@ -2202,7 +2202,7 @@ private:
 
     void Solve_NP2()
     {
-        phi_n->ProjectCoefficient(phi_exact); // test convergence rate
+//        phi_n->ProjectCoefficient(phi_exact); // test convergence rate
 
         ParBilinearForm *blf = new ParBilinearForm(fsp);
         ProductCoefficient sigma_D_Cl_v_Cl(sigma_coeff, D_Cl_prod_v_Cl);
@@ -2267,8 +2267,8 @@ private:
         np2_iter.Append(solver->GetNumIterations());
         np2_time.Append(chrono.RealTime());
 
-        cout << "L2 error norm of | c2_h - c2_e |: " << c2->ComputeL2Error(c2_exact) << endl;
-        MFEM_ABORT("Stop here for test NP2 convergence rate in PNP_DG_Gummel_Solver_par!");
+//        cout << "L2 error norm of | c2_h - c2_e |: " << c2->ComputeL2Error(c2_exact) << endl;
+//        MFEM_ABORT("Stop here for test NP2 convergence rate in PNP_DG_Gummel_Solver_par!");
 
         delete blf;
         delete lf;
