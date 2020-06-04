@@ -2465,7 +2465,7 @@ protected:
 
     PetscNonlinearSolver* newton_solver;
 
-    Array<int> ess_bdr, top_bdr, bottom_bdr;
+    Array<int> ess_bdr, top_bdr, bottom_bdr, Neumann_attr;
     Array<int> ess_tdof_list, top_ess_tdof_list, bottom_ess_tdof_list;
 
     StopWatch chrono;
@@ -2478,18 +2478,28 @@ public:
         MPI_Comm_size(fsp->GetComm(), &num_procs);
         MPI_Comm_rank(fsp->GetComm(), &myid);
 
-        ess_bdr.SetSize(fsp->GetMesh()->bdr_attributes.Max());
+        int bdr_size = fsp->GetMesh()->bdr_attributes.Max();
+        {
+            Neumann_attr.SetSize(bdr_size);
+            Neumann_attr = 0;
+            Neumann_attr[left_attr - 1]  = 1;
+            Neumann_attr[right_attr - 1] = 1;
+            Neumann_attr[front_attr - 1] = 1;
+            Neumann_attr[back_attr - 1]  = 1;
+        }
+
+        ess_bdr.SetSize(bdr_size);
         ess_bdr                  = 0;
         ess_bdr[top_attr - 1]    = 1;
         ess_bdr[bottom_attr - 1] = 1;
         fsp->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
-        top_bdr.SetSize(fsp->GetMesh()->bdr_attributes.Max());
+        top_bdr.SetSize(bdr_size);
         top_bdr                 = 0;
         top_bdr[top_attr - 1] = 1;
         fsp->GetEssentialTrueDofs(top_bdr, top_ess_tdof_list);
 
-        bottom_bdr.SetSize(fsp->GetMesh()->bdr_attributes.Max());
+        bottom_bdr.SetSize(bdr_size);
         bottom_bdr = 0;
         bottom_bdr[bottom_attr - 1] = 1;
         fsp->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
@@ -2523,6 +2533,7 @@ public:
         a33 = new ParBilinearForm(fsp);
 
         a11 = new ParBilinearForm(fsp);
+        // epsilon_s (grad(dphi), grad(psi))
         a11->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water));
         a11->Assemble(0);
         a11->Finalize(0);
@@ -2530,6 +2541,7 @@ public:
         a11->FormSystemMatrix(ess_tdof_list, A11);
 
         a12 = new ParBilinearForm(fsp);
+        // -alpha2 alpha3 z1 (dc1, psi)
         ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K(neg, alpha2_prod_alpha3_prod_v_K);
         a12->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_K));
         a12->Assemble(0);
@@ -2538,6 +2550,7 @@ public:
         a12->FormSystemMatrix(null_array, A12);
 
         a13 = new ParBilinearForm(fsp);
+        // -alpha2 alpha3 z2 (dc2, psi)
         ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl(neg, alpha2_prod_alpha3_prod_v_Cl);
         a13->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_Cl));
         a13->Assemble(0);
@@ -2559,6 +2572,8 @@ public:
 //        cout << "l2 norm of y: " << y.Norml2() << endl;
         int sc = height / 3;
         Vector& x_ = const_cast<Vector&>(x);
+        Array<int>& Neumann_attr_ = const_cast<Array<int>&>(Neumann_attr);
+
         phi->MakeTRef(fsp, x_, 0);
         c1_k->MakeTRef(fsp, x_, sc);
         c2_k->MakeTRef(fsp, x_, 2*sc);
@@ -2610,6 +2625,10 @@ public:
         f->AddDomainIntegrator(new DomainLFIntegrator(neg_term));
         // epsilon_s (grad(phi^k), grad(psi))
         f->AddDomainIntegrator(new GradConvectionIntegrator2(&epsilon_water, phi));
+#ifndef PhysicalModel // for Physical model, omit zero Neumann bdc: epsilon_s (phi_N, psi)
+        // epsilon_s <grad(phi_e).n, psi>, phi_flux = -epsilon_s grad(phi_e)
+        f->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(J), Neumann_attr_);
+#endif
         f->Assemble();
         f->SetSubVector(ess_tdof_list, 0.0);
 
@@ -2621,6 +2640,12 @@ public:
         f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D_K_, c1_k));
         // D1 z1 c1^k (grad(phi^k), grad(psi))
         f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D1_prod_z1_prod_c1_k, phi));
+#ifndef PhysicalModel // for PhysicalModel, omit zero Neumann bdc: -alpha3 <c1_N, v1>
+        // D1 <(grad(c1_e) + z1 c1_e grad(phi_e)) . n, v1>, c1_flux = J1 = -D1 (grad(c1_e) + z1 c1_e grad(phi_e))
+        f1->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(J1), Neumann_attr_);
+        // (f1, v1)
+        f1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+#endif
         f1->Assemble();
         f1->SetSubVector(ess_tdof_list, 0.0);
 
@@ -2633,6 +2658,12 @@ public:
         f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D_Cl_, c2_k));
         // D2 z2 c2^k (grad(phi^k), grad(v2))
         f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D2_prod_z2_prod_c2_k, phi));
+#ifndef PhysicalModel // for PhysicalModel, omit zero Neumann bdc: - alpha3 (c2_N, v2)
+        // D2 <(grad(c2_e) + z2 c2_e grad(phi_e)) . n, v2>, c2_flux = J2 = -D2 (grad(c2_e) + z2 c2_e grad(phi_e))
+        f2->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(J2), Neumann_attr_);
+        // (f2, v2)
+        f2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
+#endif
         f2->Assemble();
         f2->SetSubVector(ess_tdof_list, 0.0);
 
@@ -2862,11 +2893,12 @@ public:
         PetscFree(residual_norms);
     }
 
-    void Solve(Array<double> phiL2errornomrs, Array<double> c1L2errornorms, Array<double> c2L2errornorms, Array<double> meshsizes)
+    void Solve(Array<double>& phiL2errornorms_, Array<double>& c1L2errornorms_,
+               Array<double>& c2L2errornorms_, Array<double>& meshsizes_)
     {
         cout << "\nNewton, CG" << p_order << ", box, parallel"
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
-//        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
+
         Vector zero_vec;
         chrono.Start();
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
@@ -2893,17 +2925,40 @@ public:
         phi.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
-        cout.precision(14);
-        cout << "l2 norm of phi3: " << phi.ComputeL2Error(zero) << endl;
-        cout << "l2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
-        cout << "l2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
-        cout << "solution vector size on mesh: phi, " << phi.Size() << "; c1, " << c1_k.Size() << "; c2, " << c2_k.Size() << endl;
+
+        if (ComputeConvergenceRate)
+        {
+            double phiL2err = phi.ComputeL2Error(phi_exact);
+            double c1L2err = c1_k.ComputeL2Error(c1_exact);
+            double c2L2err = c2_k.ComputeL2Error(c2_exact);
+
+            phiL2errornorms_.Append(phiL2err);
+            c1L2errornorms_.Append(c1L2err);
+            c2L2errornorms_.Append(c2L2err);
+            double totle_size = 0.0;
+            for (int i=0; i<mesh->GetNE(); i++)
+                totle_size += mesh->GetElementSize(0, 1);
+
+            meshsizes_.Append(totle_size / mesh->GetNE());
+            cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
+                 << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
+                 << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << ", \n"
+                 << "mesh size: " << totle_size / mesh->GetNE() << endl;
+        }
+        else
+        {
+            cout.precision(14);
+            cout << "l2 norm of phi3: " << phi.ComputeL2Error(zero) << endl;
+            cout << "l2 norm of   c1: " << c1_k.ComputeL2Error(zero) << endl;
+            cout << "l2 norm of   c2: " << c2_k.ComputeL2Error(zero) << endl;
+            cout << "solution vector size on mesh: phi, " << phi.Size() << "; c1, " << c1_k.Size() << "; c2, " << c2_k.Size() << endl;
+        }
 
         cout << endl;
+#ifdef SELF_VERBOSE
         map<string, Array<double>>::iterator it1;
         for (it1=out1.begin(); it1!=out1.end(); ++it1)
             (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
-#ifdef SELF_VERBOSE
 #endif
         map<string, double>::iterator it2;
         for (it2=out2.begin(); it2!=out2.end(); ++it2)
