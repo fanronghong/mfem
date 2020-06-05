@@ -7,36 +7,43 @@ reset
 exec &> >(tee "./out")
 
 
-#./pnp_steadystate_box -p 1 -ref 0 -lin gummel -des cg
-#./pnp_steadystate_box -p 1 -ref 0 -lin gummel -des dg
-#./pnp_steadystate_box -p 1 -ref 1 -lin gummel -des cg
-#./pnp_steadystate_box -p 1 -ref 1 -lin gummel -des dg
-#./pnp_steadystate_box -p 1 -ref 2 -lin gummel -des cg
-#./pnp_steadystate_box -p 1 -ref 2 -lin gummel -des dg
-#./pnp_steadystate_box -p 1 -ref 3 -lin gummel -des cg
-#./pnp_steadystate_box -p 1 -ref 3 -lin gummel -des dg
+#./pnp_steadystate_box -p 1 -ref 0 -lin gummel -dis cg
+#./pnp_steadystate_box -p 1 -ref 0 -lin gummel -dis dg
+#./pnp_steadystate_box -p 1 -ref 1 -lin gummel -dis cg
+#./pnp_steadystate_box -p 1 -ref 1 -lin gummel -dis dg
+#./pnp_steadystate_box -p 1 -ref 2 -lin gummel -dis cg
+#./pnp_steadystate_box -p 1 -ref 2 -lin gummel -dis dg
+#./pnp_steadystate_box -p 1 -ref 3 -lin gummel -dis cg
+#./pnp_steadystate_box -p 1 -ref 3 -lin gummel -dis dg
 
-#./pnp_steadystate_box -p 1 -ref 0 -lin gummel -des cg
-#./pnp_steadystate_box -p 1 -ref 0 -lin gummel -des dg
-#./pnp_steadystate_box -p 2 -ref 0 -lin gummel -des cg
-#./pnp_steadystate_box -p 2 -ref 0 -lin gummel -des dg
-#./pnp_steadystate_box -p 1 -ref 1 -lin gummel -des cg
-#./pnp_steadystate_box -p 1 -ref 1 -lin gummel -des dg
-#./pnp_steadystate_box -p 2 -ref 1 -lin gummel -des cg
-#./pnp_steadystate_box -p 2 -ref 1 -lin gummel -des dg
-#./pnp_steadystate_box -p 1 -ref 2 -lin gummel -des cg
-#./pnp_steadystate_box -p 1 -ref 2 -lin gummel -des dg
-#./pnp_steadystate_box -p 2 -ref 2 -lin gummel -des cg
-#./pnp_steadystate_box -p 2 -ref 2 -lin gummel -des dg
+#./pnp_steadystate_box -p 1 -ref 0 -lin gummel -dis cg
+#./pnp_steadystate_box -p 1 -ref 0 -lin gummel -dis dg
+#./pnp_steadystate_box -p 2 -ref 0 -lin gummel -dis cg
+#./pnp_steadystate_box -p 2 -ref 0 -lin gummel -dis dg
+#./pnp_steadystate_box -p 1 -ref 1 -lin gummel -dis cg
+#./pnp_steadystate_box -p 1 -ref 1 -lin gummel -dis dg
+#./pnp_steadystate_box -p 2 -ref 1 -lin gummel -dis cg
+#./pnp_steadystate_box -p 2 -ref 1 -lin gummel -dis dg
+#./pnp_steadystate_box -p 1 -ref 2 -lin gummel -dis cg
+#./pnp_steadystate_box -p 1 -ref 2 -lin gummel -dis dg
+#./pnp_steadystate_box -p 2 -ref 2 -lin gummel -dis cg
+#./pnp_steadystate_box -p 2 -ref 2 -lin gummel -dis dg
 
 
-#./pnp_steadystate_box -p 1 -ref 0 -lin newton -des cg
-#./pnp_steadystate_box -p 1 -ref 0 -lin newton -des dg
-#./pnp_steadystate_box -p 1 -ref 1 -lin newton -des cg
-#./pnp_steadystate_box -p 1 -ref 1 -lin newton -des dg
-#./pnp_steadystate_box -p 1 -ref 2 -lin newton -des cg
-#./pnp_steadystate_box -p 1 -ref 2 -lin newton -des dg
-./pnp_steadystate_box -p 1 -ref 3 -lin newton -des cg
-./pnp_steadystate_box -p 1 -ref 3 -lin newton -des dg
+#./pnp_steadystate_box -p 1 -ref 0 -lin newton -dis cg
+#./pnp_steadystate_box -p 1 -ref 0 -lin newton -dis dg
+#./pnp_steadystate_box -p 1 -ref 1 -lin newton -dis cg
+#./pnp_steadystate_box -p 1 -ref 1 -lin newton -dis dg
+#./pnp_steadystate_box -p 1 -ref 2 -lin newton -dis cg
+#./pnp_steadystate_box -p 1 -ref 2 -lin newton -dis dg
 
+
+./pnp_steadystate_box -p 1 -ref 0 -lin newton -dis cg -opts newton_cg_box_petsc_opts
+./pnp_steadystate_box -p 1 -ref 0 -lin newton -dis dg -opts newton_dg_box_petsc_opts
+./pnp_steadystate_box -p 2 -ref 0 -lin newton -dis cg -opts newton_cg_box_petsc_opts
+./pnp_steadystate_box -p 2 -ref 0 -lin newton -dis dg -opts newton_dg_box_petsc_opts
+./pnp_steadystate_box -p 1 -ref 1 -lin newton -dis cg -opts newton_cg_box_petsc_opts
+./pnp_steadystate_box -p 1 -ref 1 -lin newton -dis dg -opts newton_dg_box_petsc_opts
+./pnp_steadystate_box -p 2 -ref 1 -lin newton -dis cg -opts newton_cg_box_petsc_opts
+./pnp_steadystate_box -p 2 -ref 1 -lin newton -dis dg -opts newton_dg_box_petsc_opts
 

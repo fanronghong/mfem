@@ -1584,6 +1584,7 @@ public:
 
         if (ComputeConvergenceRate)
         {
+#ifndef PhysicalModel
             double phiL2err = phi->ComputeL2Error(phi_exact);
             double c1L2err = c1->ComputeL2Error(c1_exact);
             double c2L2err = c2->ComputeL2Error(c2_exact);
@@ -1600,13 +1601,15 @@ public:
                  << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
                  << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << ", \n"
                  << "mesh size: " << totle_size / mesh.GetNE() << endl;
+#endif
         }
-
-        cout.precision(14);
-        cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
-             << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
-             << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
-
+        else
+        {
+            cout.precision(14);
+            cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
+                 << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
+                 << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
+        }
         if (visualize)
         {
             (*phi) /= alpha1;
@@ -2827,6 +2830,7 @@ public:
 
         if (ComputeConvergenceRate)
         {
+#ifndef PhysicalModel
             double phiL2err = phi.ComputeL2Error(phi_exact);
             double c1L2err = c1_k.ComputeL2Error(c1_exact);
             double c2L2err = c2_k.ComputeL2Error(c2_exact);
@@ -2843,6 +2847,7 @@ public:
                  << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << "\n"
                  << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << "\n"
                  << "mesh size: " << totle_size / mesh->GetNE() << endl;
+#endif
         }
         else
         {
@@ -3074,7 +3079,7 @@ public:
         // kappa <h^{-1} [c2^k], [psi]>
 #ifdef PhysicalModel
         f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_D_coeff));
-        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_D_coeff), Dirichlet_);
+        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_D_coeff), Dirichlet_attr_);
 #else
         f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_exact));
         f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_exact), Dirichlet_attr_);
@@ -3114,7 +3119,7 @@ public:
         f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D1_prod_z1_prod_c1_k, &phi_coeff), Dirichlet_attr_);
         // - sigma <phi_D, D1 z1 c1^k grad(v1).n> - kappa D1 z1 c1^k <h^{-1} phi_D, v1>
 #ifdef PhysicalModel
-        f1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D1_prod_z1_prod_c1_k, -1.0*sigma, -1.0*kappa), Dirichlet_);
+        f1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D1_prod_z1_prod_c1_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
 #else
         f1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, D1_prod_z1_prod_c1_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
 #endif
@@ -3153,7 +3158,7 @@ public:
         f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D2_prod_z2_prod_c2_k, &phi_coeff), Dirichlet_attr_);
         // - sigma <phi_D, D2 z2 c2^k grad(v2).n> - kappa D2 z2 c2^k <h^{-1} phi_D, v2>
 #ifdef PhysicalModel
-        f2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D2_prod_z2_prod_c2_k, -1.0*sigma, -1.0*kappa), Dirichlet_);
+        f2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D2_prod_z2_prod_c2_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
 #else
         f2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, D2_prod_z2_prod_c2_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
 #endif
@@ -3435,6 +3440,7 @@ public:
 
         if (ComputeConvergenceRate)
         {
+#ifndef PhysicalModel
             double phiL2err = phi.ComputeL2Error(phi_exact);
             double c1L2err = c1_k.ComputeL2Error(c1_exact);
             double c2L2err = c2_k.ComputeL2Error(c2_exact);
@@ -3451,6 +3457,7 @@ public:
                  << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << "\n"
                  << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << "\n"
                  << "mesh size: " << totle_size / mesh->GetNE() << endl;
+#endif
         }
         else
         {

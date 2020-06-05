@@ -8,10 +8,7 @@
 -newton_snes_linesearch_monitor
 -newton_snes_linesearch_maxstep 0
 -newton_snes_monitor
-#-newton_snes_monitor_solution
-#-newton_snes_monitor_residual
-#-newton_snes_monitor_solution_update
-#-newton_snes_converged_reason
+-newton_snes_converged_reason
 #-newton_snes_view
 #
 -newton_ksp_type gmres
