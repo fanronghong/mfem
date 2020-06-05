@@ -1563,7 +1563,7 @@ public:
         out1["np2_iter"] = np2_iter;
         out1["np2_time"] = np2_time;
 
-        linearize_iter = (iter + 1);
+        linearize_iter = iter;
         total_time = poisson_time.Sum() + np1_time.Sum() + np2_time.Sum();
         ndofs = fsp->GetVSize() * 3;
         out2["linearize_iter"] = linearize_iter;
@@ -1999,7 +1999,7 @@ public:
         out1["np2_iter"] = np2_iter;
         out1["np2_time"] = np2_time;
 
-        linearize_iter = (iter + 1);
+        linearize_iter = iter;
         total_time = poisson_time.Sum() + np1_time.Sum() + np2_time.Sum();
         ndofs = fsp->GetVSize() * 3;
         out2["linearize_iter"] = linearize_iter;
