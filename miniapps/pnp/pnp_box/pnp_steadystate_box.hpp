@@ -15,9 +15,9 @@ const char* mesh_file       = "./4_4_4_translate.msh";
 int refine_times            = 0;
 const char* Linearize       = "newton"; // newton, gummel
 const char* Discretize      = "dg"; // cg, dg
-const char* options_src     = "./newton_dg_box_petsc_opts";
+const char* options_src     = "./pnp_box_petsc_opts";
 int p_order                 = 1; //有限元基函数的多项式次数
-bool ComputeConvergenceRate = false;
+bool ComputeConvergenceRate = false; // 利用解析解计算误差阶
 
 const int bottom_attr       = 1;
 const int top_attr          = 6;
@@ -36,7 +36,7 @@ const double TOL            = 1e-20;
  * Micro_SCALE: 微米尺度
  * PhysicalModel: 真实的模型(没有蛋白区域), 上下边界是Dirichlet, 四周是Neumann边界
  * */
-#define PhysicalModel
+#define Angstrom_SCALE
 
 #if defined(PhysicalModel)
 // use Dirichlet bdc on top and bottom, zero Neumann for other boundaries

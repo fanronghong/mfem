@@ -1,3 +1,25 @@
+# --------------------------------- Gummel Linearization --------------------------------
+-phi_ksp_type gmres
+-phi_pc_type lu
+-phi_ksp_rtol 1e-10
+#-phi_ksp_monitor_true_residual
+#-phi_ksp_converged_reason
+#-phi_ksp_view
+
+-np1_ksp_type gmres
+-np1_pc_type lu
+#-np1_ksp_monitor_true_residual
+#-np1_ksp_converged_reason
+#-np1_ksp_view
+
+-np2_ksp_type gmres
+-np2_pc_type lu
+#-np2_ksp_monitor_true_residual
+#-np2_ksp_converged_reason
+#-np2_ksp_view
+
+
+# --------------------------------- Newton Linearization --------------------------------
 -newton_snes_type newtonls
 -newton_snes_max_it 50
 -newton_snes_rtol 1e-6
@@ -62,5 +84,7 @@
 #-sub_block3_ksp_converged_reason
 #-sub_block3_ksp_view
 
+
+# --------------------------------- Petsc Other Parameters --------------------------------
 #-options_view
 -options_left 0

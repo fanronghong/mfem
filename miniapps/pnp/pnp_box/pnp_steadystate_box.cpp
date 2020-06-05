@@ -22,7 +22,6 @@ int main(int argc, char *argv[])
     args.AddOption(&refine_times, "-ref", "--refinetimes", "Refine the initial mesh times.");
     args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method.");
     args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method.");
-    args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options");
     args.AddOption(&ComputeConvergenceRate, "-rate", "--computerate", "-norate", "--nocomputerate", "Compute convergence rate by using analytic solutions");
     args.Parse();
     if (!args.Good())
