@@ -9,7 +9,7 @@
 using namespace std;
 using namespace mfem;
 
-#define SELF_VERBOSE
+//#define SELF_VERBOSE
 
 const char* mesh_file       = "./4_4_4_translate.msh";
 int p_order                 = 1; //有限元基函数的多项式次数
@@ -27,8 +27,13 @@ const int back_attr         = 4;
 const int right_attr        = 3;
 
 const int Gummel_max_iters  = 100;
-const double Gummel_rel_tol = 1e-12;
+const double Gummel_rel_tol = 1e-10;
 const double TOL            = 1e-20;
+const double relax_phi = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
+const double relax_c1  = 0.2;
+const double relax_c2  = 0.2;
+const double sigma = -1.0; // symmetric parameter for DG
+const double kappa = 20; // penalty parameter for DG
 
 /* 可以定义如下模型参数: 前三个宏定义参数在其他头文件定义
  * Angstrom_SCALE: 埃米尺度
@@ -172,18 +177,11 @@ FunctionCoefficient f2_analytic(f2_analytic_);
 
 
 // ------------------------- 一些辅助变量(避免在main函数里面定义) ------------------------
-const double relax_phi = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
-const double relax_c1  = 0.2;
-const double relax_c2  = 0.2;
-
-double sigma = -1.0;
-double kappa = 20;
-
 bool use_np1spd             = false;
 bool use_np2spd             = false;
 bool visualize              = false;
 
-// 必须足够精确
+// if not use PETSc, use below parameters for solvers
 double phi_solver_atol = 1E-20;
 double phi_solver_rtol = 1E-14;
 int phi_solver_maxiter = 10000;

@@ -17,6 +17,10 @@ exec &> >(tee "./out")
 # 用gummel和dg计算收敛阶
 #./pnp_steadystate_box -p 1 -ref 2 -lin newton -dis dg -rate
 
+# ------> Some Errors
+# np1 not converge at 1st Gummel, leading to wrong convergence rate
+#./pnp_steadystate_box -p 1 -ref 2 -lin gummel -dis cg
+./pnp_steadystate_box -p 1 -ref 2 -lin gummel -dis dg
 
 #./pnp_steadystate_box -p 1 -ref 0 -lin gummel -dis dg
 #./pnp_steadystate_box -p 1 -ref 1 -lin gummel -dis cg

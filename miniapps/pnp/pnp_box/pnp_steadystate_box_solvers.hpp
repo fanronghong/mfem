@@ -149,7 +149,7 @@ public:
             cout << "===> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
             if (tol < Gummel_rel_tol)
             {
-                cout << "------> Gummel iteration converge: " << iter+1 << " times." << endl;
+                cout << "------> Gummel iteration converge: " << iter << " times." << endl;
                 break;
             }
             iter++;
@@ -550,7 +550,7 @@ public:
             cout << "===> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
             if (tol < Gummel_rel_tol)
             {
-                cout << "------> Gummel iteration converge: " << iter+1 << " times." << endl;
+                cout << "------> Gummel iteration converge: " << iter << " times." << endl;
                 break;
             }
             iter++;
@@ -831,7 +831,7 @@ public:
             cout << "===> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
             if (tol < Gummel_rel_tol)
             {
-                cout << "------> Gummel iteration converge: " << iter+1 << " times." << endl;
+                cout << "------> Gummel iteration converge: " << iter << " times." << endl;
                 break;
             }
             iter++;
@@ -1115,7 +1115,7 @@ public:
             cout << "===> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
             if (tol < Gummel_rel_tol)
             {
-                cout << "------> Gummel iteration converge: " << iter+1 << " times." << endl;
+                cout << "------> Gummel iteration converge: " << iter << " times." << endl;
                 break;
             }
             iter++;
@@ -1522,7 +1522,7 @@ public:
     {
         cout << "\nGummel, CG" << p_order << ", box, parallel"
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
-        int iter = 0;
+        int iter = 1;
         while (iter < Gummel_max_iters)
         {
             Solve_Poisson();
@@ -1540,19 +1540,15 @@ public:
             Solve_NP2();
             (*c2_n) = (*c2);
 
-#ifdef SELF_VERBOSE
             cout << "===> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
             if (tol < Gummel_rel_tol)
             {
-                cout << "------> Gummel iteration converge: " << iter+1 << " times." << endl;
+                cout << "------> Gummel iteration converge: " << iter << " times." << endl;
                 break;
             }
-            cout << endl;
-#else
-            if (tol < Gummel_rel_tol)
-                break;
-#endif
+            if (tol < Gummel_rel_tol) break;
             iter++;
+            cout << endl;
         }
         if (iter == Gummel_max_iters) MFEM_ABORT("------> Gummel iteration Failed!!!");
 
@@ -1582,34 +1578,34 @@ public:
         out2["np2_avg_iter"] = np2_avg_iter;
         out2["np2_avg_time"] = np2_avg_time;
 
-        if (ComputeConvergenceRate)
-        {
+        cout.precision(14);
 #ifndef PhysicalModel
             double phiL2err = phi->ComputeL2Error(phi_exact);
             double c1L2err = c1->ComputeL2Error(c1_exact);
             double c2L2err = c2->ComputeL2Error(c2_exact);
 
-            phiL2errornorms_.Append(phiL2err);
-            c1L2errornorms_.Append(c1L2err);
-            c2L2errornorms_.Append(c2L2err);
-            double totle_size = 0.0;
-            for (int i=0; i<mesh.GetNE(); i++)
-                totle_size += mesh.GetElementSize(0, 1);
-
-            meshsizes_.Append(totle_size / mesh.GetNE());
             cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
                  << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
-                 << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << ", \n"
-                 << "mesh size: " << totle_size / mesh.GetNE() << endl;
+                 << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+
+            if (ComputeConvergenceRate)
+            {
+                phiL2errornorms_.Append(phiL2err);
+                c1L2errornorms_.Append(c1L2err);
+                c2L2errornorms_.Append(c2L2err);
+
+                double totle_size = 0.0;
+                for (int i=0; i<mesh.GetNE(); i++)
+                    totle_size += mesh.GetElementSize(0, 1);
+
+                meshsizes_.Append(totle_size / mesh.GetNE());
+            }
+#else
+        cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
+             << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
+             << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
 #endif
-        }
-        else
-        {
-            cout.precision(14);
-            cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
-                 << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
-                 << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
-        }
+
         if (visualize)
         {
             (*phi) /= alpha1;
@@ -1632,12 +1628,9 @@ public:
         }
 
 
-        cout << endl;
-#ifdef SELF_VERBOSE
         map<string, Array<double>>::iterator it1;
         for (it1=out1.begin(); it1!=out1.end(); ++it1)
             (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
-#endif
         map<string, double>::iterator it2;
         for (it2=out2.begin(); it2!=out2.end(); ++it2)
             cout << (*it2).first << ": " << (*it2).second << endl;
@@ -1944,8 +1937,6 @@ public:
         int iter = 1;
         while (iter < Gummel_max_iters)
         {
-            Solve_NP2();
-
             Solve_Poisson();
 
             Vector diff(fsp->GetNDofs());
@@ -1961,36 +1952,12 @@ public:
             Solve_NP2();
             (*c2_n) = (*c2);
 
-#ifdef SELF_VERBOSE
             cout << "======> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
-#endif
-            if (tol < Gummel_rel_tol)
-            {
-                break;
-            }
+            if (tol < Gummel_rel_tol) break;
             iter++;
-      #ifdef SELF_VERBOSE
-      cout << endl;
-#endif
+            cout << endl;
         }
-        if (iter == Gummel_max_iters)
-            cerr << "===> Gummel Not converge!!!" << endl;
-        {
-#ifndef PhysicalModel
-            double phiL2err = phi->ComputeL2Error(phi_exact);
-            double c1L2err = c1->ComputeL2Error(c1_exact);
-            double c2L2err = c2->ComputeL2Error(c2_exact);
-
-            phiL2errornorms_.Append(phiL2err);
-            c1L2errornorms_.Append(c1L2err);
-            c2L2errornorms_.Append(c2L2err);
-            double totle_size = 0.0;
-            for (int i=0; i<mesh.GetNE(); i++) {
-                totle_size += mesh.GetElementSize(0, 1);
-            }
-            meshsizes_.Append(totle_size / mesh.GetNE());
-#endif
-        }
+        if (iter == Gummel_max_iters) MFEM_ABORT("------> Gummel iteration Failed!!!");
 
         out1["poisson_iter"] = poisson_iter;
         out1["poisson_time"] = poisson_time;
@@ -2019,34 +1986,58 @@ public:
         out2["np2_avg_time"] = np2_avg_time;
 
         cout.precision(14);
+#ifndef PhysicalModel
+        double phiL2err = phi->ComputeL2Error(phi_exact);
+        double c1L2err = c1->ComputeL2Error(c1_exact);
+        double c2L2err = c2->ComputeL2Error(c2_exact);
+
+        cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
+             << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
+             << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+
+        if (ComputeConvergenceRate)
+        {
+            phiL2errornorms_.Append(phiL2err);
+            c1L2errornorms_.Append(c1L2err);
+            c2L2errornorms_.Append(c2L2err);
+
+            double totle_size = 0.0;
+            for (int i=0; i<mesh.GetNE(); i++)
+                totle_size += mesh.GetElementSize(0, 1);
+
+            meshsizes_.Append(totle_size / mesh.GetNE());
+        }
+#else
         cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
              << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
              << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
+#endif
 
-        (*phi) /= alpha1;
-        (*c1)  /= alpha3;
-        (*c2)  /= alpha3;
-        Visualize(*dc, "phi", "phi");
-        Visualize(*dc, "c1", "c1");
-        Visualize(*dc, "c2", "c2");
-        cout << "solution vector size on mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
-        ofstream results("phi_c1_c2_DG_Gummel.vtk");
-        results.precision(14);
-        int ref = 0;
-        mesh.PrintVTK(results, ref);
-        phi->SaveVTK(results, "phi", ref);
-        c1->SaveVTK(results, "c1", ref);
-        c2->SaveVTK(results, "c2", ref);
-        (*phi) *= (alpha1);
-        (*c1)  *= (alpha3);
-        (*c2)  *= (alpha3);
+        if (visualize)
+        {
+            (*phi) /= alpha1;
+            (*c1) /= alpha3;
+            (*c2) /= alpha3;
+            Visualize(*dc, "phi", "phi");
+            Visualize(*dc, "c1", "c1");
+            Visualize(*dc, "c2", "c2");
+            cout << "solution vector size on mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, "
+                 << c2->Size() << endl;
+            ofstream results("phi_c1_c2_DG_Gummel.vtk");
+            results.precision(14);
+            int ref = 0;
+            mesh.PrintVTK(results, ref);
+            phi->SaveVTK(results, "phi", ref);
+            c1->SaveVTK(results, "c1", ref);
+            c2->SaveVTK(results, "c2", ref);
+            (*phi) *= (alpha1);
+            (*c1) *= (alpha3);
+            (*c2) *= (alpha3);
+        }
 
-        cout << endl;
-#ifdef SELF_VERBOSE
         map<string, Array<double>>::iterator it1;
         for (it1=out1.begin(); it1!=out1.end(); ++it1)
             (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
-#endif
         map<string, double>::iterator it2;
         for (it2=out2.begin(); it2!=out2.end(); ++it2)
             cout << (*it2).first << ": " << (*it2).second << endl;
