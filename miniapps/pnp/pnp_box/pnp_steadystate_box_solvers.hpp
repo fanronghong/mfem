@@ -2796,6 +2796,7 @@ public:
         chrono.Start();
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
         chrono.Stop();
+
         linearize_iter = newton_solver->GetNumIterations();
         total_time = chrono.RealTime();
         ndofs = u_k->Size();
@@ -2819,42 +2820,37 @@ public:
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
 
+        cout.precision(14);
+#ifndef PhysicalModel
+        double phiL2err = phi.ComputeL2Error(phi_exact);
+        double c1L2err = c1_k.ComputeL2Error(c1_exact);
+        double c2L2err = c2_k.ComputeL2Error(c2_exact);
+
+        cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
+             << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
+             << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+
         if (ComputeConvergenceRate)
         {
-#ifndef PhysicalModel
-            double phiL2err = phi.ComputeL2Error(phi_exact);
-            double c1L2err = c1_k.ComputeL2Error(c1_exact);
-            double c2L2err = c2_k.ComputeL2Error(c2_exact);
-
             phiL2errornorms_.Append(phiL2err);
             c1L2errornorms_.Append(c1L2err);
             c2L2errornorms_.Append(c2L2err);
+
             double totle_size = 0.0;
             for (int i=0; i<mesh->GetNE(); i++)
                 totle_size += mesh->GetElementSize(0, 1);
 
             meshsizes_.Append(totle_size / mesh->GetNE());
-            cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << "\n"
-                 << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << "\n"
-                 << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << "\n"
-                 << "mesh size: " << totle_size / mesh->GetNE() << endl;
+        }
+#else
+        cout << "L2 norm of phi: " << phi.ComputeL2Error(zero) << '\n'
+             << "L2 norm of c1 : " << c1_k.ComputeL2Error(zero) << '\n'
+             << "L2 norm of c2 : " << c2_k.ComputeL2Error(zero) << endl;
 #endif
-        }
-        else
-        {
-            cout.precision(14);
-            cout << "L2 norm of phi3: " << phi.ComputeL2Error(zero) << endl;
-            cout << "L2 norm of   c1: " << c1_k.ComputeL2Error(zero) << endl;
-            cout << "L2 norm of   c2: " << c2_k.ComputeL2Error(zero) << endl;
-            cout << "solution vector size on mesh: phi, " << phi.Size() << "; c1, " << c1_k.Size() << "; c2, " << c2_k.Size() << endl;
-        }
 
-        cout << endl;
-#ifdef SELF_VERBOSE
         map<string, Array<double>>::iterator it1;
         for (it1=out1.begin(); it1!=out1.end(); ++it1)
             (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
-#endif
         map<string, double>::iterator it2;
         for (it2=out2.begin(); it2!=out2.end(); ++it2)
             cout << (*it2).first << ": " << (*it2).second << endl;
@@ -3429,42 +3425,37 @@ public:
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
 
+        cout.precision(14);
+#ifndef PhysicalModel
+        double phiL2err = phi.ComputeL2Error(phi_exact);
+        double c1L2err = c1_k.ComputeL2Error(c1_exact);
+        double c2L2err = c2_k.ComputeL2Error(c2_exact);
+
+        cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
+             << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
+             << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+
         if (ComputeConvergenceRate)
         {
-#ifndef PhysicalModel
-            double phiL2err = phi.ComputeL2Error(phi_exact);
-            double c1L2err = c1_k.ComputeL2Error(c1_exact);
-            double c2L2err = c2_k.ComputeL2Error(c2_exact);
-
             phiL2errornorms_.Append(phiL2err);
             c1L2errornorms_.Append(c1L2err);
             c2L2errornorms_.Append(c2L2err);
+
             double totle_size = 0.0;
             for (int i=0; i<mesh->GetNE(); i++)
                 totle_size += mesh->GetElementSize(0, 1);
 
             meshsizes_.Append(totle_size / mesh->GetNE());
-            cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << "\n"
-                 << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << "\n"
-                 << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << "\n"
-                 << "mesh size: " << totle_size / mesh->GetNE() << endl;
+        }
+#else
+        cout << "L2 norm of phi: " << phi.ComputeL2Error(zero) << '\n'
+             << "L2 norm of c1 : " << c1_k.ComputeL2Error(zero) << '\n'
+             << "L2 norm of c2 : " << c2_k.ComputeL2Error(zero) << endl;
 #endif
-        }
-        else
-        {
-            cout.precision(14);
-            cout << "L2 norm of phi3: " << phi.ComputeL2Error(zero) << endl;
-            cout << "L2 norm of   c1: " << c1_k.ComputeL2Error(zero) << endl;
-            cout << "L2 norm of   c2: " << c2_k.ComputeL2Error(zero) << endl;
-            cout << "solution vector size on mesh: phi, " << phi.Size() << "; c1, " << c1_k.Size() << "; c2, " << c2_k.Size() << endl;
-        }
 
-        cout << endl;
         map<string, Array<double>>::iterator it1;
         for (it1=out1.begin(); it1!=out1.end(); ++it1)
             (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
-#ifdef SELF_VERBOSE
-#endif
         map<string, double>::iterator it2;
         for (it2=out2.begin(); it2!=out2.end(); ++it2)
             cout << (*it2).first << ": " << (*it2).second << endl;

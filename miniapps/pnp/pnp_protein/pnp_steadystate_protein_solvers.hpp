@@ -531,522 +531,6 @@ private:
     }
 };
 
-
-class PNP_Gummel_Solver_par
-{
-private:
-    Mesh* mesh;
-    ParMesh* pmesh;
-    H1_FECollection* h1_fec;
-    ParFiniteElementSpace* h1_space;
-    /* 将电势分解成3部分: 奇异电荷部分phi1, 调和部分phi2, 其余部分phi3,
-    * ref: Poisson–Nernst–Planck equations for simulating biomolecular diffusion–reaction processes I: Finite element solutions
-    * */
-    ParGridFunction *phi1, *phi2;
-    ParGridFunction *phi3, *c1, *c2;       // FE 解
-    ParGridFunction *phi3_n, *c1_n, *c2_n; // Gummel迭代解
-
-    VisItDataCollection* dc;
-    // protein_dofs和water_dofs里面不包含interface_ess_tdof_list
-    Array<int> interface_ess_tdof_list, ess_tdof_list, protein_dofs, water_dofs;
-    Array<int> top_ess_tdof_list, bottom_ess_tdof_list;
-
-    StopWatch chrono;
-    int num_procs, myid;
-
-public:
-    PNP_Gummel_Solver_par(Mesh* mesh_) : mesh(mesh_)
-    {
-        pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
-
-        h1_fec = new H1_FECollection(p_order, mesh->Dimension());
-        h1_space = new ParFiniteElementSpace(pmesh, h1_fec);
-
-        Array<int> ess_bdr(h1_space->GetMesh()->bdr_attributes.Max());
-        ess_bdr                    = 0;
-        ess_bdr[top_marker - 1]    = 1;
-        ess_bdr[bottom_marker - 1] = 1;
-        h1_space->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
-
-        Array<int> top_bdr(h1_space->GetMesh()->bdr_attributes.Max());
-        top_bdr                 = 0;
-        top_bdr[top_marker - 1] = 1;
-        h1_space->GetEssentialTrueDofs(top_bdr, top_ess_tdof_list);
-
-        Array<int> bottom_bdr(h1_space->GetMesh()->bdr_attributes.Max());
-        bottom_bdr = 0;
-        bottom_bdr[bottom_marker - 1] = 1;
-        h1_space->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
-
-        Array<int> interface_bdr(h1_space->GetMesh()->bdr_attributes.Max());
-        interface_bdr = 0;
-        interface_bdr[interface_marker - 1] = 1;
-        h1_space->GetEssentialTrueDofs(interface_bdr, interface_ess_tdof_list);
-
-        for (int i=0; i<h1_space->GetNE(); ++i)
-        {
-            Element* el = mesh->GetElement(i);
-            int attr = el->GetAttribute();
-            Array<int> dofs;
-            if (attr == protein_marker)
-            {
-                h1_space->GetElementDofs(i, dofs);
-                protein_dofs.Append(dofs);
-            } else {
-                assert(attr == water_marker);
-                h1_space->GetElementDofs(i,dofs);
-                water_dofs.Append(dofs);
-            }
-        }
-        protein_dofs.Sort(); protein_dofs.Unique();
-        water_dofs.Sort(); water_dofs.Unique();
-        for (int i=0; i<interface_ess_tdof_list.Size(); i++) // 去掉protein和water中的interface上的dofs
-        {
-            protein_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
-            water_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
-        }
-
-
-        MPI_Comm_size(h1_space->GetComm(), &num_procs);
-        MPI_Comm_rank(h1_space->GetComm(), &myid);
-
-        phi1   = new ParGridFunction(h1_space);
-        phi2   = new ParGridFunction(h1_space);
-        phi3   = new ParGridFunction(h1_space);
-        c1     = new ParGridFunction(h1_space);
-        c2     = new ParGridFunction(h1_space);
-        phi3_n = new ParGridFunction(h1_space);
-        c1_n   = new ParGridFunction(h1_space);
-        c2_n   = new ParGridFunction(h1_space);
-
-        *phi3 = 0.0;
-        *c1   = 0.0;
-        *c2   = 0.0;
-        for (int i=0; i<top_ess_tdof_list.Size(); ++i) // essential边界条件
-        {
-            (*phi3)  [top_ess_tdof_list[i]] = phi_top;
-            (*c1)    [top_ess_tdof_list[i]] = c1_top;
-            (*c2)    [top_ess_tdof_list[i]] = c2_top;
-            (*phi3_n)[top_ess_tdof_list[i]] = phi_top;
-            (*c1_n)  [top_ess_tdof_list[i]] = c1_top;
-            (*c2_n)  [top_ess_tdof_list[i]] = c2_top;
-        }
-        for (int i=0; i<bottom_ess_tdof_list.Size(); ++i)
-        {
-            (*phi3)  [bottom_ess_tdof_list[i]] = phi_bottom;
-            (*c1)    [bottom_ess_tdof_list[i]] = c1_bottom;
-            (*c2)    [bottom_ess_tdof_list[i]] = c2_bottom;
-            (*phi3_n)[bottom_ess_tdof_list[i]] = phi_bottom;
-            (*c1_n)  [bottom_ess_tdof_list[i]] = c1_bottom;
-            (*c2_n)  [bottom_ess_tdof_list[i]] = c2_bottom;
-        }
-
-        dc = new VisItDataCollection("data collection", mesh);
-        dc->RegisterField("phi1", phi1);
-        dc->RegisterField("phi2", phi2);
-        dc->RegisterField("phi3", phi3);
-        dc->RegisterField("c1",   c1);
-        dc->RegisterField("c2",   c2);
-    }
-    ~PNP_Gummel_Solver_par()
-    {
-        delete phi1, phi2, phi3, c1, c2, phi3_n, c1_n, c2_n, dc;
-    }
-
-    // 把下面的5个求解过程串联起来
-    void Solve()
-    {
-#ifdef SELF_DEBUG
-        cout << "alpha1: " << alpha1 << endl;
-        cout << "alpha2: " << alpha2 << endl;
-        cout << "alpha3: " << alpha3 << endl;
-        cout << "alpha2 * alpha3: " << alpha2 * alpha3 << endl;
-        cout << "(no units) phi top    Dirichlet boundary: " << phi_top << endl;
-        cout << "(no units) phi bottom Dirichlet boundary: " << phi_bottom << endl;
-        cout << "(no units) c1  top    Dirichlet boundary: " << c1_top << endl;
-        cout << "(no units) c1  bottom Dirichlet boundary: " << c1_bottom << endl;
-        cout << "(no units) c2  top    Dirichlet boundary: " << c2_top << endl;
-        cout << "(no units) c2  bottom Dirichlet boundary: " << c2_bottom << endl;
-#endif
-        Solve_Singular();
-        Solve_Harmonic();
-
-        // -------------------- 开始 Gummel 迭代 --------------------
-        cout << "\n\n---------------------- CG1, Gummel, protein, parallel ----------------------" << endl;
-        GridFunctionCoefficient phi3_n_coeff(phi3_n), c1_n_coeff(c1_n), c2_n_coeff(c2_n);
-        int iter = 1;
-        while (iter < Gummel_max_iters)
-        {
-            Solve_Poisson(*c1_n, *c2_n);
-
-            Vector diff(h1_space->GetNDofs());
-            diff = 0.0; // 必须初始化,否则下面的计算结果不对fff
-            diff += (*phi3);
-            diff -= (*phi3_n); // 不能把上述2步合并成1步: diff = (*phi3) - (*phi3_n)fff
-            double tol = diff.Norml2() / phi3->Norml2(); // 相对误差
-            (*phi3_n) = (*phi3);
-
-            Solve_NP1(*phi3_n);
-            (*c1_n) = (*c1);
-
-            Solve_NP2(*phi3_n);
-            (*c2_n) = (*c2);
-
-            cout << "======> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
-            if (tol < Gummel_rel_tol)
-            {
-                break;
-            }
-#ifdef SELF_VERBOSE
-            cout << "l2 norm of phi3: " << phi3->Norml2() << endl;
-            cout << "l2 norm of   c1: " << c1->Norml2() << endl;
-            cout << "l2 norm of   c2: " << c2->Norml2() << endl;
-#endif
-            iter++;
-            cout << endl;
-        }
-
-        if (iter == Gummel_max_iters) cerr << "===> Gummel Not converge!!!" << endl;
-        else {
-            cout << "===> Gummel iteration converge!!!" << endl;
-            cout << "l2 norm of phi1: " << phi1->Norml2() << endl;
-            cout << "l2 norm of phi2: " << phi2->Norml2() << endl;
-            cout << "l2 norm of phi3: " << phi3->Norml2() << endl;
-            cout << "l2 norm of   c1: " << c1->Norml2() << endl;
-            cout << "l2 norm of   c2: " << c2->Norml2() << '\n' << endl;
-        }
-
-#ifdef SELF_VERBOSE
-        {
-            (*phi3) += (*phi1); //把总的电势全部加到phi3上面
-            (*phi3) += (*phi2);
-            (*phi3) /= alpha1;
-            (*c1)   /= alpha3;
-            (*c2)   /= alpha3;
-            Visualize(*dc, "phi3", "phi3 (with units)");
-            Visualize(*dc, "c1", "c1 (with units)");
-            Visualize(*dc, "c2", "c2 (with units)");
-
-            ofstream results("phi_c1_c2.vtk");
-            results.precision(14);
-            int ref = 0;
-            mesh->PrintVTK(results, ref);
-            phi3->SaveVTK(results, "phi", ref);
-            c1  ->SaveVTK(results, "c1", ref);
-            c2  ->SaveVTK(results, "c2", ref);
-        }
-#endif
-    }
-
-private:
-    // 1.求解奇异电荷部分的电势
-    void Solve_Singular()
-    {
-        ifstream phi1_txt_in(phi1_txt); // 从文件读取 phi1
-//        if (phi1_txt_in.is_open())
-        if (0) // just for test
-        {
-            phi1->Load(phi1_txt_in);
-        }
-        else // 文件不存在
-        {
-            phi1->ProjectCoefficient(G_coeff); // phi1求解完成, 直接算比较慢, 也可以从文件读取
-
-            ofstream phi1_txt_out(phi1_txt);
-            phi1_txt_out.precision(14);
-            phi1->Print(phi1_txt_out << phi1->Size() << '\n'); // 首先要写入向量的维数
-            phi1_txt_out.close();
-        }
-#ifdef SELF_DEBUG
-        /* Only need a pqr file, we can compute singular electrostatic potential phi1, no need for mesh file.
-         * Here for pqr file "../data/1MAG.pqr", we do a simple test for phi1. Data is provided by Zhang Qianru.
-         */
-        if (strcmp(pqr_file, "../data/1MAG.pqr") == 0)
-        {
-            Vector zero_(3);
-            zero_ = 0.0;
-            VectorConstantCoefficient zero_vec(zero_);
-
-            double L2norm = phi1->ComputeL2Error(zero);
-            assert(abs(L2norm - 2.1067E+03) < 10); //数据由张倩如提供
-            cout << "======> Test Pass: L2 norm of phi1 (no units)" << endl;
-
-            FiniteElementSpace h1_vec(&mesh, h1_space->FEColl(), 3);
-            GridFunction grad_phi1(&h1_vec);
-            grad_phi1.ProjectCoefficient(gradG_coeff);
-            double L2norm_ = grad_phi1.ComputeL2Error(zero_vec);
-            assert(abs(L2norm_ - 9.2879E+03) < 10); //数据由张倩如提供
-            cout << "======> Test Pass: L2 norm of grad(phi1) (no units)" << endl;
-        }
-#endif
-    }
-
-    // 2.求解调和方程部分的电势
-    void Solve_Harmonic()
-    {
-        ParBilinearForm blf(h1_space);
-        blf.AddDomainIntegrator(new DiffusionIntegrator(mark_protein_coeff));
-        blf.Assemble(0);
-        blf.Finalize(0);
-
-        ParLinearForm lf(h1_space);
-        Array<int> Gamma_m(mesh->bdr_attributes.Max());
-        Gamma_m = 0;
-        Gamma_m[Gamma_m_marker - 1] = 1;
-        lf.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_gradG_coeff), Gamma_m); // Neumann bdc on Gamma_m, take negative below
-        lf.Assemble();
-
-        phi2->ProjectCoefficient(G_coeff);
-        phi2->Neg(); // 在interface \Gamma 上是Dirichlet边界: -phi1
-
-        PetscParMatrix *A = new PetscParMatrix();
-        PetscParVector *x = new PetscParVector(h1_space);
-        PetscParVector *b = new PetscParVector(h1_space);
-        blf.SetOperatorType(Operator::PETSC_MATAIJ);
-        blf.FormLinearSystem(interface_ess_tdof_list, *phi2, lf, *A, *x, *b); //除了ess_tdof_list以外是0的Neumann边界
-
-        A->EliminateRows(water_dofs, 1.0); // fff自己修改了源码: 重载了这个函数
-        for (int i=0; i<water_dofs.Size(); i++) // 确保只在水中(不包括蛋白质和interface)的自由度为0
-        {
-#ifdef SELF_DEBUG
-            assert(abs((*b)(water_dofs[i])) < 1E-10);
-#endif
-        }
-
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, "harmonic_");
-        solver->SetAbsTol(harmonic_atol);
-        solver->SetRelTol(harmonic_rtol);
-        solver->SetMaxIter(harmonic_maxiter);
-        solver->SetPrintLevel(harmonic_printlvl);
-
-        chrono.Clear();
-        chrono.Start();
-        solver->Mult(*b, *x);
-        chrono.Stop();
-        blf.RecoverFEMSolution(*x, lf, *phi2);
-
-#ifdef SELF_VERBOSE
-//        cout << "\nl2 norm of phi2: " << phi2->Norml2() << endl;
-        if (solver->GetConverged() == 1 && myid == 0)
-            cout << "phi2 solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
-        else if (solver->GetConverged() != 1)
-            cerr << "phi2 solver: failed to converged" << endl;
-#endif
-#ifdef SELF_DEBUG
-        /* Only for pqr file "../data/1MAG.pqr" and mesh file "../data/1MAG_2.msh", we do below tests.
-           Only need pqr file (to compute singluar electrostatic potential phi1) and mesh file, we can compute phi2.
-           Data is provided by Zhang Qianru */
-        if (strcmp(pqr_file, "../data/1MAG.pqr") == 0 && strcmp(mesh_file, "../data/1MAG_2.msh") == 0)
-        {
-            for (int i=0; i<water_dofs.Size(); i++)
-            {
-                assert(abs((*phi2)[water_dofs[i]]) < 1E-10);
-            }
-            for (int i=0; i<interface_ess_tdof_list.Size(); i++)
-            {
-                assert(abs((*phi2)[interface_ess_tdof_list[i]] + (*phi1)[interface_ess_tdof_list[i]]) < 1E-10);
-            }
-
-            double L2norm = phi2->ComputeL2Error(zero);
-            assert(abs(L2norm - 7.2139E+02) < 1); //数据由张倩如提供
-            cout << "======> Test Pass: L2 norm of phi2 (no units)" << endl;
-        }
-#endif
-        delete solver, A, x, b;
-    }
-
-    // 3.求解耦合的方程Poisson方程
-    void Solve_Poisson(GridFunction& c1_n_, GridFunction& c2_n_)
-    {
-        ParBilinearForm *blf(new ParBilinearForm(h1_space));
-        blf->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water_mark));
-        blf->AddDomainIntegrator(new DiffusionIntegrator(epsilon_protein_mark));
-        blf->Assemble();
-        blf->Finalize();
-
-        // Poisson方程关于离子浓度的两项
-        ParLinearForm *lf(new ParLinearForm(h1_space)); //Poisson方程的右端项
-        GridFunctionCoefficient c1_n_coeff(&c1_n_), c2_n_coeff(&c2_n_);
-        ProductCoefficient rhs1(alpha2_prod_alpha3_prod_v_K, c1_n_coeff);
-        ProductCoefficient rhs2(alpha2_prod_alpha3_prod_v_Cl, c2_n_coeff);
-        ProductCoefficient lf1(rhs1, mark_water_coeff);
-        ProductCoefficient lf2(rhs2, mark_water_coeff);
-        lf->AddDomainIntegrator(new DomainLFIntegrator(lf1));
-        lf->AddDomainIntegrator(new DomainLFIntegrator(lf2));
-        lf->Assemble();
-
-        // Poisson方程的奇异项导出的interface部分
-        GradientGridFunctionCoefficient grad_phi1(phi1), grad_phi2(phi2);
-        VectorSumCoefficient grad_phi1_plus_grad_phi2(grad_phi1, grad_phi2); //就是 grad(phi1 + phi2)
-        SelfDefined_LinearForm interface_term(h1_space);
-        interface_term.AddSelfDefined_LFFacetIntegrator(new SelfDefined_LFFacetIntegrator(h1_space, grad_phi1_plus_grad_phi2,
-                                                                                          protein_marker, water_marker));
-        interface_term.SelfDefined_Assemble();
-        interface_term *= protein_rel_permittivity;
-        (*lf) += interface_term; //界面项要移到方程的右端
-
-        PetscParMatrix *A = new PetscParMatrix();
-        PetscParVector *x = new PetscParVector(h1_space);
-        PetscParVector *b = new PetscParVector(h1_space);
-        blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        blf->FormLinearSystem(ess_tdof_list, *phi3, *lf, *A, *x, *b); // ess_tdof_list include: top, bottom
-
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, "phi3_");
-        solver->SetAbsTol(phi3_atol);
-        solver->SetRelTol(phi3_rtol);
-        solver->SetMaxIter(phi3_maxiter);
-        solver->SetPrintLevel(phi3_printlvl);
-
-        chrono.Clear();
-        chrono.Start();
-        solver->Mult(*b, *x);
-        chrono.Stop();
-        blf->RecoverFEMSolution(*x, *lf, *phi3);
-
-        (*phi3_n) *= relax_phi;
-        (*phi3)   *= 1-relax_phi;
-        (*phi3)   += (*phi3_n); // 利用松弛方法更新phi3
-        (*phi3_n) /= relax_phi+TOL; // 还原phi3_n.避免松弛因子为0的情况造成除0
-
-#ifdef SELF_VERBOSE
-        //        cout << "            l2 norm of phi3: " << phi3->Norml2() << endl;
-        if (solver->GetConverged() == 1 && myid == 0)
-            cout << "phi3 solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
-        else if (solver->GetConverged() != 1)
-            cerr << "phi3 solver: failed to converged" << endl;
-#endif
-
-        delete blf, lf, solver, A, x, b;
-    }
-
-    // 4.求解耦合的方程NP1方程
-    void Solve_NP1(GridFunction& phi3_n_)
-    {
-        ParLinearForm *lf(new ParLinearForm(h1_space)); //NP1方程的右端项
-        *lf = 0.0;
-
-        ParBilinearForm *blf(new ParBilinearForm(h1_space));
-        ProductCoefficient D1_water(D_K_, mark_water_coeff);
-        ProductCoefficient D1_prod_z1_water(D_K_prod_v_K, mark_water_coeff);
-        blf->AddDomainIntegrator(new DiffusionIntegrator(D1_water));
-        blf->AddDomainIntegrator(new GradConvectionIntegrator(phi3_n_, &D1_prod_z1_water));
-        blf->Assemble(0);
-        blf->Finalize(0);
-
-        PetscParMatrix *A = new PetscParMatrix();
-        PetscParVector *x = new PetscParVector(h1_space);
-        PetscParVector *b = new PetscParVector(h1_space);
-        blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
-
-        A->EliminateRows(protein_dofs, 1.0);
-        for (int i=0; i<protein_dofs.Size(); ++i)
-        {
-#ifdef SELF_DEBUG
-            assert(abs((*b)(protein_dofs[i])) < 1E-10);
-#endif
-        }
-
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
-        solver->SetAbsTol(np1_atol);
-        solver->SetRelTol(np1_rtol);
-        solver->SetMaxIter(np1_maxiter);
-        solver->SetPrintLevel(np1_printlvl);
-
-        chrono.Clear();
-        chrono.Start();
-        solver->Mult(*b, *x);
-        chrono.Stop();
-        blf->RecoverFEMSolution(*x, *lf, *c1);
-
-        (*c1_n) *= relax_c1;
-        (*c1)   *= 1-relax_c1;
-        (*c1)   += (*c1_n); // 利用松弛方法更新c1
-        (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
-
-#ifdef SELF_VERBOSE
-        //        cout << "            l2 norm of c1: " << c1->Norml2() << endl;
-        if (solver->GetConverged() == 1 && myid == 0)
-            cout << "np1 solver : successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
-        else if (solver->GetConverged() != 1)
-            cerr << "np1 solver : failed to converged" << endl;
-#endif
-#ifdef SELF_DEBUG
-        {
-            for (int i=0; i<protein_dofs.Size(); ++i)
-            {
-                assert(abs((*c1)[protein_dofs[i]]) < 1E-10);
-            }
-        }
-#endif
-        delete lf, blf, solver, A, x, b;
-    }
-
-    // 5.求解耦合的方程NP2方程
-    void Solve_NP2(GridFunction& phi3_n_)
-    {
-        ParLinearForm *lf(new ParLinearForm(h1_space)); //NP2方程的右端项
-        *lf = 0.0;
-
-        ParBilinearForm *blf(new ParBilinearForm(h1_space));
-        ProductCoefficient D2_water(D_Cl_, mark_water_coeff);
-        ProductCoefficient D2_prod_z2_water(D_Cl_prod_v_Cl, mark_water_coeff);
-        blf->AddDomainIntegrator(new DiffusionIntegrator(D2_water));
-        blf->AddDomainIntegrator(new GradConvectionIntegrator(phi3_n_, &D2_prod_z2_water));
-        blf->Assemble(0);
-        blf->Finalize(0);
-
-        PetscParMatrix *A = new PetscParMatrix();
-        PetscParVector *x = new PetscParVector(h1_space);
-        PetscParVector *b = new PetscParVector(h1_space);
-        blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        blf->FormLinearSystem(ess_tdof_list, *c2, *lf, *A, *x, *b);
-
-        A->EliminateRows(protein_dofs, 1.0);
-        for (int i=0; i<protein_dofs.Size(); ++i)
-        {
-#ifdef SELF_DEBUG
-            assert(abs((*b)(protein_dofs[i])) < 1E-10);
-#endif
-        }
-
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
-        solver->SetAbsTol(np2_atol);
-        solver->SetRelTol(np2_rtol);
-        solver->SetMaxIter(np2_maxiter);
-        solver->SetPrintLevel(np2_printlvl);
-
-        chrono.Clear();
-        chrono.Start();
-        solver->Mult(*b, *x);
-        chrono.Stop();
-        blf->RecoverFEMSolution(*x, *lf, *c2);
-
-        (*c2_n) *= relax_c2;
-        (*c2)   *= 1-relax_c2;
-        (*c2)   += (*c2_n); // 利用松弛方法更新c2
-        (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
-
-#ifdef SELF_VERBOSE
-        //        cout << "            l2 norm of c2: " << c2->Norml2() << endl;
-        if (solver->GetConverged() == 1 && myid == 0)
-            cout << "np2 solver : successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
-        else if (solver->GetConverged() != 1)
-            cerr << "np2 solver : failed to converged" << endl;
-#endif
-#ifdef SELF_DEBUG
-        {
-            for (int i=0; i<protein_dofs.Size(); ++i)
-            {
-                assert(abs((*c2)[protein_dofs[i]]) < 1E-10);
-            }
-        }
-#endif
-        delete lf, blf, solver, A, x, b;
-    }
-};
-
-
 class JacobianPrec_BlockPrec: public Solver
 {
 protected:
@@ -1835,7 +1319,513 @@ public:
 };
 
 
-class PNP_Newton_Operator_par;
+
+class PNP_Gummel_CG_Solver_par
+{
+private:
+    Mesh* mesh;
+    ParMesh* pmesh;
+    H1_FECollection* h1_fec;
+    ParFiniteElementSpace* h1_space;
+
+    /* 将电势分解成3部分: 奇异电荷部分phi1, 调和部分phi2, 其余部分phi3,
+    * ref: Poisson–Nernst–Planck equations for simulating biomolecular diffusion–reaction processes I: Finite element solutions
+    * */
+    ParGridFunction *phi1, *phi2;
+    ParGridFunction *phi3, *c1, *c2;       // FE 解
+    ParGridFunction *phi3_n, *c1_n, *c2_n; // Gummel迭代解
+
+    VisItDataCollection* dc;
+    // protein_dofs和water_dofs里面不包含interface_ess_tdof_list
+    Array<int> protein_dofs, water_dofs;
+    Array<int> ess_bdr, top_bdr, bottom_bdr, interface_bdr, Gamma_m;
+    Array<int> ess_tdof_list, top_ess_tdof_list, bottom_ess_tdof_list, interface_ess_tdof_list;
+
+    StopWatch chrono;
+    int num_procs, myid;
+
+public:
+    PNP_Gummel_CG_Solver_par(Mesh* mesh_) : mesh(mesh_)
+    {
+        pmesh    = new ParMesh(MPI_COMM_WORLD, *mesh);
+        h1_fec   = new H1_FECollection(p_order, mesh->Dimension());
+        h1_space = new ParFiniteElementSpace(pmesh, h1_fec);
+
+        MPI_Comm_size(h1_space->GetComm(), &num_procs);
+        MPI_Comm_rank(h1_space->GetComm(), &myid);
+
+        phi1   = new ParGridFunction(h1_space);
+        phi2   = new ParGridFunction(h1_space);
+        phi3   = new ParGridFunction(h1_space);
+        c1     = new ParGridFunction(h1_space);
+        c2     = new ParGridFunction(h1_space);
+        phi3_n = new ParGridFunction(h1_space);
+        c1_n   = new ParGridFunction(h1_space);
+        c2_n   = new ParGridFunction(h1_space);
+
+        {
+            int size = pmesh->bdr_attributes.Max();
+
+            ess_bdr.SetSize(size);
+            ess_bdr                    = 0;
+            ess_bdr[top_marker - 1]    = 1;
+            ess_bdr[bottom_marker - 1] = 1;
+            h1_space->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+
+            top_bdr.SetSize(size);
+            top_bdr                 = 0;
+            top_bdr[top_marker - 1] = 1;
+            h1_space->GetEssentialTrueDofs(top_bdr, top_ess_tdof_list);
+
+            bottom_bdr.SetSize(size);
+            bottom_bdr                    = 0;
+            bottom_bdr[bottom_marker - 1] = 1;
+            h1_space->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
+
+            interface_bdr.SetSize(size);
+            interface_bdr                       = 0;
+            interface_bdr[interface_marker - 1] = 1;
+            h1_space->GetEssentialTrueDofs(interface_bdr, interface_ess_tdof_list);
+
+            Gamma_m.SetSize(size);
+            Gamma_m                     = 0;
+            Gamma_m[Gamma_m_marker - 1] = 1;
+        }
+
+        for (int i=0; i<h1_space->GetNE(); ++i)
+        {
+            Element* el = mesh->GetElement(i);
+            int attr = el->GetAttribute();
+            Array<int> dofs;
+            if (attr == protein_marker)
+            {
+                h1_space->GetElementDofs(i, dofs);
+                protein_dofs.Append(dofs);
+            }
+            else
+            {
+                assert(attr == water_marker);
+                h1_space->GetElementDofs(i,dofs);
+                water_dofs.Append(dofs);
+            }
+        }
+        protein_dofs.Sort();
+        protein_dofs.Unique();
+        water_dofs.Sort();
+        water_dofs.Unique();
+        for (int i=0; i<interface_ess_tdof_list.Size(); i++) // 去掉protein和water中的interface上的dofs
+        {
+            protein_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
+            water_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
+        }
+
+        *phi3 = 0.0;
+        *c1   = 0.0;
+        *c2   = 0.0;
+        *phi3_n = 0.0;
+        *c1_n   = 0.0;
+        *c2_n   = 0.0;
+        // essential边界条件
+        phi3->ProjectBdrCoefficient(phi_D_coeff, ess_bdr);
+        c1  ->ProjectBdrCoefficient(c1_D_coeff, ess_bdr);
+        c2  ->ProjectBdrCoefficient(c2_D_coeff, ess_bdr);
+        phi3->SetTrueVector();
+        c1  ->SetTrueVector();
+        c2  ->SetTrueVector();
+        phi3_n->ProjectBdrCoefficient(phi_D_coeff, ess_bdr);
+        c1_n  ->ProjectBdrCoefficient(c1_D_coeff, ess_bdr);
+        c2_n  ->ProjectBdrCoefficient(c2_D_coeff, ess_bdr);
+        phi3_n->SetTrueVector();
+        c1_n  ->SetTrueVector();
+        c2_n  ->SetTrueVector();
+
+        dc = new VisItDataCollection("data collection", mesh);
+        dc->RegisterField("phi1", phi1);
+        dc->RegisterField("phi2", phi2);
+        dc->RegisterField("phi3", phi3);
+        dc->RegisterField("c1",   c1);
+        dc->RegisterField("c2",   c2);
+    }
+    ~PNP_Gummel_CG_Solver_par()
+    {
+        delete phi1, phi2, phi3, c1, c2, phi3_n, c1_n, c2_n, dc;
+    }
+
+    // 把下面的5个求解过程串联起来
+    void Solve()
+    {
+#ifdef SELF_DEBUG
+        cout << "alpha1: " << alpha1 << endl;
+        cout << "alpha2: " << alpha2 << endl;
+        cout << "alpha3: " << alpha3 << endl;
+        cout << "alpha2 * alpha3: " << alpha2 * alpha3 << endl;
+        cout << "(no units) phi top    Dirichlet boundary: " << phi_top << endl;
+        cout << "(no units) phi bottom Dirichlet boundary: " << phi_bottom << endl;
+        cout << "(no units) c1  top    Dirichlet boundary: " << c1_top << endl;
+        cout << "(no units) c1  bottom Dirichlet boundary: " << c1_bottom << endl;
+        cout << "(no units) c2  top    Dirichlet boundary: " << c2_top << endl;
+        cout << "(no units) c2  bottom Dirichlet boundary: " << c2_bottom << endl;
+#endif
+        Solve_Singular();
+        Solve_Harmonic();
+
+        // -------------------- 开始 Gummel 迭代 --------------------
+        cout << "\n\n---------------------- CG1, Gummel, protein, parallel ----------------------" << endl;
+        GridFunctionCoefficient phi3_n_coeff(phi3_n), c1_n_coeff(c1_n), c2_n_coeff(c2_n);
+        int iter = 1;
+        while (iter < Gummel_max_iters)
+        {
+            Solve_Poisson(*c1_n, *c2_n);
+
+            Vector diff(h1_space->GetNDofs());
+            diff = 0.0; // 必须初始化,否则下面的计算结果不对fff
+            diff += (*phi3);
+            diff -= (*phi3_n); // 不能把上述2步合并成1步: diff = (*phi3) - (*phi3_n)fff
+            double tol = diff.Norml2() / phi3->Norml2(); // 相对误差
+            (*phi3_n) = (*phi3);
+
+            Solve_NP1(*phi3_n);
+            (*c1_n) = (*c1);
+
+            Solve_NP2(*phi3_n);
+            (*c2_n) = (*c2);
+
+            cout << "======> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
+            if (tol < Gummel_rel_tol)
+            {
+                break;
+            }
+#ifdef SELF_VERBOSE
+            cout << "l2 norm of phi3: " << phi3->Norml2() << endl;
+            cout << "l2 norm of   c1: " << c1->Norml2() << endl;
+            cout << "l2 norm of   c2: " << c2->Norml2() << endl;
+#endif
+            iter++;
+            cout << endl;
+        }
+
+        if (iter == Gummel_max_iters) cerr << "===> Gummel Not converge!!!" << endl;
+        else {
+            cout << "===> Gummel iteration converge!!!" << endl;
+            cout << "l2 norm of phi1: " << phi1->Norml2() << endl;
+            cout << "l2 norm of phi2: " << phi2->Norml2() << endl;
+            cout << "l2 norm of phi3: " << phi3->Norml2() << endl;
+            cout << "l2 norm of   c1: " << c1->Norml2() << endl;
+            cout << "l2 norm of   c2: " << c2->Norml2() << '\n' << endl;
+        }
+
+#ifdef SELF_VERBOSE
+        {
+            (*phi3) += (*phi1); //把总的电势全部加到phi3上面
+            (*phi3) += (*phi2);
+            (*phi3) /= alpha1;
+            (*c1)   /= alpha3;
+            (*c2)   /= alpha3;
+            Visualize(*dc, "phi3", "phi3 (with units)");
+            Visualize(*dc, "c1", "c1 (with units)");
+            Visualize(*dc, "c2", "c2 (with units)");
+
+            ofstream results("phi_c1_c2.vtk");
+            results.precision(14);
+            int ref = 0;
+            mesh->PrintVTK(results, ref);
+            phi3->SaveVTK(results, "phi", ref);
+            c1  ->SaveVTK(results, "c1", ref);
+            c2  ->SaveVTK(results, "c2", ref);
+        }
+#endif
+    }
+
+private:
+    // 1.求解奇异电荷部分的电势
+    void Solve_Singular()
+    {
+        phi1->ProjectCoefficient(G_coeff); // phi1求解完成, 直接算比较慢, 也可以从文件读取
+
+        if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
+        {
+            /* Only need a pqr file, we can compute singular electrostatic potential phi1, no need for mesh file.
+             * Here for pqr file "../data/1MAG.pqr", we do a simple test for phi1. Data is provided by Zhang Qianru.
+             */
+            Vector zero_(3);
+            zero_ = 0.0;
+            VectorConstantCoefficient zero_vec(zero_);
+
+            double L2norm = phi1->ComputeL2Error(zero);
+            assert(abs(L2norm - 2.1067E+03) < 10); //数据由张倩如提供
+            cout << "======> Test Pass: L2 norm of phi1 (no units)" << endl;
+
+            H1_FECollection temp_fec(1, mesh->Dimension());
+            FiniteElementSpace temp_fes(mesh, h1_fec, 3);
+            GridFunction grad_phi1(&temp_fes);
+            grad_phi1.ProjectCoefficient(gradG_coeff);
+            double L2norm_ = grad_phi1.ComputeL2Error(zero_vec);
+            assert(abs(L2norm_ - 9.2879E+03) < 10); //数据由张倩如提供
+            cout << "======> Test Pass: L2 norm of grad(phi1) (no units)" << endl;
+        }
+    }
+
+    // 2.求解调和方程部分的电势
+    void Solve_Harmonic()
+    {
+        ParBilinearForm blf(h1_space);
+        // (grad(phi_2), grad(psi_2))_{\Omega_p}, \Omega_p: protein zone
+        blf.AddDomainIntegrator(new DiffusionIntegrator(mark_protein_coeff));
+        blf.Assemble(0);
+        blf.Finalize(0);
+
+        ParLinearForm lf(h1_space);
+        // -<grad(G).n, psi_2>_{\Gamma_M}
+        lf.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_gradG_coeff), Gamma_m); // Neumann bdc on Gamma_m, take negative below
+        lf.Assemble();
+
+        phi2->ProjectCoefficient(G_coeff);
+        phi2->Neg(); // 在interface(\Gamma)上是Dirichlet边界: -phi1
+
+        PetscParMatrix *A = new PetscParMatrix();
+        PetscParVector *x = new PetscParVector(h1_space);
+        PetscParVector *b = new PetscParVector(h1_space);
+        blf.SetOperatorType(Operator::PETSC_MATAIJ);
+        blf.FormLinearSystem(interface_ess_tdof_list, *phi2, lf, *A, *x, *b);
+
+        A->EliminateRows(water_dofs, 1.0); // fff自己修改了源码: 重载了这个函数
+        if (self_debug)
+        {   // 确保只在水中(不包括蛋白质和interface)的自由度为0
+            for (int i = 0; i < water_dofs.Size(); i++)
+                assert(abs((*b)(water_dofs[i])) < 1E-10);
+        }
+
+        PetscLinearSolver* solver = new PetscLinearSolver(*A, "phi2_");
+
+        chrono.Clear();
+        chrono.Start();
+        solver->Mult(*b, *x);
+        chrono.Stop();
+        blf.RecoverFEMSolution(*x, lf, *phi2);
+
+#ifdef SELF_VERBOSE
+        cout << "\nL2 norm of phi2: " << phi2->ComputeL2Error(zero) << endl;
+        if (solver->GetConverged() == 1 && myid == 0)
+            cout << "phi2 solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
+        else if (solver->GetConverged() != 1)
+            cerr << "phi2 solver: failed to converged" << endl;
+#endif
+        if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
+        {
+            /* Only for pqr file "1MAG.pqr" and mesh file "1MAG_2.msh", we do below tests.
+                Only need pqr file (to compute singluar electrostatic potential phi1)
+                and mesh file, we can compute phi2.
+                Data is provided by Zhang Qianru */
+            for (int i=0; i<water_dofs.Size(); i++)
+            {
+                assert(abs((*phi2)[water_dofs[i]]) < 1E-10);
+            }
+            for (int i=0; i<interface_ess_tdof_list.Size(); i++)
+            {
+                assert(abs((*phi2)[interface_ess_tdof_list[i]] + (*phi1)[interface_ess_tdof_list[i]]) < 1E-10);
+            }
+
+            double L2norm = phi2->ComputeL2Error(zero);
+            assert(abs(L2norm - 7.2139E+02) < 1); //数据由张倩如提供
+            cout << "======> Test Pass: L2 norm of phi2 (no units)" << endl;
+        }
+
+        delete solver, A, x, b;
+    }
+
+    // 3.求解耦合的方程Poisson方程
+    void Solve_Poisson(GridFunction& c1_n_, GridFunction& c2_n_)
+    {
+        ParBilinearForm *blf(new ParBilinearForm(h1_space));
+        blf->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water_mark));
+        blf->AddDomainIntegrator(new DiffusionIntegrator(epsilon_protein_mark));
+        blf->Assemble();
+        blf->Finalize();
+
+        // Poisson方程关于离子浓度的两项
+        ParLinearForm *lf(new ParLinearForm(h1_space)); //Poisson方程的右端项
+        GridFunctionCoefficient c1_n_coeff(&c1_n_), c2_n_coeff(&c2_n_);
+        ProductCoefficient rhs1(alpha2_prod_alpha3_prod_v_K, c1_n_coeff);
+        ProductCoefficient rhs2(alpha2_prod_alpha3_prod_v_Cl, c2_n_coeff);
+        ProductCoefficient lf1(rhs1, mark_water_coeff);
+        ProductCoefficient lf2(rhs2, mark_water_coeff);
+        lf->AddDomainIntegrator(new DomainLFIntegrator(lf1));
+        lf->AddDomainIntegrator(new DomainLFIntegrator(lf2));
+        lf->Assemble();
+
+        // Poisson方程的奇异项导出的interface部分
+        GradientGridFunctionCoefficient grad_phi1(phi1), grad_phi2(phi2);
+        VectorSumCoefficient grad_phi1_plus_grad_phi2(grad_phi1, grad_phi2); //就是 grad(phi1 + phi2)
+        SelfDefined_LinearForm interface_term(h1_space);
+        interface_term.AddSelfDefined_LFFacetIntegrator(new SelfDefined_LFFacetIntegrator(h1_space, grad_phi1_plus_grad_phi2,
+                                                                                          protein_marker, water_marker));
+        interface_term.SelfDefined_Assemble();
+        interface_term *= protein_rel_permittivity;
+        (*lf) += interface_term; //界面项要移到方程的右端
+
+        PetscParMatrix *A = new PetscParMatrix();
+        PetscParVector *x = new PetscParVector(h1_space);
+        PetscParVector *b = new PetscParVector(h1_space);
+        blf->SetOperatorType(Operator::PETSC_MATAIJ);
+        blf->FormLinearSystem(ess_tdof_list, *phi3, *lf, *A, *x, *b); // ess_tdof_list include: top, bottom
+
+        PetscLinearSolver* solver = new PetscLinearSolver(*A, "phi3_");
+        solver->SetAbsTol(phi3_atol);
+        solver->SetRelTol(phi3_rtol);
+        solver->SetMaxIter(phi3_maxiter);
+        solver->SetPrintLevel(phi3_printlvl);
+
+        chrono.Clear();
+        chrono.Start();
+        solver->Mult(*b, *x);
+        chrono.Stop();
+        blf->RecoverFEMSolution(*x, *lf, *phi3);
+
+        (*phi3_n) *= relax_phi;
+        (*phi3)   *= 1-relax_phi;
+        (*phi3)   += (*phi3_n); // 利用松弛方法更新phi3
+        (*phi3_n) /= relax_phi+TOL; // 还原phi3_n.避免松弛因子为0的情况造成除0
+
+#ifdef SELF_VERBOSE
+        //        cout << "            l2 norm of phi3: " << phi3->Norml2() << endl;
+        if (solver->GetConverged() == 1 && myid == 0)
+            cout << "phi3 solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
+        else if (solver->GetConverged() != 1)
+            cerr << "phi3 solver: failed to converged" << endl;
+#endif
+
+        delete blf, lf, solver, A, x, b;
+    }
+
+    // 4.求解耦合的方程NP1方程
+    void Solve_NP1(GridFunction& phi3_n_)
+    {
+        ParLinearForm *lf(new ParLinearForm(h1_space)); //NP1方程的右端项
+        *lf = 0.0;
+
+        ParBilinearForm *blf(new ParBilinearForm(h1_space));
+        ProductCoefficient D1_water(D_K_, mark_water_coeff);
+        ProductCoefficient D1_prod_z1_water(D_K_prod_v_K, mark_water_coeff);
+        blf->AddDomainIntegrator(new DiffusionIntegrator(D1_water));
+        blf->AddDomainIntegrator(new GradConvectionIntegrator(phi3_n_, &D1_prod_z1_water));
+        blf->Assemble(0);
+        blf->Finalize(0);
+
+        PetscParMatrix *A = new PetscParMatrix();
+        PetscParVector *x = new PetscParVector(h1_space);
+        PetscParVector *b = new PetscParVector(h1_space);
+        blf->SetOperatorType(Operator::PETSC_MATAIJ);
+        blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
+
+        A->EliminateRows(protein_dofs, 1.0);
+        for (int i=0; i<protein_dofs.Size(); ++i)
+        {
+#ifdef SELF_DEBUG
+            assert(abs((*b)(protein_dofs[i])) < 1E-10);
+#endif
+        }
+
+        PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
+        solver->SetAbsTol(np1_atol);
+        solver->SetRelTol(np1_rtol);
+        solver->SetMaxIter(np1_maxiter);
+        solver->SetPrintLevel(np1_printlvl);
+
+        chrono.Clear();
+        chrono.Start();
+        solver->Mult(*b, *x);
+        chrono.Stop();
+        blf->RecoverFEMSolution(*x, *lf, *c1);
+
+        (*c1_n) *= relax_c1;
+        (*c1)   *= 1-relax_c1;
+        (*c1)   += (*c1_n); // 利用松弛方法更新c1
+        (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
+
+#ifdef SELF_VERBOSE
+        //        cout << "            l2 norm of c1: " << c1->Norml2() << endl;
+        if (solver->GetConverged() == 1 && myid == 0)
+            cout << "np1 solver : successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
+        else if (solver->GetConverged() != 1)
+            cerr << "np1 solver : failed to converged" << endl;
+#endif
+#ifdef SELF_DEBUG
+        {
+            for (int i=0; i<protein_dofs.Size(); ++i)
+            {
+                assert(abs((*c1)[protein_dofs[i]]) < 1E-10);
+            }
+        }
+#endif
+        delete lf, blf, solver, A, x, b;
+    }
+
+    // 5.求解耦合的方程NP2方程
+    void Solve_NP2(GridFunction& phi3_n_)
+    {
+        ParLinearForm *lf(new ParLinearForm(h1_space)); //NP2方程的右端项
+        *lf = 0.0;
+
+        ParBilinearForm *blf(new ParBilinearForm(h1_space));
+        ProductCoefficient D2_water(D_Cl_, mark_water_coeff);
+        ProductCoefficient D2_prod_z2_water(D_Cl_prod_v_Cl, mark_water_coeff);
+        blf->AddDomainIntegrator(new DiffusionIntegrator(D2_water));
+        blf->AddDomainIntegrator(new GradConvectionIntegrator(phi3_n_, &D2_prod_z2_water));
+        blf->Assemble(0);
+        blf->Finalize(0);
+
+        PetscParMatrix *A = new PetscParMatrix();
+        PetscParVector *x = new PetscParVector(h1_space);
+        PetscParVector *b = new PetscParVector(h1_space);
+        blf->SetOperatorType(Operator::PETSC_MATAIJ);
+        blf->FormLinearSystem(ess_tdof_list, *c2, *lf, *A, *x, *b);
+
+        A->EliminateRows(protein_dofs, 1.0);
+        for (int i=0; i<protein_dofs.Size(); ++i)
+        {
+#ifdef SELF_DEBUG
+            assert(abs((*b)(protein_dofs[i])) < 1E-10);
+#endif
+        }
+
+        PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
+        solver->SetAbsTol(np2_atol);
+        solver->SetRelTol(np2_rtol);
+        solver->SetMaxIter(np2_maxiter);
+        solver->SetPrintLevel(np2_printlvl);
+
+        chrono.Clear();
+        chrono.Start();
+        solver->Mult(*b, *x);
+        chrono.Stop();
+        blf->RecoverFEMSolution(*x, *lf, *c2);
+
+        (*c2_n) *= relax_c2;
+        (*c2)   *= 1-relax_c2;
+        (*c2)   += (*c2_n); // 利用松弛方法更新c2
+        (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
+
+#ifdef SELF_VERBOSE
+        //        cout << "            l2 norm of c2: " << c2->Norml2() << endl;
+        if (solver->GetConverged() == 1 && myid == 0)
+            cout << "np2 solver : successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
+        else if (solver->GetConverged() != 1)
+            cerr << "np2 solver : failed to converged" << endl;
+#endif
+#ifdef SELF_DEBUG
+        {
+            for (int i=0; i<protein_dofs.Size(); ++i)
+            {
+                assert(abs((*c2)[protein_dofs[i]]) < 1E-10);
+            }
+        }
+#endif
+        delete lf, blf, solver, A, x, b;
+    }
+};
+
+
+class PNP_Newton_CG_Operator_par;
 class BlockPreconditionerSolver: public Solver
 {
 private:
@@ -1984,10 +1974,10 @@ public:
 class PreconditionerFactory: public PetscPreconditionerFactory
 {
 private:
-    const PNP_Newton_Operator_par& op; // op就是Nonlinear Operator(可用来计算Residual, Jacobian)
+    const PNP_Newton_CG_Operator_par& op; // op就是Nonlinear Operator(可用来计算Residual, Jacobian)
 
 public:
-    PreconditionerFactory(const PNP_Newton_Operator_par& op_, const string& name_): PetscPreconditionerFactory(name_), op(op_) {}
+    PreconditionerFactory(const PNP_Newton_CG_Operator_par& op_, const string& name_): PetscPreconditionerFactory(name_), op(op_) {}
     virtual ~PreconditionerFactory() {}
 
     virtual Solver* NewPreconditioner(const OperatorHandle& oh) // oh就是当前Newton迭代步的Jacobian的句柄
@@ -1995,7 +1985,7 @@ public:
         return new BlockPreconditionerSolver(oh);
     }
 };
-class PNP_Newton_Operator_par: public Operator
+class PNP_Newton_CG_Operator_par: public Operator
 {
 protected:
     ParFiniteElementSpace *fsp;
@@ -2023,7 +2013,7 @@ protected:
     Array<int> null_array;
 
 public:
-    PNP_Newton_Operator_par(ParFiniteElementSpace *fsp_, ParGridFunction* phi1_, ParGridFunction* phi2_)
+    PNP_Newton_CG_Operator_par(ParFiniteElementSpace *fsp_, ParGridFunction* phi1_, ParGridFunction* phi2_)
     : Operator(fsp_->TrueVSize()*3), fsp(fsp_), phi1(phi1_), phi2(phi2_)
     {
         MPI_Comm_size(fsp->GetComm(), &num_procs);
@@ -2157,7 +2147,7 @@ public:
         A13.EliminateRows(ess_tdof_list, 0.0);
         A13.EliminateRows(protein_dofs, 0.0);
     }
-    virtual ~PNP_Newton_Operator_par()
+    virtual ~PNP_Newton_CG_Operator_par()
     {
         delete f, f1, f2, g;
         delete a11, a12, a13, a21, a22, a31, a33;
@@ -2410,14 +2400,14 @@ public:
         return *jac_k;
     }
 };
-class PNP_Newton_Solver_par
+class PNP_Newton_CG_Solver_par
 {
 protected:
     Mesh* mesh;
     ParMesh* pmesh;
     H1_FECollection* h1_fec;
     ParFiniteElementSpace* h1_space;
-    PNP_Newton_Operator_par* op;
+    PNP_Newton_CG_Operator_par* op;
     PetscPreconditionerFactory *jac_factory;
     PetscNonlinearSolver* newton_solver;
 
@@ -2430,7 +2420,7 @@ protected:
     StopWatch chrono;
 
 public:
-    PNP_Newton_Solver_par(Mesh* mesh_): mesh(mesh_)
+    PNP_Newton_CG_Solver_par(Mesh* mesh_): mesh(mesh_)
     {
         int mesh_dim = mesh->Dimension(); //网格的维数:1D,2D,3D
         for (int i=0; i<refine_times; ++i) mesh->UniformRefinement();
@@ -2639,7 +2629,7 @@ public:
         }
         cout << "l2 norm of phi2: " << phi2->Norml2() << endl;
 
-        op = new PNP_Newton_Operator_par(h1_space, phi1, phi2);
+        op = new PNP_Newton_CG_Operator_par(h1_space, phi1, phi2);
 
         // Set the newton solve parameters
         jac_factory   = new PreconditionerFactory(*op, "Block Preconditioner");
@@ -2651,7 +2641,7 @@ public:
         newton_solver->SetPrintLevel(newton_printlvl);
         newton_solver->SetPreconditionerFactory(jac_factory);
     }
-    virtual ~PNP_Newton_Solver_par()
+    virtual ~PNP_Newton_CG_Solver_par()
     {
         delete newton_solver, op, jac_factory, u_k, mesh, pmesh;
     }

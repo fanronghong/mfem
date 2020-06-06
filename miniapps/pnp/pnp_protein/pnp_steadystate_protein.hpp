@@ -6,7 +6,6 @@
 #include "../utils/PQR_GreenFunc_PhysicalParameters.hpp"
 #include "../utils/StdFunctionCoefficient.hpp"
 #include "../utils/mfem_utils.hpp"
-
 using namespace std;
 using namespace mfem;
 
@@ -47,18 +46,23 @@ double c2_bottom   = 0.2 * alpha3; // 国际单位mol/L, Cl-阴离子在计算�
 double c2_other    = 0.0 * alpha3; // 国际单位mol/L, Cl-阳离子在计算区域的 其他边界是 Neumann
 
 #elif defined(_1MAG_2)
-const char* options_src = "./pnp_steadystate_protein_petsc.opts";
-const int p_order = 1; //有限元基函数的多项式次数
-const char* mesh_file = "./1MAG_2.msh"; // 带有蛋白的网格,与PQR文件必须匹配
-const int refine_times = 0;
-const char* pqr_file = "./1MAG.pqr"; // PQR文件,与网格文件必须匹配
-const char* phi1_txt = "./phi1_1MAG_2.txt";
-const int protein_marker = 1; // 这些marker信息可以从Gmsh中可视化得到
-const int water_marker = 2;
+const char* mesh_file   = "./1MAG_2.msh"; // 带有蛋白的网格,与PQR文件必须匹配
+const char* pqr_file    = "./1MAG.pqr"; // PQR文件,与网格文件必须匹配
+int p_order             = 1; //有限元基函数的多项式次数
+const char* Linearize   = "gummel"; // newton, gummel
+const char* Discretize  = "cg"; // cg, dg
+const char* options_src = "./pnp_protein_petsc_opts";
+bool self_debug         = false;
+
+const char* phi1_txt    = "./phi1_1MAG_2.txt";
+const int refine_times  = 0;
+
+const int protein_marker   = 1; // 这些marker信息可以从Gmsh中可视化得到
+const int water_marker     = 2;
 const int interface_marker = 9;
-const int top_marker = 8;
-const int bottom_marker = 7;
-const int Gamma_m_marker = 5;
+const int top_marker       = 8;
+const int bottom_marker    = 7;
+const int Gamma_m_marker   = 5;
 
 double phi_top     = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 上边界是 Dirichlet, 乘以alpha1进行无量纲化
 double phi_bottom  = 2.5 * alpha1; // 国际单位V, 电势在计算区域的 下边界是 Dirichlet
@@ -72,6 +76,25 @@ double c2_top      = 0.9 * alpha3; // 国际单位mol/L, Cl-阴离子在计算�
 double c2_bottom   = 0.1 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
 double c2_other    = 0.0 * alpha3; // 国际单位mol/L, Cl-阳离子在计算区域的 其他边界是 Neumann
 
+double phi_D_func(const Vector& x)
+{
+    if (abs(x[2] - 50.0) < 1E-10) return phi_top;
+    else if (abs(x[2] + 60.0) < 1E-10) return phi_bottom;
+}
+double c1_D_func(const Vector& x)
+{
+    if (abs(x[2] - 50.0) < 1E-10) return c1_top;
+    else if (abs(x[2] + 60.0) < 1E-10) return c1_bottom;
+}
+double c2_D_func(const Vector& x)
+{
+    if (abs(x[2] - 50.0) < 1E-10) return c2_top;
+    else if (abs(x[2] + 60.0) < 1E-10) return c2_bottom;
+}
+
+FunctionCoefficient phi_D_coeff(phi_D_func);
+FunctionCoefficient c1_D_coeff (c1_D_func);
+FunctionCoefficient c2_D_coeff (c2_D_func);
 #elif defined(_1bl8_tu)
 const char* options_src = "./petsc_opts";
 const char* mesh_file = "../data/1bl8_tu.msh"; // 带有蛋白的网格,与PQR文件必须匹配
@@ -138,13 +161,12 @@ const int jacobi_printlv = -1;
 
 
 
+// ------------------------- 一些辅助变量(避免在main函数里面定义) ------------------------
 MarkProteinCoefficient mark_protein_coeff(protein_marker, water_marker); //在蛋白单元取值为1.0,在水中单元取值为0.0
 MarkWaterCoefficient   mark_water_coeff(protein_marker, water_marker);   //在水中单元取值为1.0,在蛋白单元取值为0.0
 ProductCoefficient     epsilon_water_mark(epsilon_water, mark_water_coeff);
 ProductCoefficient     epsilon_protein_mark(epsilon_protein, mark_protein_coeff);
 
-
-// ------------------------- 一些辅助变量(避免在main函数里面定义) ------------------------
 ConstantCoefficient neg(-1.0);
 ConstantCoefficient zero(0.0);
 ConstantCoefficient one(1.0);

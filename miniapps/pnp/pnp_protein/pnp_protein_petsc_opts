@@ -1,18 +1,18 @@
-# 许多被注释的参数在程序的头文件中定义
+# ------> phi2 equation Params
+-phi2_ksp_type gmres
+-phi2_pc_type jacobi # ilu,jacobi...
+-phi2_ksp_rtol 1e-8
+-phi2_ksp_atol 1e-10
+-phi2_ksp_divtol 1e5
+-phi2_ksp_max_it 1000
+#-phi2_ksp_monitor
+#-phi2_ksp_monitor_short
+#-phi2_ksp_monitor_true_residual
+-phi2_ksp_converged_reason
+#-phi2_ksp_view
 
--harmonic_ksp_type gmres
--harmonic_pc_type jacobi # ilu,jacobi...
-#-harmonic_ksp_rtol 1e-8
-#-harmonic_ksp_atol 1e-10
-#-harmonic_ksp_divtol 1e5
-#-harmonic_ksp_max_it 1000
-#-harmonic_ksp_monitor
-#-harmonic_ksp_monitor_short
-#-harmonic_ksp_monitor_true_residual
--harmonic_ksp_converged_reason
-#-harmonic_ksp_view
 
-
+# ------> Gummel Params
 -phi3_ksp_type minres
 -phi3_pc_type ilu
 #-phi3_ksp_rtol 1e-8
@@ -25,7 +25,6 @@
 -phi3_ksp_converged_reason
 #-phi3_ksp_view
 
-
 -np1_ksp_type gmres
 -np1_pc_type lu
 #-np1_ksp_rtol 1e-8
@@ -37,7 +36,6 @@
 #-np1_ksp_monitor_true_residual
 -np1_ksp_converged_reason
 #-np1_ksp_view
-
 
 -np2_ksp_type gmres
 -np2_pc_type ilu
@@ -52,13 +50,14 @@
 #-np2_ksp_view
 
 
+# ------> Newton Params
 -newton_snes_type newtonls
 -newton_snes_max_it 20
 -newton_snes_stol 1e-14
 #-newton_snes_rtol 1e-10
 #-newton_snes_atol 1e-20
 #-newton_snes_divergence_tolerance 1e5
--newton_snes_linesearch_type basic
+-newton_snes_linesearch_type bt
 -newton_snes_linesearch_monitor
 -newton_snes_linesearch_maxstep 0
 -newton_snes_monitor
@@ -81,7 +80,6 @@
 #-newton_ksp_monitor_short
 -newton_ksp_converged_reason
 #-newton_ksp_view
-
 
 -sub_block1_ksp_type gmres
 -sub_block1_pc_type lu
@@ -120,5 +118,6 @@
 #-sub_block3_ksp_view
 
 
+# ------> Petsc Other Params
 #-options_view
 -options_left 0

@@ -1,4 +1,4 @@
-# ------> Gummel Linearization
+# ------> Gummel Params
 -phi_ksp_type cg
 -phi_pc_type ilu
 -phi_ksp_max_it 10000
@@ -30,7 +30,7 @@
 #-np2_ksp_view
 
 
-# ------> Newton Linearization
+# ------> Newton Params
 -newton_snes_type newtonls
 -newton_snes_max_it 50
 -newton_snes_rtol 1e-6
@@ -52,8 +52,7 @@
 -newton_ksp_divtol 1e+5
 #-newton_ksp_monitor
 #-newton_ksp_monitor_true_residual
-#-newton_ksp_monitor_short
-#-newton_ksp_converged_reason
+-newton_ksp_converged_reason
 #-newton_ksp_view
 
 -sub_block1_ksp_type cg
@@ -96,6 +95,6 @@
 #-sub_block3_ksp_view
 
 
-# ------> Petsc Other Parameters
+# ------> Petsc Other Params
 #-options_view
 -options_left 0

@@ -12,36 +12,56 @@
 using namespace std;
 using namespace mfem;
 
-int main(int args, char **argv)
+int main(int argc, char **argv)
 {
     int num_procs, myid;
-    MPI_Init(&args, &argv);
+    MPI_Init(&argc, &argv);
     MFEMInitializePetsc(NULL, NULL, options_src, NULL);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
-#ifdef SELF_DEBUG
-    Test_ReadPQR();
-    Test_PhysicalParameters();
-    Test_G_gradG_cfun(); // slow
-#endif
+    OptionsParser args(argc, argv);
+    args.AddOption(&mesh_file, "-m", "--mesh", "Choose a mesh");
+    args.AddOption(&pqr_file, "-pqr", "--pqr", "Select a PQR file");
+    args.AddOption(&p_order, "-p", "--p_order", "Polynomial order of basis function.");
+    args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method.");
+    args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method.");
+    args.AddOption(&self_debug, "-debug", "--self_debug", "-nodebug", "--no_self_debug", "Run many asserts to debug");
+    args.Parse();
+    if (!args.Good())
+    {
+        if (myid == 0)
+        {
+            args.PrintUsage(cout);
+        }
+        MPI_Finalize();
+        return 1;
+    }
+
+    if (self_debug)
+    {
+        Test_ReadPQR();
+        Test_PhysicalParameters();
+        Test_G_gradG_cfun(); // slow
+    }
 
     Mesh mesh(mesh_file, 1, 1);
-    int mesh_dim = mesh.Dimension(); //网格的维数:1D,2D,3D
     for (int i=0; i<refine_times; ++i) mesh.UniformRefinement();
-#ifdef SELF_DEBUG
-    mesh.PrintInfo(cout);
-#endif
 
-//    PNP_Gummel_Solver* solver = new PNP_Gummel_Solver(mesh);
-//    PNP_Gummel_Solver_par* solver = new PNP_Gummel_Solver_par(&mesh);
-//    PNP_Newton_Solver* solver = new PNP_Newton_Solver(&mesh);
-    PNP_Newton_Solver_par* solver = new PNP_Newton_Solver_par(&mesh);
-    solver->Solve();
-    delete solver;
-
+    if (strcmp(Linearize, "gummel") == 0 && strcmp(Discretize, "cg") == 0)
+    {
+        PNP_Gummel_CG_Solver_par* solver = new PNP_Gummel_CG_Solver_par(&mesh);
+        solver->Solve();
+        delete solver;
+    }
+    else if (strcmp(Linearize, "newton") == 0 && strcmp(Discretize, "cg") == 0)
+    {
+        PNP_Newton_CG_Solver_par* solver = new PNP_Newton_CG_Solver_par(&mesh);
+        solver->Solve();
+        delete solver;
+    }
 
     MFEMFinalizePetsc();
     MPI_Finalize();
-    return 0;
+    cout << "------------------------------ All Good! -------------------------\n\n" << endl;
 }
