@@ -179,4 +179,9 @@ StdFunctionCoefficient         G_coeff(G_func);
 VectorStdFunctionCoefficient   gradG_coeff(3, gradG_func);
 ScalarVectorProductCoefficient neg_gradG_coeff(neg, gradG_coeff);
 
+ProductCoefficient D1_prod_z1_water(D_K_prod_v_K, mark_water_coeff);
+ProductCoefficient D2_prod_z2_water(D_Cl_prod_v_Cl, mark_water_coeff);
+ProductCoefficient D1_water(D_K_, mark_water_coeff);
+ProductCoefficient D2_water(D_Cl_, mark_water_coeff);
+
 #endif

@@ -1457,9 +1457,8 @@ public:
         Solve_Singular();
         Solve_Harmonic();
 
-        // -------------------- 开始 Gummel 迭代 --------------------
-        cout << "\n\n---------------------- CG1, Gummel, protein, parallel ----------------------" << endl;
-        GridFunctionCoefficient phi3_n_coeff(phi3_n), c1_n_coeff(c1_n), c2_n_coeff(c2_n);
+        cout << "\n------> Gummel, CG" << p_order << ", protein, parallel"
+             << ", mesh: " << mesh_file << ", refine times: " << refine_times << '\n' << endl;
         int iter = 1;
         while (iter < Gummel_max_iters)
         {
@@ -1504,8 +1503,8 @@ public:
 
         if (visualize)
         {
-            (*phi3) += (*phi1); //把总的电势全部加到phi3上面
-            (*phi3) += (*phi2);
+//            (*phi3) += (*phi1); //把总的电势全部加到phi3上面
+//            (*phi3) += (*phi2);
             (*phi3) /= alpha1;
             (*c1)   /= alpha3;
             (*c2)   /= alpha3;
@@ -1513,7 +1512,7 @@ public:
             Visualize(*dc, "c1", "c1 (with units)");
             Visualize(*dc, "c2", "c2 (with units)");
 
-            ofstream results("phi_c1_c2.vtk");
+            ofstream results("gummel_cg_phi_c1_c2.vtk");
             results.precision(14);
             int ref = 0;
             mesh->PrintVTK(results, ref);
@@ -1733,9 +1732,9 @@ private:
 #ifdef SELF_VERBOSE
 //        cout << "            L2 norm of c1: " << c1->ComputeL2Error(zero) << endl;
         if (solver->GetConverged() == 1 && myid == 0)
-            cout << "np1 solver : successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
+            cout << "np1  solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
-            cerr << "np1 solver : failed to converged" << endl;
+            cerr << "np1  solver: failed to converged" << endl;
 #endif
         if (self_debug)
         {
@@ -1794,9 +1793,9 @@ private:
 #ifdef SELF_VERBOSE
 //        cout << "            L2 norm of c2: " << c2->ComputeL2Error(zero) << endl;
         if (solver->GetConverged() == 1 && myid == 0)
-            cout << "np2 solver : successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
+            cout << "np2  solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
         else if (solver->GetConverged() != 1)
-            cerr << "np2 solver : failed to converged" << endl;
+            cerr << "np2  solver: failed to converged" << endl;
 #endif
 
         if (self_debug) {
@@ -2170,6 +2169,8 @@ public:
         cout << "in Mult(), l2 norm of   c1: " <<   c1_k->Norml2() << endl;
         cout << "in Mult(), l2 norm of   c2: " <<   c2_k->Norml2() << endl;
 
+        GridFunctionCoefficient c1_k_coeff(c1_k), c2_k_coeff(c2_k);
+
 #ifdef SELF_DEBUG
         {
             // essential边界条件
@@ -2204,16 +2205,18 @@ public:
         GradientGridFunctionCoefficient grad_phi3_k(phi3_k);
         ScalarVectorProductCoefficient epsilon_protein_prod_grad_phi3_k(epsilon_protein_mark, grad_phi3_k);
         ScalarVectorProductCoefficient epsilon_water_prod_grad_phi3_k(epsilon_water_mark, grad_phi3_k);
-        f->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &epsilon_protein_prod_grad_phi3_k));
-        f->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &epsilon_water_prod_grad_phi3_k));
-        GridFunctionCoefficient c1_k_coeff(c1_k);
         ProductCoefficient term1(alpha2_prod_alpha3_prod_v_K,  c1_k_coeff);
-        GridFunctionCoefficient c2_k_coeff(c2_k);
         ProductCoefficient term2(alpha2_prod_alpha3_prod_v_Cl, c2_k_coeff);
         SumCoefficient term(term1, term2);
         ProductCoefficient neg_term(neg, term);
         ProductCoefficient neg_term_water(neg_term, mark_water_coeff);
+        // epsilon_m (grad(phi^k), grad(psi3))_{\Omega_m}
+        f->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &epsilon_protein_prod_grad_phi3_k));
+        // epsilon_s (grad(phi^k), grad(psi3))_{\Omega_s}
+        f->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &epsilon_water_prod_grad_phi3_k));
+        // - alpha2 alpha3 (z1 c1^k + z2 c2^k, psi3)_{\Omega_s}
         f->AddDomainIntegrator(new DomainLFIntegrator(neg_term_water));
+        // omit zero Neumann bdc
         f->SelfDefined_Assemble();
         (*f) -= (*g);
         f->SetSubVector(ess_tdof_list, 0.0);
@@ -2223,12 +2226,11 @@ public:
         f1 = new SelfDefined_LinearForm(fsp);
         f1->Update(fsp, rhs_k->GetBlock(1), 0);
         GradientGridFunctionCoefficient grad_c1_k(c1_k);
-        ProductCoefficient D1_water(D_K_, mark_water_coeff);
         ScalarVectorProductCoefficient D1_prod_grad_c1_k(D1_water, grad_c1_k);
-        ProductCoefficient D1_prod_z1_water(D_K_prod_v_K, mark_water_coeff);
         ProductCoefficient D1_prod_z1_water_c1_k(D1_prod_z1_water, c1_k_coeff);
         ScalarVectorProductCoefficient D1_prod_v_K_prod_c1_k_prod_grad_phi3_k(D1_prod_z1_water_c1_k, grad_phi3_k);
         VectorSumCoefficient np1(D1_prod_grad_c1_k, D1_prod_v_K_prod_c1_k_prod_grad_phi3_k);
+        // (D1 grad(c1^k) + D1 z1 c1^k grad(phi3^k), grad(v1))_{\Omega_s}
         f1->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &np1));
         f1->SelfDefined_Assemble();
         f1->SetSubVector(ess_tdof_list, 0.0);
@@ -2238,36 +2240,19 @@ public:
         f2 = new SelfDefined_LinearForm(fsp);
         f2->Update(fsp, rhs_k->GetBlock(2), 0);
         GradientGridFunctionCoefficient grad_c2_k(c2_k);
-        ProductCoefficient D2_water(D_Cl_, mark_water_coeff);
         ScalarVectorProductCoefficient D2_prod_grad_c2_k(D2_water, grad_c2_k);
-        ProductCoefficient D2_prod_z2_water(D_Cl_prod_v_Cl, mark_water_coeff);
         ProductCoefficient D2_prod_z2_water_c2_k(D2_prod_z2_water, c2_k_coeff);
         ScalarVectorProductCoefficient D2_prod_v_Cl_prod_c2_k_prod_grad_phi3_k(D2_prod_z2_water_c2_k, grad_phi3_k);
         VectorSumCoefficient np2(D2_prod_grad_c2_k, D2_prod_v_Cl_prod_c2_k_prod_grad_phi3_k);
+        // (D2 grad(c2^k) + D2 z2 c2^k grad(phi3^k), grad(v2))_{\Omega_s}
         f2->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &np2));
         f2->SelfDefined_Assemble();
         f2->SetSubVector(ess_tdof_list, 0.0);
 //        for (int i=0; i<ess_tdof_list.Size(); ++i) (*f2)[ess_tdof_list[i]] = 0.0;
+
         y1 = (*f);
         y2 = (*f1);
         y3 = (*f2);
-
-//        cout.precision(14);
-//        cout << "after computing Residual, l2 norm of rhs_k(par): " << rhs_k->Norml2() << endl;
-//        phi3_k->MakeTRef(fsp, y, 0);
-//        c1_k->MakeTRef(fsp, y, sc);
-//        c2_k->MakeTRef(fsp, y, 2*sc);
-//        phi3_k->SetFromTrueVector();
-//        c1_k->SetFromTrueVector();
-//        c2_k->SetFromTrueVector();
-//        cout << "in Mult(), l2 norm of phi3: " << phi3_k->Norml2() << endl;
-//        cout << "in Mult(), l2 norm of   c1: " <<   c1_k->Norml2() << endl;
-//        cout << "in Mult(), l2 norm of   c2: " <<   c2_k->Norml2() << endl;
-//
-//        ofstream rhs_k_file;
-//        rhs_k_file.open("./rhs_k_par.txt");
-//        rhs_k->Print(rhs_k_file, 1);
-//        rhs_k_file.close();
     }
 
     virtual Operator &GetGradient(const Vector& x) const
@@ -2285,11 +2270,12 @@ public:
 //        cout << "in GetGradient(), l2 norm of   c1: " <<   c1_k->Norml2() << endl;
 //        cout << "in GetGradient(), l2 norm of   c2: " <<   c2_k->Norml2() << endl;
 
+        GridFunctionCoefficient c1_k_coeff(c1_k);
+
         delete a21;
         a21 = new ParBilinearForm(fsp);
-        ProductCoefficient D1_prod_z1_water(D_K_prod_v_K, mark_water_coeff);
-        GridFunctionCoefficient c1_k_coeff(c1_k);
         ProductCoefficient D1_prod_z1_water_c1_k(D1_prod_z1_water, c1_k_coeff);
+        // D1 z1 c1^k (grad(dphi3), grad(v1))_{\Omega_s}
         a21->AddDomainIntegrator(new DiffusionIntegrator(D1_prod_z1_water_c1_k));
         a21->Assemble(0);
         a21->Finalize(0);
@@ -2300,8 +2286,9 @@ public:
 
         delete a22;
         a22 = new ParBilinearForm(fsp);
-        ProductCoefficient D1_water(D_K_, mark_water_coeff);
+        // D1 (grad(dc1), grad(v1))_{\Omega_s}
         a22->AddDomainIntegrator(new DiffusionIntegrator(D1_water));
+        // D1 z1 (dc1 grad(phi3^k), grad(v1))_{\Omega_s}
         a22->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_k, &D1_prod_z1_water));
         a22->Assemble(0);
         a22->Finalize(0);
@@ -2311,9 +2298,9 @@ public:
 
         delete a31;
         a31 = new ParBilinearForm(fsp);
-        ProductCoefficient D2_prod_z2_water(D_Cl_prod_v_Cl, mark_water_coeff);
         GridFunctionCoefficient c2_k_coeff(c2_k);
         ProductCoefficient D2_prod_z2_water_c2_k(D2_prod_z2_water, c2_k_coeff);
+        // D2 z2 c2^k (grad(dphi3), grad(v2))_{\Omega_s}
         a31->AddDomainIntegrator(new DiffusionIntegrator(D2_prod_z2_water_c2_k));
         a31->Assemble(0);
         a31->Finalize(0);
@@ -2324,8 +2311,9 @@ public:
 
         delete a33;
         a33 = new ParBilinearForm(fsp);
-        ProductCoefficient D2_water(D_Cl_, mark_water_coeff);
+        // D2 (grad(dc2), grad(v2))_{\Omega_s}
         a33->AddDomainIntegrator(new DiffusionIntegrator(D2_water));
+        // D2 z2 (dc2 grad(phi3^k), grad(v2))_{\Omega_ss}
         a33->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_k, &D2_prod_z2_water));
         a33->Assemble(0);
         a33->Finalize(0);
@@ -2341,61 +2329,6 @@ public:
         jac_k->SetBlock(1, 1, &A22);
         jac_k->SetBlock(2, 0, &A31);
         jac_k->SetBlock(2, 2, &A33);
-#ifdef CLOSE
-        { // for test
-            cout << "after Assemble() in GetGradient() in par:\n";
-            Vector temp(height/3), haha(height/3);
-            for (int i=0; i<height/3; ++i) {
-                haha[i] = i%10;
-            }
-
-            ofstream temp_file;
-
-            temp_file.open("./A11_mult_phi3_k_par");
-            A11.Mult(haha, temp);
-            cout << "A11_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A12_mult_phi3_k_par");
-            A12.Mult(haha, temp);
-            cout << "A12_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A13_mult_phi3_k_par");
-            A13.Mult(haha, temp);
-            cout << "A13_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A21_mult_phi3_k_par");
-            A21.Mult(haha, temp);
-            cout << "A21_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A22_mult_phi3_k_par");
-            A22.Mult(haha, temp);
-            cout << "A22_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A31_mult_phi3_k_par");
-            A31.Mult(haha, temp);
-            cout << "A31_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A33_mult_phi3_k_par");
-            A33.Mult(haha, temp);
-            cout << "A33_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-//            MFEM_ABORT("save mesh done in par");
-        }
-#endif
         return *jac_k;
     }
 };
@@ -2599,10 +2532,12 @@ public:
 
     void Solve()
     {
-        cout << "---------------------- CG1, Newton, protein, parallel ----------------------" << endl;
-        Vector zero;
+        cout << "\nNewton, CG" << p_order << ", protein, parallel"
+             << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
+
+        Vector zero_vec;
         cout << "u_k l2 norm: " << u_k->Norml2() << endl;
-        newton_solver->Mult(zero, *u_k); // u_k must be a true vector
+        newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
 
         phi3_k.MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
         c1_k  .MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
@@ -2610,9 +2545,9 @@ public:
         phi3_k.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
-        cout << "l2 norm of phi3: " << phi3_k.Norml2() << endl;
-        cout << "l2 norm of   c1: " <<   c1_k.Norml2() << endl;
-        cout << "l2 norm of   c2: " <<   c2_k.Norml2() << endl;
+        cout << "L2 norm of phi3: " << phi3_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
     }
 };
 
