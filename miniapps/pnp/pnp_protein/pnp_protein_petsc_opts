@@ -8,55 +8,55 @@
 #-phi2_ksp_monitor
 #-phi2_ksp_monitor_short
 #-phi2_ksp_monitor_true_residual
--phi2_ksp_converged_reason
+#-phi2_ksp_converged_reason
 #-phi2_ksp_view
 
 
 # ------> Gummel Params
 -phi3_ksp_type minres
 -phi3_pc_type ilu
-#-phi3_ksp_rtol 1e-8
-#-phi3_ksp_atol 1e-10
-#-phi3_ksp_divtol 1e5
-#-phi3_ksp_max_it 1000
+-phi3_ksp_rtol 1e-8
+-phi3_ksp_atol 1e-10
+-phi3_ksp_divtol 1e5
+-phi3_ksp_max_it 1000
 #-phi3_ksp_monitor
 #-phi3_ksp_monitor_short
 #-phi3_ksp_monitor_true_residual
--phi3_ksp_converged_reason
+#-phi3_ksp_converged_reason
 #-phi3_ksp_view
 
 -np1_ksp_type gmres
--np1_pc_type lu
-#-np1_ksp_rtol 1e-8
-#-np1_ksp_atol 1e-10
-#-np1_ksp_divtol 1e5
-#-np1_ksp_max_it 1000
+-np1_pc_type ilu
+-np1_ksp_rtol 1e-8
+-np1_ksp_atol 1e-10
+-np1_ksp_divtol 1e5
+-np1_ksp_max_it 1000
 #-np1_ksp_monitor
 #-np1_ksp_monitor_short
 #-np1_ksp_monitor_true_residual
--np1_ksp_converged_reason
+#-np1_ksp_converged_reason
 #-np1_ksp_view
 
 -np2_ksp_type gmres
 -np2_pc_type ilu
-#-np2_ksp_rtol 1e-8
-#-np2_ksp_atol 1e-10
-#-np2_ksp_divtol 1e5
-#-np2_ksp_max_it 1000
+-np2_ksp_rtol 1e-8
+-np2_ksp_atol 1e-10
+-np2_ksp_divtol 1e5
+-np2_ksp_max_it 1000
 #-np2_ksp_monitor
 #-np2_ksp_monitor_short
 #-np2_ksp_monitor_true_residual
--np2_ksp_converged_reason
+#-np2_ksp_converged_reason
 #-np2_ksp_view
 
 
 # ------> Newton Params
 -newton_snes_type newtonls
+-newton_snes_rtol 1e-10
+-newton_snes_atol 1e-20
 -newton_snes_max_it 20
 -newton_snes_stol 1e-14
-#-newton_snes_rtol 1e-10
-#-newton_snes_atol 1e-20
-#-newton_snes_divergence_tolerance 1e5
+-newton_snes_divergence_tolerance 1e5
 -newton_snes_linesearch_type bt
 -newton_snes_linesearch_monitor
 -newton_snes_linesearch_maxstep 0

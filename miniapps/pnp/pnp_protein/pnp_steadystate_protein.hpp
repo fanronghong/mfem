@@ -53,6 +53,7 @@ const char* Linearize   = "gummel"; // newton, gummel
 const char* Discretize  = "cg"; // cg, dg
 const char* options_src = "./pnp_protein_petsc_opts";
 bool self_debug         = false;
+bool visualize          = false;
 
 const char* phi1_txt    = "./phi1_1MAG_2.txt";
 const int refine_times  = 0;

@@ -27,6 +27,7 @@ int main(int argc, char **argv)
     args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method.");
     args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method.");
     args.AddOption(&self_debug, "-debug", "--self_debug", "-nodebug", "--no_self_debug", "Run many asserts to debug");
+    args.AddOption(&visualize, "-v", "--vis", "-nov", "--novis", "Visualize outputs");
     args.Parse();
     if (!args.Good())
     {
