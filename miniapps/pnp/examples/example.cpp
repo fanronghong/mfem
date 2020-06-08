@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include "mfem.hpp"
+#include "../utils/PrintMesh.hpp"
 #include "../utils/SelfDefined_LinearForm.hpp"
 #include "../utils/DGSelfTraceIntegrator.hpp"
 #include "../utils/mfem_utils.hpp"
@@ -14,5 +15,5 @@ int main()
 //    using namespace _DGSelfTraceIntegrator;
 //    Test_DGSelfTraceIntegrator();
 
-    Test_PlotSparseMatrix();
+    Modify_Mesh();
 }

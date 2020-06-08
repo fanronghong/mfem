@@ -6,7 +6,7 @@ reset
 exec &> >(tee "./out")
 
 # ------>
-./pnp_steadystate_protein -p 1 -lin gummel -dis cg -v
+./pnp_steadystate_protein -p 1 -lin gummel -dis cg -v -debug
 #./pnp_steadystate_protein -p 1 -lin newton -dis cg
 
 

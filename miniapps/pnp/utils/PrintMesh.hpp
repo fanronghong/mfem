@@ -90,6 +90,77 @@ void PrintMesh(const string filename, const Mesh& mesh, const Array<Element*>& a
     out << endl;
 }
 
+void Modify_Mesh()
+{
+    Mesh mesh("./1MAG_2.msh");
+    const char* target_mesh = "modify_1MAG_2.mesh";
+
+    int marker1 = 100, marker2 = 200;
+    Array<Element*> interface, protein, water, boundary;
+    Array<int> index_sets;
+    for (size_t i=0; i<mesh.GetNumFaces(); i++)
+    {
+        FaceElementTransformations* tran = mesh.GetInteriorFaceTransformations(i);
+        if (tran != NULL)
+        {
+            int id1 = tran->Elem1No;
+            int id2 = tran->Elem2No;
+            Element* el1 = mesh.GetElement(id1);
+            Element* el2 = mesh.GetElement(id2);
+
+            int has_id1 = index_sets.Find(id1);
+            int has_id2 = index_sets.Find(id2);
+            if (has_id1 == -1) index_sets.Append(id1);
+            if (has_id2 == -1) index_sets.Append(id2);
+
+            if (el1->GetAttribute() == 1) {
+                if (has_id1 == -1) protein.Append(el1);
+                if (has_id2 == -1) water.Append(el2);
+            } else {
+                assert(el1->GetAttribute() == 2);
+                if (has_id2 == -1) protein.Append(el2);
+                if (has_id1 == -1) water.Append(el1);
+            }
+
+            // interior facet相连的第一个单元就是单元编号较小的,第二个是较大的.
+            // 同时,interior facet的normal方向也是从单元编号较小的指向单元编号较大的
+            assert(tran->Elem1No < tran->Elem2No);
+            Element* face = const_cast<Element*>(mesh.GetFace(i));
+            if (el1->GetAttribute() < el2->GetAttribute()) //在1MAG_2.msh里面,蛋白标记为1,水标记为2
+            {
+                face->SetAttribute(marker1); //在这个facet上面,其normal就是由el1(蛋白单元)指向el2(水单元)
+                interface.Append(face);
+            }
+            else if (el1->GetAttribute() > el2->GetAttribute())
+            {
+                face->SetAttribute(marker2); //在这个facet上面,其normal就是由el1(水单元)指向el2(蛋白单元)
+                interface.Append(face);
+            }
+        }
+    }
+
+    cout << "index_sets size: " << index_sets.Size() << ", #element of mesh: " << mesh.GetNE()
+         << ", protein size: " << protein.Size() << ", water size: " << water.Size() << endl;
+    assert(index_sets.Size() == mesh.GetNE());
+
+    Array<int> reorder;
+    int size = protein.Size();
+    int protein_idx=0, water_idx=size;
+    for (int i=0; i<mesh.GetNE(); ++i)
+    {
+        Element* el = mesh.GetElement(i);
+        if (protein.Find(el) != -1) {
+            reorder.Append(protein_idx);
+            protein_idx++;
+        } else {
+            reorder.Append(water_idx);
+            water_idx++;
+        }
+    }
+    mesh.ReorderElements(reorder);
+
+    PrintMesh(target_mesh, mesh, interface);
+}
 
 void Test_PrintMesh()
 {
@@ -106,9 +177,7 @@ void Test_PrintMesh()
         Tran->Transform(*center, phy_center);
 
         double tol = 1E-8;
-        if ((phy_center[0] < 0.4+tol || phy_center[0] > 0.6-tol)
-            && (phy_center[1] < 0.4+tol || phy_center[1] > 0.6-tol)
-            && (phy_center[2] < 0.4+tol || phy_center[2] > 0.6-tol))
+        if (phy_center[2] < 0.4+tol || phy_center[2] > 0.6-tol)
         {
             mesh.GetElement(i)->SetAttribute(1);
         }
@@ -128,7 +197,7 @@ void Test_PrintMesh()
             Element *el2 = mesh.GetElement(tran->Elem2No);
             Element* face = const_cast<Element*>(mesh.GetFace(i));
             if (el1->GetAttribute() != el2->GetAttribute()) {
-                face->SetAttribute(7);
+                face->SetAttribute(10);
                 interface.Append(face);
             }
         }
@@ -136,7 +205,7 @@ void Test_PrintMesh()
 
     string temp = "gooooooo.mesh";
     PrintMesh(temp, mesh, interface);
-    system(("rm " + temp).c_str()); // 调用shell命令
+//    system(("rm " + temp).c_str()); // 调用shell命令
     cout << "===> Test Pass: PrintMesh.hpp" << endl;
 }
 
