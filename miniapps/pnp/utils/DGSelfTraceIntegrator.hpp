@@ -117,6 +117,59 @@ public:
 };
 
 
+// 计算: Q*(w, grad(v))_{\Omega}, NOT test. Same with GradConvectionIntegrator2.
+// Q is Coefficient, w is VectorCoefficient w
+class GradGradConvectionIntegrator: public LinearFormIntegrator
+{
+protected:
+    VectorCoefficient* w;
+    Coefficient* q;
+
+    DenseMatrix adjJ, dshape, tmp;
+    Vector w_val, tmp_vec;
+
+public:
+    GradGradConvectionIntegrator(Coefficient* q_, VectorCoefficient* w_): q(q_), w(w_) {}
+    ~GradGradConvectionIntegrator() {}
+
+    virtual void AssembleRHSElementVect(const FiniteElement &el,
+                                        ElementTransformation &Tr,
+                                        Vector &elvect)
+    {
+        int nd = el.GetDof();
+        int dim = el.GetDim();
+
+        adjJ.SetSize(dim);
+        w_val.SetSize(dim);
+
+        dshape.SetSize(nd, dim);
+        tmp.SetSize(nd, dim);
+        tmp_vec.SetSize(nd);
+        elvect.SetSize(nd);
+        elvect = 0.0;
+
+        int order = Tr.OrderGrad(&el) + Tr.Order() + el.GetOrder();
+        const IntegrationRule *ir = &IntRules.Get(el.GetGeomType(), order);
+
+        for (int i=0; i<ir->GetNPoints(); ++i)
+        {
+            const IntegrationPoint& ip = ir->IntPoint(i);
+            el.CalcDShape(ip, dshape);
+
+            Tr.SetIntPoint(&ip);
+            CalcAdjugate(Tr.Jacobian(), adjJ);
+
+            w->Eval(w_val, Tr, ip);
+            double wi = ip.weight * q->Eval(Tr, ip);
+
+            Mult(dshape, adjJ, tmp);
+            tmp.Mult(w_val, tmp_vec);
+            elvect.Add(wi, tmp_vec);
+        }
+    }
+};
+
+
 /* 计算(区域边界积分): q<u_D, v grad(w).n>_E,
  * q, u_D are Coefficient, w is GridFunction */
 class DGSelfBdrFaceIntegrator: public LinearFormIntegrator

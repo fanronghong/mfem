@@ -1478,17 +1478,16 @@ public:
             Solve_NP2();
             (*c2_n) = (*c2);
 
-#ifdef SELF_VERBOSE
-            cout << "L2 norm of phi3: " << phi3->ComputeL2Error(zero) << endl;
-            cout << "L2 norm of   c1: " << c1->ComputeL2Error(zero) << endl;
-            cout << "L2 norm of   c2: " << c2->ComputeL2Error(zero) << endl;
-#endif
+            if (verbose) {
+                cout << "L2 norm of phi3: " << phi3->ComputeL2Error(zero) << endl;
+                cout << "L2 norm of   c1: " << c1->ComputeL2Error(zero) << endl;
+                cout << "L2 norm of   c2: " << c2->ComputeL2Error(zero) << endl;
+            }
 
             cout << "======> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
             if (tol < Gummel_rel_tol)
-            {
                 break;
-            }
+
             iter++;
             cout << endl;
         }
@@ -1513,6 +1512,7 @@ public:
             Visualize(*dc, "c1", "c1 (with units)");
             Visualize(*dc, "c2", "c2 (with units)");
 
+            cout << "save output: gummel_cg_phi_c1_c2.vtk" << endl;
             ofstream results("gummel_cg_phi_c1_c2.vtk");
             results.precision(14);
             int ref = 0;
@@ -1557,13 +1557,13 @@ private:
     void Solve_Harmonic()
     {
         ParBilinearForm blf(h1_space);
-        // (grad(phi_2), grad(psi_2))_{\Omega_m}, \Omega_m: protein zone
+        // (grad(phi2), grad(psi2))_{\Omega_m}, \Omega_m: protein domain
         blf.AddDomainIntegrator(new DiffusionIntegrator(mark_protein_coeff));
         blf.Assemble(0);
         blf.Finalize(0);
 
         ParLinearForm lf(h1_space);
-        // -<grad(G).n, psi_2>_{\Gamma_M}, G is \phi_1
+        // -<grad(G).n, psi2>_{\Gamma_M}, G is phi1
         lf.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_gradG_coeff), Gamma_m);
         lf.Assemble();
 
@@ -1591,13 +1591,14 @@ private:
         chrono.Stop();
         blf.RecoverFEMSolution(*x, lf, *phi2);
 
-#ifdef SELF_VERBOSE
-        cout << "\nL2 norm of phi2: " << phi2->ComputeL2Error(zero) << endl;
-        if (solver->GetConverged() == 1 && myid == 0)
-            cout << "phi2 solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
-        else if (solver->GetConverged() != 1)
-            cerr << "phi2 solver: failed to converged" << endl;
-#endif
+        if (verbose) {
+            cout << "\nL2 norm of phi2: " << phi2->ComputeL2Error(zero) << endl;
+            if (solver->GetConverged() == 1 && myid == 0)
+                cout << "phi2 solver: successfully converged by iterating " << solver->GetNumIterations()
+                     << " times, taking " << chrono.RealTime() << " s." << endl;
+            else if (solver->GetConverged() != 1)
+                cerr << "phi2 solver: failed to converged" << endl;
+        }
 
         if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
         {
@@ -1652,7 +1653,7 @@ private:
         // omit 0 Neumann bdc on \Gamma_N and \Gamma_M
         lf->Assemble();
 
-        if (0) // 另外一种第一种interface积分. Verify equivalence by seeing below l2 norm of b
+        if (false) // 另外一种第一种interface积分. Verify equivalence by seeing below l2 norm of b
         {
             // Poisson方程的奇异项导出的interface部分
             SelfDefined_LinearForm interface_term(h1_space);
@@ -1668,11 +1669,6 @@ private:
         blf->SetOperatorType(Operator::PETSC_MATAIJ);
         blf->FormLinearSystem(ess_tdof_list, *phi3, *lf, *A, *x, *b); // ess_tdof_list include: top, bottom
 
-        {
-            cout.precision(14);
-            cout << "l2 norm of b: " << b->Norml2() << endl;
-        }
-
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "phi3_");
 
         chrono.Clear();
@@ -1686,14 +1682,14 @@ private:
         (*phi3)   += (*phi3_n); // 利用松弛方法更新phi3
         (*phi3_n) /= relax_phi+TOL; // 还原phi3_n.避免松弛因子为0的情况造成除0
 
-#ifdef SELF_VERBOSE
-//        cout << "            L2 norm of phi3: " << phi3->ComputeL2Error(zero) << endl;
-        if (solver->GetConverged() == 1 && myid == 0)
-            cout << "phi3 solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
-        else if (solver->GetConverged() != 1)
-            cerr << "phi3 solver: failed to converged" << endl;
-#endif
-
+        if (verbose) {
+            cout << "            L2 norm of phi3: " << phi3->ComputeL2Error(zero) << endl;
+            if (solver->GetConverged() == 1 && myid == 0)
+                cout << "phi3 solver: successfully converged by iterating " << solver->GetNumIterations()
+                     << " times, taking " << chrono.RealTime() << " s." << endl;
+            else if (solver->GetConverged() != 1)
+                cerr << "phi3 solver: failed to converged" << endl;
+        }
         delete blf, lf, solver, A, x, b;
     }
 
@@ -1735,27 +1731,25 @@ private:
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *c1);
 
+        if (self_debug) {
+            for (int i=0; i<protein_dofs.Size(); ++i) {
+                assert(abs((*c1)[protein_dofs[i]]) < 1E-10);
+            }
+        }
+
         (*c1_n) *= relax_c1;
         (*c1)   *= 1-relax_c1;
         (*c1)   += (*c1_n); // 利用松弛方法更新c1
         (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
 
-#ifdef SELF_VERBOSE
-//        cout << "            L2 norm of c1: " << c1->ComputeL2Error(zero) << endl;
-        if (solver->GetConverged() == 1 && myid == 0)
-            cout << "np1  solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
-        else if (solver->GetConverged() != 1)
-            cerr << "np1  solver: failed to converged" << endl;
-#endif
-        if (self_debug)
-        {
-            for (int i=0; i<protein_dofs.Size(); ++i)
-            {
-                assert(abs((*c1)[protein_dofs[i]]) < 1E-10);
-            }
-        }
-
-        delete lf, blf, solver, A, x, b;
+        if (verbose) {
+            cout << "            L2 norm of c1: " << c1->ComputeL2Error(zero) << endl;
+            if (solver->GetConverged() == 1 && myid == 0)
+                cout << "np1  solver: successfully converged by iterating " << solver->GetNumIterations()
+                     << " times, taking " << chrono.RealTime() << " s." << endl;
+            else if (solver->GetConverged() != 1)
+                cerr << "np1  solver: failed to converged" << endl;
+        }        delete lf, blf, solver, A, x, b;
     }
 
     // 5.求解耦合的方程NP2方程
@@ -1796,26 +1790,25 @@ private:
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *c2);
 
+        if (self_debug) {
+            for (int i=0; i<protein_dofs.Size(); ++i) {
+                assert(abs((*c2)[protein_dofs[i]]) < 1E-10);
+            }
+        }
+
         (*c2_n) *= relax_c2;
         (*c2)   *= 1-relax_c2;
         (*c2)   += (*c2_n); // 利用松弛方法更新c2
         (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
 
-#ifdef SELF_VERBOSE
-//        cout << "            L2 norm of c2: " << c2->ComputeL2Error(zero) << endl;
-        if (solver->GetConverged() == 1 && myid == 0)
-            cout << "np2  solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
-        else if (solver->GetConverged() != 1)
-            cerr << "np2  solver: failed to converged" << endl;
-#endif
-
-        if (self_debug) {
-            for (int i=0; i<protein_dofs.Size(); ++i)
-            {
-                assert(abs((*c2)[protein_dofs[i]]) < 1E-10);
-            }
+        if (verbose) {
+            cout << "            L2 norm of c2: " << c2->ComputeL2Error(zero) << endl;
+            if (solver->GetConverged() == 1 && myid == 0)
+                cout << "np2  solver: successfully converged by iterating " << solver->GetNumIterations()
+                     << " times, taking " << chrono.RealTime() << " s." << endl;
+            else if (solver->GetConverged() != 1)
+                cerr << "np2  solver: failed to converged" << endl;
         }
-
         delete lf, blf, solver, A, x, b;
     }
 };
@@ -1990,12 +1983,13 @@ protected:
     mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
     mutable BlockOperator *jac_k; // Jacobian at current solution
 
-    mutable SelfDefined_LinearForm *f, *f1, *f2;
-    SelfDefined_LinearForm *g;
+    mutable ParLinearForm *f, *f1, *f2;
+    ParLinearForm *g;
     mutable PetscParMatrix A11, A12, A13, A21, A22, A31, A33;
     mutable ParBilinearForm *a11, *a12, *a13, *a21, *a22, *a31, *a33;
 
     ParGridFunction *phi1, *phi2;
+    VectorCoefficient* grad_phi1_plus_grad_phi2;
     ParGridFunction *phi3_k, *c1_k, *c2_k;
 
     PetscNonlinearSolver* newton_solver;
@@ -2105,21 +2099,33 @@ public:
         c1_k  = new ParGridFunction(fsp);
         c2_k  = new ParGridFunction(fsp);
 
-        f  = new SelfDefined_LinearForm(fsp);
-        f1  = new SelfDefined_LinearForm(fsp);
-        f2  = new SelfDefined_LinearForm(fsp);
+        f  = new ParLinearForm(fsp);
+        f1  = new ParLinearForm(fsp);
+        f2  = new ParLinearForm(fsp);
         a21 = new ParBilinearForm(fsp);
         a22 = new ParBilinearForm(fsp);
         a31 = new ParBilinearForm(fsp);
         a33 = new ParBilinearForm(fsp);
 
-        g  = new SelfDefined_LinearForm(fsp);
         GradientGridFunctionCoefficient grad_phi1(phi1), grad_phi2(phi2);
-        VectorSumCoefficient grad_phi1_plus_grad_phi2(grad_phi1, grad_phi2); //就是 grad(phi1 + phi2)
-        ScalarVectorProductCoefficient eps_m_prod_grad_phi1_plus_grad_phi2(epsilon_protein, grad_phi1_plus_grad_phi2);
+        grad_phi1_plus_grad_phi2 = new VectorSumCoefficient(grad_phi1, grad_phi2); //就是 grad(phi1 + phi2)
+
+        g  = new ParLinearForm(fsp);
         // epsilon_m <grad(phi1 + phi2).n, psi3>_{\Gamma}
-        g->AddSelfDefined_LFFacetIntegrator(new SelfDefined_LFFacetIntegrator(fsp, eps_m_prod_grad_phi1_plus_grad_phi2, protein_marker, water_marker));
-        g->SelfDefined_Assemble();
+        g->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator(&epsilon_protein, grad_phi1_plus_grad_phi2, mesh, protein_marker, water_marker));
+        g->Assemble();
+
+        if (false) // another way to do interface integrate
+        {
+            SelfDefined_LinearForm* g1  = new SelfDefined_LinearForm(fsp);
+            ScalarVectorProductCoefficient eps_m_prod_grad_phi1_plus_grad_phi2(epsilon_protein, *grad_phi1_plus_grad_phi2);
+            // epsilon_m <grad(phi1 + phi2).n, psi3>_{\Gamma}
+            g1->AddSelfDefined_LFFacetIntegrator(new SelfDefined_LFFacetIntegrator(fsp, eps_m_prod_grad_phi1_plus_grad_phi2, protein_marker, water_marker));
+            g1->SelfDefined_Assemble();
+
+            cout << "l2 norm of g1: " << g1->Norml2() << endl;
+            cout << "l2 norm of  g: " << g->Norml2() << endl;
+        }
 
         a11 = new ParBilinearForm(fsp);
         // epsilon_s (grad(dphi3), grad(psi3))_{\Omega_s}
@@ -2129,32 +2135,27 @@ public:
         a11->Assemble(0);
         a11->Finalize(0);
         a11->SetOperatorType(Operator::PETSC_MATAIJ);
-        A11 = *a11->ParallelAssemble();
         a11->FormSystemMatrix(ess_tdof_list, A11);
 
         a12 = new ParBilinearForm(fsp);
-        ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K(neg, alpha2_prod_alpha3_prod_v_K);
-        ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K_water(neg_alpha2_prod_alpha3_prod_v_K, mark_water_coeff);
         // - alpha2 alpha3 z1 (dc1, psi3)_{\Omega_s}
         a12->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_K_water));
         a12->Assemble(0);
         a12->Finalize(0);
         a12->SetOperatorType(Operator::PETSC_MATAIJ);
         a12->FormSystemMatrix(null_array, A12);
-        A12.EliminateRows(ess_tdof_list, 0.0); // ffffffffffffffffff
-        A12.EliminateRows(protein_dofs, 0.0);
+//        A12.EliminateRows(ess_tdof_list, 0.0); // fff
+//        A12.EliminateRows(protein_dofs, 0.0);
 
         a13 = new ParBilinearForm(fsp);
-        ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl(neg, alpha2_prod_alpha3_prod_v_Cl);
-        ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl_water(neg_alpha2_prod_alpha3_prod_v_Cl, mark_water_coeff);
         // - alpha2 alpha3 z2 (dc2, psi3)_{\Omega_s}
         a13->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_Cl_water));
         a13->Assemble(0);
         a13->Finalize(0);
         a13->SetOperatorType(Operator::PETSC_MATAIJ);
         a13->FormSystemMatrix(null_array, A13);
-        A13.EliminateRows(ess_tdof_list, 0.0);
-        A13.EliminateRows(protein_dofs, 0.0);
+//        A13.EliminateRows(ess_tdof_list, 0.0); // fff
+//        A13.EliminateRows(protein_dofs, 0.0);
     }
     virtual ~PNP_Newton_CG_Operator_par()
     {
@@ -2173,6 +2174,10 @@ public:
         phi3_k->MakeTRef(fsp, x_, 0);
         c1_k->MakeTRef(fsp, x_, sc);
         c2_k->MakeTRef(fsp, x_, 2*sc);
+        phi3_k->ProjectCoefficient(sin_cos_coeff);
+//        phi3_k->SetTrueVector();
+//        c1_k->SetTrueVector();
+//        c2_k->SetTrueVector();
         phi3_k->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
@@ -2211,59 +2216,99 @@ public:
         Vector y3(y.GetData() +2*sc, sc);
 
         delete f;
-        f = new SelfDefined_LinearForm(fsp);
+        f = new ParLinearForm(fsp);
         f->Update(fsp, rhs_k->GetBlock(0), 0);
-        GradientGridFunctionCoefficient grad_phi3_k(phi3_k);
-        ScalarVectorProductCoefficient epsilon_protein_prod_grad_phi3_k(epsilon_protein_mark, grad_phi3_k);
-        ScalarVectorProductCoefficient epsilon_water_prod_grad_phi3_k(epsilon_water_mark, grad_phi3_k);
         ProductCoefficient term1(alpha2_prod_alpha3_prod_v_K,  c1_k_coeff);
         ProductCoefficient term2(alpha2_prod_alpha3_prod_v_Cl, c2_k_coeff);
         SumCoefficient term(term1, term2);
         ProductCoefficient neg_term(neg, term);
         ProductCoefficient neg_term_water(neg_term, mark_water_coeff);
-        // epsilon_m (grad(phi^k), grad(psi3))_{\Omega_m}
-        f->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &epsilon_protein_prod_grad_phi3_k));
-        // epsilon_s (grad(phi^k), grad(psi3))_{\Omega_s}
-        f->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &epsilon_water_prod_grad_phi3_k));
         // - alpha2 alpha3 (z1 c1^k + z2 c2^k, psi3)_{\Omega_s}
         f->AddDomainIntegrator(new DomainLFIntegrator(neg_term_water));
+        // epsilon_m (grad(phi3^k), grad(psi3))_{\Omega_m}
+        f->AddDomainIntegrator(new GradConvectionIntegrator2(&epsilon_protein_mark, phi3_k));
+        // epsilon_s (grad(phi3^k), grad(psi3))_{\Omega_s}
+        f->AddDomainIntegrator(new GradConvectionIntegrator2(&epsilon_water_mark, phi3_k));
         // omit zero Neumann bdc
-        f->SelfDefined_Assemble();
-        (*f) -= (*g);
+        f->Assemble();
+        (*f) += (*g); // add interface integrate
         f->SetSubVector(ess_tdof_list, 0.0);
-//        for (int i=0; i<ess_tdof_list.Size(); ++i) (*f)[ess_tdof_list[i]] = 0.0;
+        if (1)
+        {
+            SelfDefined_LinearForm* lf = new SelfDefined_LinearForm(fsp);
+            GradientGridFunctionCoefficient grad_phi3_k(phi3_k);
+            ScalarVectorProductCoefficient epsilon_protein_prod_grad_phi3_k(epsilon_protein_mark, grad_phi3_k);
+            ScalarVectorProductCoefficient epsilon_water_prod_grad_phi3_k(epsilon_water_mark, grad_phi3_k);
+            // - alpha2 alpha3 (z1 c1^k + z2 c2^k, psi3)_{\Omega_s}
+            lf->AddDomainIntegrator(new DomainLFIntegrator(neg_term_water));
+            // epsilon_m (grad(phi3^k), grad(psi3))_{\Omega_m}
+            lf->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &epsilon_protein_prod_grad_phi3_k));
+            // epsilon_s (grad(phi3^k), grad(psi3))_{\Omega_s}
+            lf->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &epsilon_water_prod_grad_phi3_k));
+            // omit zero Neumann bdc
+            lf->SelfDefined_Assemble();
+            (*lf) += (*g);
+            lf->SetSubVector(ess_tdof_list, 0.0);
+
+            cout << "l2 norm of f : " << f->Norml2() << endl;
+            cout << "l2 norm of lf: " << lf->Norml2() << endl;
+        }
 
         delete f1;
-        f1 = new SelfDefined_LinearForm(fsp);
+        f1 = new ParLinearForm(fsp);
         f1->Update(fsp, rhs_k->GetBlock(1), 0);
-        GradientGridFunctionCoefficient grad_c1_k(c1_k);
-        ScalarVectorProductCoefficient D1_prod_grad_c1_k(D1_water, grad_c1_k);
         ProductCoefficient D1_prod_z1_water_c1_k(D1_prod_z1_water, c1_k_coeff);
-        ScalarVectorProductCoefficient D1_prod_v_K_prod_c1_k_prod_grad_phi3_k(D1_prod_z1_water_c1_k, grad_phi3_k);
-        VectorSumCoefficient np1(D1_prod_grad_c1_k, D1_prod_v_K_prod_c1_k_prod_grad_phi3_k);
-        // (D1 grad(c1^k) + D1 z1 c1^k grad(phi3^k), grad(v1))_{\Omega_s}
-        f1->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &np1));
-        f1->SelfDefined_Assemble();
+        // D1 (grad(c1^k), grad(v1))_{\Omega_s}
+        f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D1_water, c1_k));
+        // D1 (z1 c1^k grad(phi3^k), grad(v1))_{\Omega_s}
+        f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D1_prod_z1_water_c1_k, phi3_k));
+        f1->Assemble();
         f1->SetSubVector(ess_tdof_list, 0.0);
-//        for (int i=0; i<ess_tdof_list.Size(); ++i) (*f1)[ess_tdof_list[i]] = 0.0;
+        if (1)
+        {
+            GradientGridFunctionCoefficient grad_phi3_k(phi3_k);
+            GradientGridFunctionCoefficient grad_c1_k(c1_k);
+            ScalarVectorProductCoefficient D1_prod_grad_c1_k(D1_water, grad_c1_k);
+            ScalarVectorProductCoefficient D1_prod_v_K_prod_c1_k_prod_grad_phi3_k(D1_prod_z1_water_c1_k, grad_phi3_k);
+            VectorSumCoefficient np1(D1_prod_grad_c1_k, D1_prod_v_K_prod_c1_k_prod_grad_phi3_k);
+
+            SelfDefined_LinearForm* lf1 = new SelfDefined_LinearForm(fsp);
+            // D1 (grad(c1^k) + z1 c1^k grad(phi3^k), grad(v1))_{\Omega_s}
+            lf1->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &np1));
+            lf1->SelfDefined_Assemble();
+            lf1->SetSubVector(ess_tdof_list, 0.0);
+
+            cout << "l2 norm of f1 : " << f1->Norml2() << endl;
+            cout << "l2 norm of lf1: " << lf1->Norml2() << endl;
+        }
 
         delete f2;
-        f2 = new SelfDefined_LinearForm(fsp);
+        f2 = new ParLinearForm(fsp);
         f2->Update(fsp, rhs_k->GetBlock(2), 0);
-        GradientGridFunctionCoefficient grad_c2_k(c2_k);
-        ScalarVectorProductCoefficient D2_prod_grad_c2_k(D2_water, grad_c2_k);
         ProductCoefficient D2_prod_z2_water_c2_k(D2_prod_z2_water, c2_k_coeff);
-        ScalarVectorProductCoefficient D2_prod_v_Cl_prod_c2_k_prod_grad_phi3_k(D2_prod_z2_water_c2_k, grad_phi3_k);
-        VectorSumCoefficient np2(D2_prod_grad_c2_k, D2_prod_v_Cl_prod_c2_k_prod_grad_phi3_k);
-        // (D2 grad(c2^k) + D2 z2 c2^k grad(phi3^k), grad(v2))_{\Omega_s}
-        f2->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &np2));
-        f2->SelfDefined_Assemble();
+        // D2 (grad(c2^k), grad(v2))_{\Omega_s}
+        f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D2_water, c2_k));
+        // D2 (z2 c2^k grad(phi3^k), grad(v2))_{\Omega_s}
+        f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D2_prod_z2_water_c2_k, phi3_k));
+        f2->Assemble();
         f2->SetSubVector(ess_tdof_list, 0.0);
-//        for (int i=0; i<ess_tdof_list.Size(); ++i) (*f2)[ess_tdof_list[i]] = 0.0;
+        if (1)
+        {
+            GradientGridFunctionCoefficient grad_phi3_k(phi3_k);
+            GradientGridFunctionCoefficient grad_c2_k(c2_k);
+            ScalarVectorProductCoefficient D2_prod_grad_c2_k(D2_water, grad_c2_k);
+            ScalarVectorProductCoefficient D2_prod_v_Cl_prod_c2_k_prod_grad_phi3_k(D2_prod_z2_water_c2_k, grad_phi3_k);
+            VectorSumCoefficient np2(D2_prod_grad_c2_k, D2_prod_v_Cl_prod_c2_k_prod_grad_phi3_k);
 
-        y1 = (*f);
-        y2 = (*f1);
-        y3 = (*f2);
+            SelfDefined_LinearForm* lf2 = new SelfDefined_LinearForm(fsp);
+            // (D2 grad(c2^k) + D2 z2 c2^k grad(phi3^k), grad(v2))_{\Omega_s}
+            lf2->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &np2));
+            lf2->SelfDefined_Assemble();
+            lf2->SetSubVector(ess_tdof_list, 0.0);
+
+            cout << "l2 norm of f2 : " << f2->Norml2() << endl;
+            cout << "l2 norm of lf2: " << lf2->Norml2() << endl;
+        }
     }
 
     virtual Operator &GetGradient(const Vector& x) const
@@ -2484,7 +2529,6 @@ public:
 
             phi2->ProjectCoefficient(G_coeff);
             phi2->Neg(); // 在interface \Gamma 上是Dirichlet边界: -phi1
-            phi2->SetTrueVector();
 
             PetscParMatrix *A = new PetscParMatrix();
             PetscParVector *x = new PetscParVector(h1_space);
@@ -2498,7 +2542,7 @@ public:
                    assert(abs((*b)(water_dofs[i])) < 1E-10);
            }
 
-            PetscLinearSolver* solver = new PetscLinearSolver(*A, "harmonic_");
+            PetscLinearSolver* solver = new PetscLinearSolver(*A, "phi2_");
 
             chrono.Clear();
             chrono.Start();
@@ -2508,21 +2552,18 @@ public:
 
             if (self_debug) {
                 for (int i=0; i<interface_ess_tdof_list.Size(); i++)
-                {
                     assert(abs((*phi2)[interface_ess_tdof_list[i]] + (*phi1)[interface_ess_tdof_list[i]]) < 1E-8);
-                }
                 for (int i=0; i<water_dofs.Size(); i++)
-                {
                     assert(abs((*phi2)[water_dofs[i]]) < 1E-10);
-                }
             }
 
-#ifdef SELF_VERBOSE
-            if (solver->GetConverged() == 1)
-                cout << "phi2 solver: successfully converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
-            else if (solver->GetConverged() != 1)
-                cerr << "phi2 solver: failed to converged" << endl;
-#endif
+            if (verbose) {
+                if (solver->GetConverged() == 1)
+                    cout << "phi2 solver: successfully converged by iterating " << solver->GetNumIterations()
+                         << " times, taking " << chrono.RealTime() << " s." << endl;
+                else if (solver->GetConverged() != 1)
+                    cerr << "phi2 solver: failed to converged" << endl;
+            }
 
             delete A, x, b, solver;
         }

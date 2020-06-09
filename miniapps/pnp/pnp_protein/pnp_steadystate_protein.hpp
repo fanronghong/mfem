@@ -9,7 +9,7 @@
 using namespace std;
 using namespace mfem;
 
-#define SELF_VERBOSE //输出许多中间过程
+//#define SELF_VERBOSE //输出许多中间过程
 
 /* 只能定义如下集中参数
  * _1MAG_2_test_case: only do tests to verify the code, forbid to change any parameters
@@ -49,10 +49,11 @@ double c2_other    = 0.0 * alpha3; // 国际单位mol/L, Cl-阳离子在计算�
 const char* mesh_file   = "./1MAG_2.msh"; // 带有蛋白的网格,与PQR文件必须匹配
 const char* pqr_file    = "./1MAG.pqr"; // PQR文件,与网格文件必须匹配
 int p_order             = 1; //有限元基函数的多项式次数
-const char* Linearize   = "gummel"; // newton, gummel
+const char* Linearize   = "newton"; // newton, gummel
 const char* Discretize  = "cg"; // cg, dg
 const char* options_src = "./pnp_protein_petsc_opts";
 bool self_debug         = false;
+bool verbose            = false;
 bool visualize          = false;
 
 const char* phi1_txt    = "./phi1_1MAG_2.txt";
@@ -184,4 +185,15 @@ ProductCoefficient D2_prod_z2_water(D_Cl_prod_v_Cl, mark_water_coeff);
 ProductCoefficient D1_water(D_K_, mark_water_coeff);
 ProductCoefficient D2_water(D_Cl_, mark_water_coeff);
 ProductCoefficient neg_epsilon_protein(neg, epsilon_protein);
+
+ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K(neg, alpha2_prod_alpha3_prod_v_K);
+ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl(neg, alpha2_prod_alpha3_prod_v_Cl);
+ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K_water(neg_alpha2_prod_alpha3_prod_v_K, mark_water_coeff);
+ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl_water(neg_alpha2_prod_alpha3_prod_v_Cl, mark_water_coeff);
+
+double sin_cos(const Vector& x)
+{
+    return sin(x[0]) * cos(x[1]) * cos(x[2]);
+}
+FunctionCoefficient sin_cos_coeff(sin_cos);
 #endif
