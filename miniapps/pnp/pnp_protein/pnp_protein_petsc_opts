@@ -7,7 +7,7 @@
 -phi2_ksp_max_it 1000
 #-phi2_ksp_monitor
 #-phi2_ksp_monitor_short
--phi2_ksp_monitor_true_residual
+#-phi2_ksp_monitor_true_residual
 -phi2_ksp_converged_reason
 #-phi2_ksp_view
 
@@ -76,8 +76,8 @@
 -newton_ksp_divtol 1e+5
 #-newton_ksp_norm_type
 #-newton_ksp_monitor
-#-newton_ksp_monitor_true_residual
 #-newton_ksp_monitor_short
+-newton_ksp_monitor_true_residual
 -newton_ksp_converged_reason
 #-newton_ksp_view
 
@@ -90,7 +90,7 @@
 #-sub_block1_ksp_monitor
 #-sub_block1_ksp_monitor_short
 #-sub_block1_ksp_monitor_true_residual
--sub_block1_ksp_converged_reason
+#-sub_block1_ksp_converged_reason
 #-sub_block1_ksp_view
 
 -sub_block2_ksp_type gmres
@@ -102,7 +102,7 @@
 #-sub_block2_ksp_monitor
 #-sub_block2_ksp_monitor_short
 #-sub_block2_ksp_monitor_true_residual
--sub_block2_ksp_converged_reason
+#-sub_block2_ksp_converged_reason
 #-sub_block2_ksp_view
 
 -sub_block3_ksp_type gmres
@@ -114,7 +114,7 @@
 #-sub_block3_ksp_monitor
 #-sub_block3_ksp_monitor_short
 #-sub_block3_ksp_monitor_true_residual
--sub_block3_ksp_converged_reason
+#-sub_block3_ksp_converged_reason
 #-sub_block3_ksp_view
 
 

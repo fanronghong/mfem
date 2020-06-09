@@ -82,16 +82,19 @@ double phi_D_func(const Vector& x)
 {
     if (abs(x[2] - 50.0) < 1E-10) return phi_top;
     else if (abs(x[2] + 60.0) < 1E-10) return phi_bottom;
+    else return 0.0;
 }
 double c1_D_func(const Vector& x)
 {
     if (abs(x[2] - 50.0) < 1E-10) return c1_top;
     else if (abs(x[2] + 60.0) < 1E-10) return c1_bottom;
+    else return 0.0;
 }
 double c2_D_func(const Vector& x)
 {
     if (abs(x[2] - 50.0) < 1E-10) return c2_top;
     else if (abs(x[2] + 60.0) < 1E-10) return c2_bottom;
+    else return 0.0;
 }
 
 FunctionCoefficient phi_D_coeff(phi_D_func);

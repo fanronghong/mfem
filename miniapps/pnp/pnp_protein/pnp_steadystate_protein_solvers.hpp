@@ -1974,6 +1974,8 @@ public:
         return new BlockPreconditionerSolver(oh);
     }
 };
+
+
 class PNP_Newton_CG_Operator_par: public Operator
 {
 protected:
@@ -2144,8 +2146,6 @@ public:
         a12->Finalize(0);
         a12->SetOperatorType(Operator::PETSC_MATAIJ);
         a12->FormSystemMatrix(null_array, A12);
-//        A12.EliminateRows(ess_tdof_list, 0.0); // fff
-//        A12.EliminateRows(protein_dofs, 0.0);
 
         a13 = new ParBilinearForm(fsp);
         // - alpha2 alpha3 z2 (dc2, psi3)_{\Omega_s}
@@ -2154,8 +2154,6 @@ public:
         a13->Finalize(0);
         a13->SetOperatorType(Operator::PETSC_MATAIJ);
         a13->FormSystemMatrix(null_array, A13);
-//        A13.EliminateRows(ess_tdof_list, 0.0); // fff
-//        A13.EliminateRows(protein_dofs, 0.0);
     }
     virtual ~PNP_Newton_CG_Operator_par()
     {
@@ -2174,41 +2172,36 @@ public:
         phi3_k->MakeTRef(fsp, x_, 0);
         c1_k->MakeTRef(fsp, x_, sc);
         c2_k->MakeTRef(fsp, x_, 2*sc);
-        phi3_k->ProjectCoefficient(sin_cos_coeff);
 //        phi3_k->SetTrueVector();
 //        c1_k->SetTrueVector();
 //        c2_k->SetTrueVector();
         phi3_k->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
-        cout << "in Mult(), l2 norm of phi3: " << phi3_k->Norml2() << endl;
-        cout << "in Mult(), l2 norm of   c1: " <<   c1_k->Norml2() << endl;
-        cout << "in Mult(), l2 norm of   c2: " <<   c2_k->Norml2() << endl;
+        cout << "in Mult(), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
+        cout << "in Mult(), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
+        cout << "in Mult(), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
 
         GridFunctionCoefficient c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
-#ifdef SELF_DEBUG
+        if (self_debug)
         {
             // essential边界条件
-            for (int i = 0; i < top_ess_tdof_list.Size(); ++i)
-            {
-                assert(abs((phi3_k)[top_ess_tdof_list[i]] - phi_top) < TOL);
-                assert(abs((c1_k)  [top_ess_tdof_list[i]] - c1_top)  < TOL);
-                assert(abs((c2_k)  [top_ess_tdof_list[i]] - c2_top)  < TOL);
+            for (int i = 0; i < top_ess_tdof_list.Size(); ++i) {
+                assert(abs((*phi3_k)[top_ess_tdof_list[i]] - phi_top) < TOL);
+                assert(abs((*c1_k)[top_ess_tdof_list[i]] - c1_top) < TOL);
+                assert(abs((*c2_k)[top_ess_tdof_list[i]] - c2_top) < TOL);
             }
-            for (int i = 0; i < bottom_ess_tdof_list.Size(); ++i)
-            {
-                assert(abs((phi3_k)[bottom_ess_tdof_list[i]] - phi_bottom) < TOL);
-                assert(abs((c1_k)  [bottom_ess_tdof_list[i]] - c1_bottom)  < TOL);
-                assert(abs((c2_k)  [bottom_ess_tdof_list[i]] - c2_bottom)  < TOL);
+            for (int i = 0; i < bottom_ess_tdof_list.Size(); ++i) {
+                assert(abs((*phi3_k)[bottom_ess_tdof_list[i]] - phi_bottom) < TOL);
+                assert(abs((*c1_k)[bottom_ess_tdof_list[i]] - c1_bottom) < TOL);
+                assert(abs((*c2_k)[bottom_ess_tdof_list[i]] - c2_bottom) < TOL);
             }
-            for (int i=0; i<protein_dofs.Size(); ++i)
-            {
-                assert( abs((c1_k)[protein_dofs[i]])  < TOL );
-                assert( abs((c2_k)[protein_dofs[i]])  < TOL );
+            for (int i = 0; i < protein_dofs.Size(); ++i) {
+                assert(abs((*c1_k)[protein_dofs[i]]) < TOL);
+                assert(abs((*c2_k)[protein_dofs[i]]) < TOL);
             }
         }
-#endif
 
         rhs_k->Update(y.GetData(), block_trueoffsets); // update residual
         Vector y1(y.GetData() +   0, sc);
@@ -2322,11 +2315,11 @@ public:
         phi3_k->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
-//        cout << "in GetGradient(), l2 norm of phi3: " << phi3_k->Norml2() << endl;
-//        cout << "in GetGradient(), l2 norm of   c1: " <<   c1_k->Norml2() << endl;
-//        cout << "in GetGradient(), l2 norm of   c2: " <<   c2_k->Norml2() << endl;
+        cout << "in GetGradient(), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
+        cout << "in GetGradient(), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
+        cout << "in GetGradient(), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
 
-        GridFunctionCoefficient c1_k_coeff(c1_k);
+        GridFunctionCoefficient c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
         delete a21;
         a21 = new ParBilinearForm(fsp);
@@ -2338,7 +2331,6 @@ public:
         a21->SetOperatorType(Operator::PETSC_MATAIJ);
         a21->FormSystemMatrix(null_array, A21);
         A21.EliminateRows(ess_tdof_list, 0.0);
-        A21.EliminateRows(protein_dofs, 0.0);
 
         delete a22;
         a22 = new ParBilinearForm(fsp);
@@ -2350,11 +2342,9 @@ public:
         a22->Finalize(0);
         a22->SetOperatorType(Operator::PETSC_MATAIJ);
         a22->FormSystemMatrix(ess_tdof_list, A22);
-        A22.EliminateRows(protein_dofs, 1.0);
 
         delete a31;
         a31 = new ParBilinearForm(fsp);
-        GridFunctionCoefficient c2_k_coeff(c2_k);
         ProductCoefficient D2_prod_z2_water_c2_k(D2_prod_z2_water, c2_k_coeff);
         // D2 z2 c2^k (grad(dphi3), grad(v2))_{\Omega_s}
         a31->AddDomainIntegrator(new DiffusionIntegrator(D2_prod_z2_water_c2_k));
@@ -2363,7 +2353,6 @@ public:
         a31->SetOperatorType(Operator::PETSC_MATAIJ);
         a31->FormSystemMatrix(null_array, A31);
         A31.EliminateRows(ess_tdof_list, 0.0);
-        A31.EliminateRows(protein_dofs, 0.0);
 
         delete a33;
         a33 = new ParBilinearForm(fsp);
@@ -2375,7 +2364,6 @@ public:
         a33->Finalize(0);
         a33->SetOperatorType(Operator::PETSC_MATAIJ);
         a33->FormSystemMatrix(ess_tdof_list, A33);
-        A33.EliminateRows(protein_dofs, 1.0);
 
         jac_k = new BlockOperator(block_trueoffsets);
         jac_k->SetBlock(0, 0, &A11);
@@ -2452,18 +2440,21 @@ public:
         phi3_k.MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
         c1_k  .MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
         c2_k  .MakeTRef(h1_space, *u_k, block_trueoffsets[2]);
-        phi3_k = 0.0;
-        c1_k   = 0.0;
-        c2_k   = 0.0;
+//        phi3_k = 0.0;
+//        c1_k   = 0.0;
+//        c2_k   = 0.0;
         phi3_k.ProjectCoefficient(phi_D_coeff);
         c1_k  .ProjectCoefficient(c1_D_coeff);
         c2_k  .ProjectCoefficient(c2_D_coeff);
         phi3_k.SetTrueVector();
-        phi3_k.SetFromTrueVector();
         c1_k.SetTrueVector();
-        c1_k.SetFromTrueVector();
         c2_k.SetTrueVector();
-        c2_k.SetFromTrueVector();
+//        phi3_k.SetFromTrueVector();
+//        c1_k.SetFromTrueVector();
+//        c2_k.SetFromTrueVector();
+        cout << "L2 norm of phi3(before before newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of   c1(before before newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of   c2(before before newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
 
         phi1 = new ParGridFunction(h1_space);
         phi1->ProjectCoefficient(G_coeff);
@@ -2587,19 +2578,26 @@ public:
         cout << "\nNewton, CG" << p_order << ", protein, parallel"
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 
-        Vector zero_vec;
-        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
-        newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
-
         phi3_k.MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
         c1_k  .MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
         c2_k  .MakeTRef(h1_space, *u_k, block_trueoffsets[2]);
         phi3_k.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
-        cout << "L2 norm of phi3: " << phi3_k.ComputeL2Error(zero) << endl;
-        cout << "L2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
-        cout << "L2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of phi3(before newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of   c1(before newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of   c2(before newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
+
+        Vector zero_vec;
+        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
+        newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
+
+        phi3_k.SetFromTrueVector();
+        c1_k.SetFromTrueVector();
+        c2_k.SetFromTrueVector();
+        cout << "L2 norm of phi3(after newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of   c1(after newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of   c2(after newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
     }
 };
 
