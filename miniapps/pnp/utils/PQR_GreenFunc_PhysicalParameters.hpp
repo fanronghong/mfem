@@ -110,9 +110,9 @@ void Test_PhysicalParameters()
     assert(abs(alpha1*0.02569257642558086 - 1.0) < tol);
     assert(abs(alpha2/(4*M_PI*protein_rel_permittivity) - 280.22967914682994) < tol);
 
-    cout << "     Test_PhysicalParameters() succeed!" << endl;
+    cout << "======> Test Pass: Test_PhysicalParameters() succeed!" << endl;
 #else
-    cout << "     Do not test if not Angstrom scale!" << endl;
+    cout << "======> Not  Test: Do not test if not Angstrom scale!" << endl;
 #endif
 }
 
@@ -180,7 +180,7 @@ void Test_ReadPQR() // 只针对一个pqr文件做了测试
         }
     }
 
-    cout << "     Test_ReadPQR() succeed!" << endl;
+    cout << "======> Test Pass: Test_ReadPQR() succeed!" << endl;
 }
 
 
@@ -266,7 +266,7 @@ void Test_G_gradG_cfun() // 只针对特定的网格和特定的参数做测试
     assert(abs(L2norm - 2.1067E+03) < 10); //数据由张倩如提供
     assert(abs(L2norm_ - 9.2879E+03) < 10); //数据由张倩如提供
 
-    cout << "     Test_G_gradG_cfun() succeed!" << endl;
+    cout << "======> Test Pass: Test_G_gradG_cfun() succeed!" << endl;
 }
 
 

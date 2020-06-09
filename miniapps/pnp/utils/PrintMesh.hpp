@@ -93,7 +93,6 @@ void PrintMesh(const string filename, const Mesh& mesh, const Array<Element*>& a
 void Modify_Mesh()
 {
     Mesh mesh("./1MAG_2.msh");
-    const char* target_mesh = "modify_1MAG_2.mesh";
 
     int marker1 = 100, marker2 = 200;
     Array<Element*> interface, protein, water, boundary;
@@ -153,13 +152,28 @@ void Modify_Mesh()
             reorder.Append(protein_idx);
             protein_idx++;
         } else {
+            assert(water.Find(el) != -1);
             reorder.Append(water_idx);
             water_idx++;
         }
     }
+    cout << "reorder size: " << reorder.Size() << endl;
     mesh.ReorderElements(reorder);
 
-    PrintMesh(target_mesh, mesh, interface);
+    PrintMesh("reorder_1MAG_2.mesh", mesh, interface);
+}
+
+void PrintInfo_mesh()
+{
+    Mesh mesh("./reorder_1MAG_2.mesh");
+    for (int i=0; i<mesh.GetNE(); ++i) {
+        Element* el = mesh.GetElement(i);
+        cout << i << endl;
+        if (i < 45399)
+            assert(el->GetAttribute() == 1);
+        else
+            assert(el->GetAttribute() == 2);
+    }
 }
 
 void Test_PrintMesh()

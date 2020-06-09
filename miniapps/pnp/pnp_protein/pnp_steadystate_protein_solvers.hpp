@@ -11,6 +11,7 @@
 #include "../utils/GradConvection_Integrator.hpp"
 #include "../utils/SelfDefined_LinearForm.hpp"
 #include "../utils/petsc_utils.hpp"
+#include "../utils/DGSelfTraceIntegrator.hpp"
 using namespace std;
 using namespace mfem;
 
@@ -1563,7 +1564,7 @@ private:
 
         ParLinearForm lf(h1_space);
         // -<grad(G).n, psi_2>_{\Gamma_M}, G is \phi_1
-        lf.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_gradG_coeff), Gamma_m); // Neumann bdc on Gamma_m, take negative below
+        lf.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_gradG_coeff), Gamma_m);
         lf.Assemble();
 
         phi2->ProjectCoefficient(G_coeff);
@@ -1597,6 +1598,7 @@ private:
         else if (solver->GetConverged() != 1)
             cerr << "phi2 solver: failed to converged" << endl;
 #endif
+
         if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
         {
             /* Only for pqr file "1MAG.pqr" and mesh file "1MAG_2.msh", we do below tests.
@@ -1635,6 +1637,8 @@ private:
 
         // Poisson方程关于离子浓度的两项
         ParLinearForm *lf(new ParLinearForm(h1_space)); //Poisson方程的右端项
+        GradientGridFunctionCoefficient grad_phi1(phi1), grad_phi2(phi2);
+        VectorSumCoefficient grad_phi1_plus_grad_phi2(grad_phi1, grad_phi2); //就是 grad(phi1 + phi2)
         ProductCoefficient rhs1(alpha2_prod_alpha3_prod_v_K, c1_n_coeff);
         ProductCoefficient rhs2(alpha2_prod_alpha3_prod_v_Cl, c2_n_coeff);
         ProductCoefficient lf1(rhs1, mark_water_coeff);
@@ -1643,24 +1647,31 @@ private:
         lf->AddDomainIntegrator(new DomainLFIntegrator(lf1));
         // (alpha2 alpha3 z2 c2^k, psi3)_{\Omega_s}
         lf->AddDomainIntegrator(new DomainLFIntegrator(lf2));
+        // - epsilon_m <grad(phi1 + phi2).n, psi3>_{\Gamma}, interface integrator, see below another way to define interface integrate
+        lf->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator(&neg_epsilon_protein, &grad_phi1_plus_grad_phi2, mesh, protein_marker, water_marker));
         // omit 0 Neumann bdc on \Gamma_N and \Gamma_M
         lf->Assemble();
 
-        // Poisson方程的奇异项导出的interface部分
-        GradientGridFunctionCoefficient grad_phi1(phi1), grad_phi2(phi2);
-        VectorSumCoefficient grad_phi1_plus_grad_phi2(grad_phi1, grad_phi2); //就是 grad(phi1 + phi2)
-        SelfDefined_LinearForm interface_term(h1_space);
-        interface_term.AddSelfDefined_LFFacetIntegrator(new SelfDefined_LFFacetIntegrator(h1_space, grad_phi1_plus_grad_phi2,
-                                                                                          protein_marker, water_marker));
-        interface_term.SelfDefined_Assemble();
-        interface_term *= protein_rel_permittivity;
-        (*lf) -= interface_term; //界面项要移到方程的右端
+        if (0) // 另外一种第一种interface积分. Verify equivalence by seeing below l2 norm of b
+        {
+            // Poisson方程的奇异项导出的interface部分
+            SelfDefined_LinearForm interface_term(h1_space);
+            interface_term.AddSelfDefined_LFFacetIntegrator(new SelfDefined_LFFacetIntegrator(h1_space, grad_phi1_plus_grad_phi2, protein_marker, water_marker));
+            interface_term.SelfDefined_Assemble();
+            interface_term *= protein_rel_permittivity;
+            (*lf) -= interface_term; //界面项要移到方程的右端
+        }
 
         PetscParMatrix *A = new PetscParMatrix();
         PetscParVector *x = new PetscParVector(h1_space);
         PetscParVector *b = new PetscParVector(h1_space);
         blf->SetOperatorType(Operator::PETSC_MATAIJ);
         blf->FormLinearSystem(ess_tdof_list, *phi3, *lf, *A, *x, *b); // ess_tdof_list include: top, bottom
+
+        {
+            cout.precision(14);
+            cout << "l2 norm of b: " << b->Norml2() << endl;
+        }
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "phi3_");
 
