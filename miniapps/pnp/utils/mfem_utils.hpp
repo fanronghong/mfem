@@ -464,6 +464,29 @@ public:
             throw "Something wrong with mesh markers!";
     }
 };
+class EpsilonCoefficient : public Coefficient
+{
+private:
+    int protein_marker, water_marker;
+    double epsilon_protein, epsilon_water;
+
+public:
+    EpsilonCoefficient(int protein_marker_, int water_marker_, double epsilon_protein_, double epsilon_water_)
+            : protein_marker(protein_marker_), water_marker(water_marker_),
+              epsilon_protein(epsilon_protein_), epsilon_water(epsilon_water_) {}
+
+    virtual ~EpsilonCoefficient() { }
+
+    virtual double Eval(ElementTransformation &T, const IntegrationPoint &ip)
+    {
+        if (T.Attribute == protein_marker) // 蛋白区域
+            return epsilon_protein;
+        else if (T.Attribute == water_marker) // 溶液区域
+            return epsilon_water;
+        else
+            throw "Something wrong with mesh markers!";
+    }
+};
 void Test_Mark_Protein_Water_Coefficient()
 {
     MarkProteinCoefficient protein(1, 2);

@@ -56,6 +56,12 @@ int main(int argc, char **argv)
         solver->Solve();
         delete solver;
     }
+    else if (strcmp(Linearize, "gummel") == 0 && strcmp(Discretize, "dg") == 0)
+    {
+        PNP_Gummel_DG_Solver_par* solver = new PNP_Gummel_DG_Solver_par(&mesh);
+        solver->Solve();
+        delete solver;
+    }
     else if (strcmp(Linearize, "newton") == 0 && strcmp(Discretize, "cg") == 0)
     {
         PNP_Newton_CG_Solver_par* solver = new PNP_Newton_CG_Solver_par(&mesh);
