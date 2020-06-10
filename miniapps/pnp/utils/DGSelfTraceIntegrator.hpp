@@ -86,11 +86,19 @@ public:
         elmat.SetSize(ndofs);
         elmat = 0.0;
 
-        const Element* elm1 = mesh->GetElement(Trans.Elem1No);
-        const Element* elm2 = mesh->GetElement(Trans.Elem2No);
-        int attr1 = elm1->GetAttribute();
-        int attr2 = elm2->GetAttribute();
-        if (attr1 != marker || attr2 != marker) return;
+        {
+            const Element *elm1, *elm2;
+            int attr1, attr2;
+            elm1 = mesh->GetElement(Trans.Elem1No);
+            attr1 = elm1->GetAttribute();
+            if (Trans.Elem2No >= 0) {
+                elm2 = mesh->GetElement(Trans.Elem2No);
+                attr2 = elm2->GetAttribute();
+                if (attr1 != marker || attr2 != marker) return;
+            } else {
+                if (attr1 != marker) return;
+            }
+        }
 
         if (kappa_is_nonzero)
         {
@@ -557,11 +565,19 @@ public:
         elmat.SetSize(ndof1 + ndof2);
         elmat = 0.0;
 
-        const Element* elm1 = mesh->GetElement(Trans.Elem1No);
-        const Element* elm2 = mesh->GetElement(Trans.Elem2No);
-        int attr1 = elm1->GetAttribute();
-        int attr2 = elm2->GetAttribute();
-        if (attr1 != marker || attr2 != marker) return;
+        {
+            const Element *elm1, *elm2;
+            int attr1, attr2;
+            elm1 = mesh->GetElement(Trans.Elem1No);
+            attr1 = elm1->GetAttribute();
+            if (Trans.Elem2No >= 0) {
+                elm2 = mesh->GetElement(Trans.Elem2No);
+                attr2 = elm2->GetAttribute();
+                if (attr1 != marker || attr2 != marker) return;
+            } else {
+                if (attr1 != marker) return;
+            }
+        }
 
         const IntegrationRule *ir = IntRule; // ref: DGTraceIntegrator::AssembleFaceMatrix
         if (ir == NULL) {
@@ -682,11 +698,19 @@ public:
         elmat.SetSize(ndof1 + ndof2);
         elmat = 0.0;
 
-        const Element* elm1 = mesh->GetElement(Trans.Elem1No);
-        const Element* elm2 = mesh->GetElement(Trans.Elem2No);
-        int attr1 = elm1->GetAttribute();
-        int attr2 = elm2->GetAttribute();
-        if (attr1 != marker || attr2 != marker) return;
+        {
+            const Element *elm1, *elm2;
+            int attr1, attr2;
+            elm1 = mesh->GetElement(Trans.Elem1No);
+            attr1 = elm1->GetAttribute();
+            if (Trans.Elem2No >= 0) {
+                elm2 = mesh->GetElement(Trans.Elem2No);
+                attr2 = elm2->GetAttribute();
+                if (attr1 != marker || attr2 != marker) return;
+            } else {
+                if (attr1 != marker) return;
+            }
+        }
 
         const IntegrationRule *ir = IntRule; // ref: DGTraceIntegrator::AssembleFaceMatrix
         if (ir == NULL) {

@@ -1925,25 +1925,39 @@ public:
         *phi3_n = 0.0;
         *c1_n   = 0.0;
         *c2_n   = 0.0;
-        // essential边界条件
-        phi3->ProjectBdrCoefficient(phi_D_top_coeff, top_bdr);
-        c1  ->ProjectBdrCoefficient( c1_D_top_coeff, top_bdr);
-        c2  ->ProjectBdrCoefficient( c2_D_top_coeff, top_bdr);
-        phi3->ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
-        c1  ->ProjectBdrCoefficient( c1_D_bottom_coeff, bottom_bdr);
-        c2  ->ProjectBdrCoefficient( c2_D_bottom_coeff, bottom_bdr);
-        phi3->SetTrueVector();
-        c1  ->SetTrueVector();
-        c2  ->SetTrueVector();
-        phi3_n->ProjectBdrCoefficient(phi_D_top_coeff, top_bdr);
-        c1_n  ->ProjectBdrCoefficient( c1_D_top_coeff, top_bdr);
-        c2_n  ->ProjectBdrCoefficient( c2_D_top_coeff, top_bdr);
-        phi3_n->ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
-        c1_n  ->ProjectBdrCoefficient( c1_D_bottom_coeff, bottom_bdr);
-        c2_n  ->ProjectBdrCoefficient( c2_D_bottom_coeff, bottom_bdr);
-        phi3_n->SetTrueVector();
-        c1_n  ->SetTrueVector();
-        c2_n  ->SetTrueVector();
+        { // set essential bdc
+            H1_FECollection h1_fec(p_order, mesh->Dimension());
+            ParFiniteElementSpace h1_fes(pmesh, &h1_fec);
+
+            ParGridFunction phi3_D_h1(&h1_fes), c1_D_h1(&h1_fes), c2_D_h1(&h1_fes);
+            phi3_D_h1 = 0.0;
+            c1_D_h1 = 0.0;
+            c2_D_h1 = 0.0;
+
+            phi3_D_h1.ProjectBdrCoefficient(phi_D_top_coeff, top_bdr);
+            phi3_D_h1.ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
+            phi3_D_h1.SetTrueVector();
+            phi3->ProjectGridFunction(phi3_D_h1);
+            phi3->SetTrueVector();
+            phi3_n->ProjectGridFunction(phi3_D_h1);
+            phi3_n->SetTrueVector();
+
+            c1_D_h1.ProjectBdrCoefficient(c1_D_top_coeff, top_bdr);
+            c1_D_h1.ProjectBdrCoefficient(c1_D_bottom_coeff, bottom_bdr);
+            c1_D_h1.SetTrueVector();
+            c1->ProjectGridFunction(c1_D_h1);
+            c1->SetTrueVector();
+            c1_n->ProjectGridFunction(c1_D_h1);
+            c1_n->SetTrueVector();
+
+            c2_D_h1.ProjectBdrCoefficient(c2_D_top_coeff, top_bdr);
+            c2_D_h1.ProjectBdrCoefficient(c2_D_bottom_coeff, bottom_bdr);
+            c2_D_h1.SetTrueVector();
+            c2->ProjectGridFunction(c2_D_h1);
+            c2->SetTrueVector();
+            c2_n->ProjectGridFunction(c2_D_h1);
+            c2_n->SetTrueVector();
+        }
 
         dc = new VisItDataCollection("data collection", mesh);
         dc->RegisterField("phi1", phi1);
@@ -1951,6 +1965,10 @@ public:
         dc->RegisterField("phi3", phi3);
         dc->RegisterField("c1",   c1);
         dc->RegisterField("c2",   c2);
+
+//        Visualize(*dc, "phi3", "phi3");
+//        Visualize(*dc, "c1", "c1");
+//        Visualize(*dc, "c2", "c2");
     }
     ~PNP_Gummel_DG_Solver_par()
     {
@@ -1963,7 +1981,7 @@ public:
         Solve_Singular();
         Solve_Harmonic();
 
-        cout << "\n------> Gummel, CG" << p_order << ", protein, parallel"
+        cout << "\n------> Gummel, DG" << p_order << ", protein, parallel"
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << '\n' << endl;
         int iter = 1;
         while (iter < Gummel_max_iters)
@@ -2038,9 +2056,52 @@ private:
     // 2.求解调和方程部分的电势
     void Solve_Harmonic()
     {
-        DG_FECollection* h1_fec = new DG_FECollection(p_order, mesh->Dimension());
+        H1_FECollection* h1_fec = new H1_FECollection(p_order, mesh->Dimension());
         ParFiniteElementSpace* h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
         ParGridFunction* phi2_ = new ParGridFunction(h1_fes);
+
+        int size = pmesh->bdr_attributes.Max();
+        Array<int> ess_tdof_list_, interface_ess_tdof_list_;
+
+        ess_bdr.SetSize(size);
+        ess_bdr                    = 0;
+        ess_bdr[top_marker - 1]    = 1;
+        ess_bdr[bottom_marker - 1] = 1;
+        h1_fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list_);
+
+        interface_bdr.SetSize(size);
+        interface_bdr                       = 0;
+        interface_bdr[interface_marker - 1] = 1;
+        h1_fes->GetEssentialTrueDofs(interface_bdr, interface_ess_tdof_list_);
+
+        Array<int> protein_dofs_, water_dofs_;
+        for (int i=0; i<h1_fes->GetNE(); ++i)
+        {
+            Element* el = mesh->GetElement(i);
+            int attr = el->GetAttribute();
+            Array<int> dofs;
+            if (attr == protein_marker)
+            {
+                h1_fes->GetElementDofs(i, dofs);
+                protein_dofs_.Append(dofs);
+            }
+            else
+            {
+                assert(attr == water_marker);
+                h1_fes->GetElementDofs(i,dofs);
+                water_dofs_.Append(dofs);
+            }
+        }
+        protein_dofs_.Sort();
+        protein_dofs_.Unique();
+        water_dofs_.Sort();
+        water_dofs_.Unique();
+        for (int i=0; i<interface_ess_tdof_list.Size(); i++) // 去掉protein和water中的interface上的dofs
+        {
+            protein_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
+            water_dofs_.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
+        }
+
 
         ParBilinearForm blf(h1_fes);
         // (grad(phi2), grad(psi2))_{\Omega_m}, \Omega_m: protein domain
@@ -2060,9 +2121,9 @@ private:
         PetscParVector *x = new PetscParVector(h1_fes);
         PetscParVector *b = new PetscParVector(h1_fes);
         blf.SetOperatorType(Operator::PETSC_MATAIJ);
-        blf.FormLinearSystem(interface_ess_tdof_list, *phi2_, lf, *A, *x, *b);
+        blf.FormLinearSystem(interface_ess_tdof_list_, *phi2_, lf, *A, *x, *b);
 
-        A->EliminateRows(water_dofs, 1.0); // ffff自己修改了源码: 重载了这个函数
+        A->EliminateRows(water_dofs_, 1.0); // ffff自己修改了源码: 重载了这个函数
         if (self_debug)
         {   // 确保只在水中(不包括蛋白质和interface)的自由度为0
             for (int i = 0; i < water_dofs.Size(); i++)
@@ -2181,8 +2242,8 @@ private:
 
         ParLinearForm *lf(new ParLinearForm(fes));
         // sigma <c1_D, D1 grad(v1).n> + kappa <{h^{-1} D1} c1_D, v1>
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_top_coeff, D1_water, sigma, kappa), top_bdr);
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_bottom_coeff, D1_water, sigma, kappa), bottom_bdr);
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_top_coeff, D_K_, sigma, kappa), top_bdr);
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_bottom_coeff, D_K_, sigma, kappa), bottom_bdr);
         // sigma <c1_D, D1 z1 v1 grad(phi3^k)>
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_D_top_coeff, phi3_n), top_bdr);
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_D_bottom_coeff, phi3_n), bottom_bdr);
@@ -2253,8 +2314,8 @@ private:
 
         ParLinearForm *lf(new ParLinearForm(fes));
         // sigma <c2_D, D2 grad(v2).n> + kappa <{h^{-1} D2} c2_D, v2>
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_top_coeff, D2_water, sigma, kappa), top_bdr);
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_bottom_coeff, D2_water, sigma, kappa), bottom_bdr);
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_top_coeff, D_Cl_, sigma, kappa), top_bdr);
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_bottom_coeff, D_Cl_, sigma, kappa), bottom_bdr);
         // sigma <c2_D, D2 z2 v2 grad(phi3^k)>
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_D_top_coeff, phi3_n), top_bdr);
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_D_bottom_coeff, phi3_n), bottom_bdr);
