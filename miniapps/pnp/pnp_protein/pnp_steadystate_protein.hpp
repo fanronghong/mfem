@@ -49,12 +49,12 @@ double c2_other    = 0.0 * alpha3; // 国际单位mol/L, Cl-阳离子在计算�
 const char* mesh_file   = "./1MAG_2.msh"; // 带有蛋白的网格,与PQR文件必须匹配
 const char* pqr_file    = "./1MAG.pqr"; // PQR文件,与网格文件必须匹配
 int p_order             = 1; //有限元基函数的多项式次数
-const char* Linearize   = "newton"; // newton, gummel
+const char* Linearize   = "gummel"; // newton, gummel
 const char* Discretize  = "cg"; // cg, dg
 const char* options_src = "./pnp_protein_petsc_opts";
 bool self_debug         = false;
 bool verbose            = false;
-bool visualize          = false;
+bool visualize          = true;
 
 const char* phi1_txt    = "./phi1_1MAG_2.txt";
 const int refine_times  = 0;
@@ -96,10 +96,41 @@ double c2_D_func(const Vector& x)
     else if (abs(x[2] + 60.0) < 1E-10) return c2_bottom;
     else return 0.0;
 }
+double phi_D_top(const Vector& x)
+{
+    return phi_top;
+}
+double phi_D_bottom(const Vector& x)
+{
+    return phi_bottom;
+}
+double c1_D_top(const Vector& x)
+{
+    return c1_top;
+}
+double c1_D_bottom(const Vector& x)
+{
+    return c1_bottom;
+}
+double c2_D_top(const Vector& x)
+{
+    return c2_top;
+}
+double c2_D_bottom(const Vector& x)
+{
+    return c2_bottom;
+}
 
 FunctionCoefficient phi_D_coeff(phi_D_func);
 FunctionCoefficient c1_D_coeff (c1_D_func);
 FunctionCoefficient c2_D_coeff (c2_D_func);
+
+ConstantCoefficient phi_D_top_coeff(phi_top);
+ConstantCoefficient phi_D_bottom_coeff(phi_bottom);
+ConstantCoefficient c1_D_top_coeff(c1_top);
+ConstantCoefficient c1_D_bottom_coeff(c1_bottom);
+ConstantCoefficient c2_D_top_coeff(c2_top);
+ConstantCoefficient c2_D_bottom_coeff(c2_bottom);
 #elif defined(_1bl8_tu)
 const char* options_src = "./petsc_opts";
 const char* mesh_file = "../data/1bl8_tu.msh"; // 带有蛋白的网格,与PQR文件必须匹配

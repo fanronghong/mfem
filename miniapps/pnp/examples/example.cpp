@@ -22,39 +22,20 @@ int main()
     const int interface_marker = 9;
     Mesh mesh("../pnp_protein/1MAG_2.msh");
 
-    Array<int> marker;
-    marker.SetSize(mesh.bdr_attributes.Max());
-    marker = 0;
-    marker[interface_marker - 1] = 1;
+    int nv = mesh.GetNV();
+    Vector coors;
+    mesh.GetVertices(coors);
 
-    H1_FECollection fec(1, 3);
-    FiniteElementSpace fes(&mesh, &fec);
-    int size = fes.GetTrueVSize();
+    Array<double> z_coor;
+    for (int i=0; i<nv; ++i)
+    {
+        cout << i << "-th vertex: " << coors[i] << ", " << coors[i + nv] << ", " << coors[i + 2*nv] << endl;
+        z_coor.Append(coors[i + 2*nv]);
+    }
 
-    ConstantCoefficient rand(3.1415926);
-    ConstantCoefficient neg(-1.0);
-    ProductCoefficient neg_rand(neg, rand);
-    FunctionCoefficient sin_coeff(sin_func);
-    FunctionCoefficient cos_coeff(cos_func);
+    z_coor.Sort();
+//    z_coor.Unique();
+    z_coor.Print(cout << "z_coor: ", z_coor.Size());
+    cout << "Max z: " << z_coor.Max() << "; Mix z: " << z_coor.Min() << endl;
 
-    BilinearForm blf(&fes);
-    blf.AddBdrFaceIntegrator(new DGDiffusionIntegrator(neg_rand, 0.0, 0.0), marker);
-    blf.Assemble();
-
-    GridFunction sin_gf(&fes), cos_gf(&fes), u(&fes);
-    sin_gf.ProjectCoefficient(sin_coeff);
-    cos_gf.ProjectCoefficient(cos_coeff);
-    u = sin_gf;
-    u += cos_gf;
-    GradientGridFunctionCoefficient gradu(&u);
-
-    Vector out1(size);
-    blf.Mult(u, out1);
-
-    LinearForm lf(&fes);
-    lf.AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator(&rand, &gradu, &mesh, 1, 2));
-    lf.Assemble();
-
-    out1.Print(cout << "out1: ", size);
-    lf  .Print(cout << "lf  : ", size);
 }

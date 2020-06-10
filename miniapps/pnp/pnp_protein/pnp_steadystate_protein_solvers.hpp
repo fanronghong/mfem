@@ -1427,15 +1427,21 @@ public:
         *c1_n   = 0.0;
         *c2_n   = 0.0;
         // essential边界条件
-        phi3->ProjectBdrCoefficient(phi_D_coeff, ess_bdr);
-        c1  ->ProjectBdrCoefficient(c1_D_coeff, ess_bdr);
-        c2  ->ProjectBdrCoefficient(c2_D_coeff, ess_bdr);
+        phi3->ProjectBdrCoefficient(phi_D_top_coeff, top_bdr);
+        c1  ->ProjectBdrCoefficient( c1_D_top_coeff, top_bdr);
+        c2  ->ProjectBdrCoefficient( c2_D_top_coeff, top_bdr);
+        phi3->ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
+        c1  ->ProjectBdrCoefficient( c1_D_bottom_coeff, bottom_bdr);
+        c2  ->ProjectBdrCoefficient( c2_D_bottom_coeff, bottom_bdr);
         phi3->SetTrueVector();
         c1  ->SetTrueVector();
         c2  ->SetTrueVector();
-        phi3_n->ProjectBdrCoefficient(phi_D_coeff, ess_bdr);
-        c1_n  ->ProjectBdrCoefficient(c1_D_coeff, ess_bdr);
-        c2_n  ->ProjectBdrCoefficient(c2_D_coeff, ess_bdr);
+        phi3_n->ProjectBdrCoefficient(phi_D_top_coeff, top_bdr);
+        c1_n  ->ProjectBdrCoefficient( c1_D_top_coeff, top_bdr);
+        c2_n  ->ProjectBdrCoefficient( c2_D_top_coeff, top_bdr);
+        phi3_n->ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
+        c1_n  ->ProjectBdrCoefficient( c1_D_bottom_coeff, bottom_bdr);
+        c2_n  ->ProjectBdrCoefficient( c2_D_bottom_coeff, bottom_bdr);
         phi3_n->SetTrueVector();
         c1_n  ->SetTrueVector();
         c2_n  ->SetTrueVector();
@@ -1842,66 +1848,12 @@ public:
         PetscInt M, N;
         ierr = MatNestGetSubMats(Jacobian, &N, &M, &sub); PCHKERRQ(sub[0][0], ierr); // get block matrices
         ierr = MatNestGetISs(Jacobian, index_set, NULL); PCHKERRQ(index_set, ierr); // get the index sets of the blocks
-//        cout << "M: " << M << ", N: " << N << endl;
-//        MatView(sub[0][0], PETSC_VIEWER_STDOUT_WORLD);
-//        MatView(sub[1][1], PETSC_VIEWER_STDOUT_WORLD);
-//        MatView(sub[2][2], PETSC_VIEWER_STDOUT_WORLD);
-//        ISView(index_set[0],PETSC_VIEWER_STDOUT_WORLD);
-//        ISView(index_set[1],PETSC_VIEWER_STDOUT_WORLD);
-//        ISView(index_set[2],PETSC_VIEWER_STDOUT_WORLD);
-//        Write_Mat_Matlab_txt("A11_.m", sub[0][0]);
-//        Write_Mat_Matlab_txt("A22_.m", sub[1][1]);
-//        Write_Mat_Matlab_txt("A33_.m", sub[2][2]);
-#ifdef CLOSE
-        {
-            PetscScalar haha[height/3];
-            PetscInt    id[height/3];
-            for (int i=0; i<height/3; ++i) {
-                haha[i] = i%10;
-                id[i] = i;
-            }
-            Vec x,y;
-            MatCreateVecs(sub[0][0], &x, &y);
-            VecSetValues(x, height/3, id, haha, INSERT_VALUES);
-            VecAssemblyBegin(x);
-            VecAssemblyEnd(x);
-
-            PetscScalar norm;
-
-            MatMult(sub[0][0], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A11_haha: " << norm << endl;
-
-            MatMult(sub[0][1], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A12_haha: " << norm << endl;
-
-            MatMult(sub[0][2], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A13_haha: " << norm << endl;
-
-            MatMult(sub[1][0], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A21_haha: " << norm << endl;
-
-            MatMult(sub[1][1], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A22_haha: " << norm << endl;
-
-            MatMult(sub[2][0], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A31_haha: " << norm << endl;
-
-            MatMult(sub[2][2], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A33_haha: " << norm << endl;
-        }
-#endif
 
         for (int i=0; i<3; ++i)
         {
             ierr = KSPCreate(MPI_COMM_WORLD, &kspblock[i]); PCHKERRQ(kspblock[i], ierr);
             ierr = KSPSetOperators(kspblock[i], sub[i][i], sub[i][i]); PCHKERRQ(sub[i][i], ierr);
+
             if (i == 0)
                 KSPAppendOptionsPrefix(kspblock[i], "sub_block1_");
             else if (i == 1)
@@ -1909,6 +1861,7 @@ public:
             else if (i == 2)
                 KSPAppendOptionsPrefix(kspblock[i], "sub_block3_");
             else MFEM_ABORT("Wrong block preconditioner solver!");
+
             KSPSetFromOptions(kspblock[i]);
             KSPSetUp(kspblock[i]);
         }
@@ -1941,15 +1894,7 @@ public:
             VecGetSubVector(*Y, index_set[i], &blocky);
 
             KSPSolve(kspblock[i], blockx, blocky);
-#ifdef CLOSE
-{
-            PetscScalar normx, normy;
-                VecNorm(blockx, NORM_2, &normx);
-               VecNorm(blocky, NORM_2, &normy);
-               cout << "norm x: " << normx
-                    << ", norm y: " << normy << endl;
-            }
-#endif
+
             VecRestoreSubVector(*X, index_set[i], &blockx);
             VecRestoreSubVector(*Y, index_set[i], &blocky);
         }
@@ -1984,17 +1929,15 @@ protected:
     Array<int> block_offsets, block_trueoffsets;
     mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
     mutable BlockOperator *jac_k; // Jacobian at current solution
+    PetscNonlinearSolver* newton_solver;
 
-    mutable ParLinearForm *f, *f1, *f2;
-    ParLinearForm *g;
+    mutable ParLinearForm *f, *f1, *f2, *g;
     mutable PetscParMatrix A11, A12, A13, A21, A22, A31, A33;
     mutable ParBilinearForm *a11, *a12, *a13, *a21, *a22, *a31, *a33;
 
     ParGridFunction *phi1, *phi2;
     VectorCoefficient* grad_phi1_plus_grad_phi2;
     ParGridFunction *phi3_k, *c1_k, *c2_k;
-
-    PetscNonlinearSolver* newton_solver;
 
     Array<int> ess_bdr, top_bdr, bottom_bdr, interface_bdr, Gamma_m_bdr;
     Array<int> ess_tdof_list, top_ess_tdof_list, bottom_ess_tdof_list,
@@ -2169,12 +2112,10 @@ public:
 //        cout << "l2 norm of y: " << y.Norml2() << endl;
         int sc = height / 3;
         Vector& x_ = const_cast<Vector&>(x);
+
         phi3_k->MakeTRef(fsp, x_, 0);
         c1_k->MakeTRef(fsp, x_, sc);
         c2_k->MakeTRef(fsp, x_, 2*sc);
-//        phi3_k->SetTrueVector();
-//        c1_k->SetTrueVector();
-//        c2_k->SetTrueVector();
         phi3_k->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
@@ -2226,7 +2167,7 @@ public:
         f->Assemble();
         (*f) += (*g); // add interface integrate
         f->SetSubVector(ess_tdof_list, 0.0);
-        if (1)
+        if (0)
         {
             SelfDefined_LinearForm* lf = new SelfDefined_LinearForm(fsp);
             GradientGridFunctionCoefficient grad_phi3_k(phi3_k);
@@ -2257,7 +2198,7 @@ public:
         f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D1_prod_z1_water_c1_k, phi3_k));
         f1->Assemble();
         f1->SetSubVector(ess_tdof_list, 0.0);
-        if (1)
+        if (0)
         {
             GradientGridFunctionCoefficient grad_phi3_k(phi3_k);
             GradientGridFunctionCoefficient grad_c1_k(c1_k);
@@ -2274,6 +2215,7 @@ public:
             cout << "l2 norm of f1 : " << f1->Norml2() << endl;
             cout << "l2 norm of lf1: " << lf1->Norml2() << endl;
         }
+        f1->SetSubVector(protein_dofs, 0.0);
 
         delete f2;
         f2 = new ParLinearForm(fsp);
@@ -2285,7 +2227,7 @@ public:
         f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D2_prod_z2_water_c2_k, phi3_k));
         f2->Assemble();
         f2->SetSubVector(ess_tdof_list, 0.0);
-        if (1)
+        if (0)
         {
             GradientGridFunctionCoefficient grad_phi3_k(phi3_k);
             GradientGridFunctionCoefficient grad_c2_k(c2_k);
@@ -2302,6 +2244,7 @@ public:
             cout << "l2 norm of f2 : " << f2->Norml2() << endl;
             cout << "l2 norm of lf2: " << lf2->Norml2() << endl;
         }
+        f2->SetSubVector(protein_dofs, 0.0);
     }
 
     virtual Operator &GetGradient(const Vector& x) const
@@ -2309,6 +2252,7 @@ public:
         cout << "in PNP_Newton_Operator::GetGradient()" << endl;
         int sc = height / 3;
         Vector& x_ = const_cast<Vector&>(x);
+
         phi3_k->MakeTRef(fsp, x_, 0);
         c1_k->MakeTRef(fsp, x_, sc);
         c2_k->MakeTRef(fsp, x_, 2*sc);
@@ -2342,6 +2286,7 @@ public:
         a22->Finalize(0);
         a22->SetOperatorType(Operator::PETSC_MATAIJ);
         a22->FormSystemMatrix(ess_tdof_list, A22);
+        A22.EliminateRows(protein_dofs, 1.0);
 
         delete a31;
         a31 = new ParBilinearForm(fsp);
@@ -2364,6 +2309,7 @@ public:
         a33->Finalize(0);
         a33->SetOperatorType(Operator::PETSC_MATAIJ);
         a33->FormSystemMatrix(ess_tdof_list, A33);
+        A33.EliminateRows(protein_dofs, 1.0);
 
         jac_k = new BlockOperator(block_trueoffsets);
         jac_k->SetBlock(0, 0, &A11);
@@ -2394,6 +2340,7 @@ protected:
     ParGridFunction *phi1, *phi2;
 
     StopWatch chrono;
+    VisItDataCollection* dc;
 
 public:
     PNP_Newton_CG_Solver_par(Mesh* mesh_): mesh(mesh_)
@@ -2443,9 +2390,15 @@ public:
 //        phi3_k = 0.0;
 //        c1_k   = 0.0;
 //        c2_k   = 0.0;
-        phi3_k.ProjectCoefficient(phi_D_coeff);
-        c1_k  .ProjectCoefficient(c1_D_coeff);
-        c2_k  .ProjectCoefficient(c2_D_coeff);
+        phi3_k.ProjectBdrCoefficient(phi_D_top_coeff, top_bdr);
+        phi3_k.ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
+        c1_k.ProjectBdrCoefficient(c1_D_top_coeff, top_bdr);
+        c1_k.ProjectBdrCoefficient(c1_D_bottom_coeff, bottom_bdr);
+        c2_k.ProjectBdrCoefficient(c2_D_top_coeff, top_bdr);
+        c2_k.ProjectBdrCoefficient(c2_D_bottom_coeff, bottom_bdr);
+//        phi3_k.ProjectCoefficient(phi_D_coeff);
+//        c1_k  .ProjectCoefficient(c1_D_coeff);
+//        c2_k  .ProjectCoefficient(c2_D_coeff);
         phi3_k.SetTrueVector();
         c1_k.SetTrueVector();
         c2_k.SetTrueVector();
@@ -2560,6 +2513,18 @@ public:
         }
         cout << "L2 norm of phi2: " << phi2->ComputeL2Error(zero) << endl;
 
+        dc = new VisItDataCollection("data collection", pmesh);
+        dc->RegisterField("phi1", phi1);
+        dc->RegisterField("phi2", phi2);
+        dc->RegisterField("phi3_k", &phi3_k);
+        dc->RegisterField("c1_k",   &c1_k);
+        dc->RegisterField("c2_k",   &c2_k);
+        Visualize(*dc, "phi1", "phi1");
+        Visualize(*dc, "phi2", "phi2");
+        Visualize(*dc, "phi3_k", "phi3_k");
+        Visualize(*dc, "c1_k", "c1_k");
+        Visualize(*dc, "c2_k", "c2_k");
+
         op = new PNP_Newton_CG_Operator_par(h1_space, phi1, phi2);
 
         // Set the newton solve parameters
@@ -2595,9 +2560,41 @@ public:
         phi3_k.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
+        cout << "L2 norm of phi1(after newton->Mult()): " << phi1->ComputeL2Error(zero) << endl;
+        cout << "L2 norm of phi2(after newton->Mult()): " << phi2->ComputeL2Error(zero) << endl;
         cout << "L2 norm of phi3(after newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
         cout << "L2 norm of   c1(after newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
         cout << "L2 norm of   c2(after newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
+
+        if (visualize)
+        {
+            (phi3_k) /= alpha1;
+            (c1_k)  /= alpha3;
+            (c2_k)  /= alpha3;
+            phi3_k.SetTrueVector();
+            c1_k.SetTrueVector();
+            c2_k.SetTrueVector();
+
+            Visualize(*dc, "phi3_k", "phi3_k");
+            Visualize(*dc, "c1_k", "c1_k");
+            Visualize(*dc, "c2_k", "c2_k");
+            cout << "solution vector size on mesh: phi3, " << phi3_k.Size()
+                 << "; c1, " << c1_k.Size() << "; c2, " << c2_k.Size() << endl;
+            ofstream results("phi3_c1_c2_CG_Newton.vtk");
+            results.precision(14);
+            int ref = 0;
+            pmesh->PrintVTK(results, ref);
+            phi3_k.SaveVTK(results, "phi3_k", ref);
+            c1_k.SaveVTK(results, "c1_k", ref);
+            c2_k.SaveVTK(results, "c2_k", ref);
+
+            (phi3_k) *= (alpha1);
+            (c1_k)  *= (alpha3);
+            (c2_k)  *= (alpha3);
+            phi3_k.SetTrueVector();
+            c1_k.SetTrueVector();
+            c2_k.SetTrueVector();
+        }
     }
 };
 
