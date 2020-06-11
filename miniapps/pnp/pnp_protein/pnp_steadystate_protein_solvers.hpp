@@ -2198,9 +2198,28 @@ private:
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "phi3_");
 
+        if (0)
+        {
+            ParBilinearForm* prec = new ParBilinearForm(fes);
+            // Epsilon (grad(phi3), grad(psi3))_{\Omega}. Epsilon=epsilon_m in \Omega_m, Epsilon=epsilon_s in \Omega_s
+            prec->AddDomainIntegrator(new DiffusionIntegrator(Epsilon));
+            // - <{Epsilon grad(phi3)}, [psi3]> + sigma <[phi3], {Epsilon grad(psi3)}> + kappa <{h^{-1} Epsilon}>
+            prec->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(Epsilon, sigma, kappa));
+            prec->AddBdrFaceIntegrator(new DGDiffusionIntegrator(Epsilon, sigma, kappa), ess_bdr);
+            prec->Assemble();
+
+            PetscParMatrix PC;
+            prec->SetOperatorType(Operator::PETSC_MATAIJ);
+            prec->FormSystemMatrix(ess_tdof_list, PC);
+
+            PetscLinearSolver* pc = new PetscLinearSolver(PC, "phi3SPDPC_");
+            solver->SetPreconditioner(*pc);
+        }
+
         chrono.Clear();
         chrono.Start();
         solver->Mult(*b, *x);
+//        MFEM_ABORT("phi3 spd pc");
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *phi3);
 
@@ -2265,9 +2284,39 @@ private:
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
 
+        if (1)
+        {
+            ParBilinearForm* prec = new ParBilinearForm(fes);
+            // D1 (grad(c1), grad(v1))_{\Omega_s}
+            ProductCoefficient scale_D1(scale_coeff, D1_water);
+            prec->AddDomainIntegrator(new DiffusionIntegrator(scale_D1));
+            // - <{D1 grad(c1)}, [v1]> + sigma <[c1], {D1 grad(v1)}> + kappa <{h^{-1} D1} [c1], [v1]> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
+            prec->AddInteriorFaceIntegrator(new selfDGDiffusionIntegrator(D1_water, sigma, kappa, mesh, water_marker));
+            prec->AddBdrFaceIntegrator(new selfDGDiffusionIntegrator(D1_water, sigma, kappa, mesh, water_marker), ess_bdr);
+//            // D1 z1 (c1 grad(phi3^k), grad(v1))_{\Omega_s}
+//            prec->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_n, &D1_prod_z1_water));
+//            // - <{D1 z1 c1 grad(phi^k)}, [v1]> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
+//            prec->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(D1_prod_z1_water, *phi3_n, mesh, water_marker));
+//            prec->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(D1_prod_z1_water, *phi3_n, mesh, water_marker), ess_bdr);
+//            // sigma <[c1], {D1 z1 v1 grad(phi3^k}> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
+//            prec->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi3_n, mesh, water_marker));
+//            prec->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi3_n, mesh, water_marker), ess_bdr);
+            prec->Assemble(0);
+            prec->Finalize(0);
+
+            PetscParMatrix PC;
+            prec->SetOperatorType(Operator::PETSC_MATAIJ);
+            prec->FormSystemMatrix(ess_tdof_list, PC);
+        	PC.EliminateRows(protein_dofs, 1.0);
+
+            PetscLinearSolver* pc = new PetscLinearSolver(PC, "np1SPDPC_");
+            solver->SetPreconditioner(*pc);
+        }
+
         chrono.Clear();
         chrono.Start();
         solver->Mult(*b, *x);
+//        MFEM_ABORT("c1SPDPC stop");
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *c1);
 
@@ -2336,6 +2385,33 @@ private:
         }
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
+
+		if (0)
+        {
+            ParBilinearForm* prec = new ParBilinearForm(fes);
+			// D2 (grad(c2), grad(v2))_{\Omega_s}
+			prec->AddDomainIntegrator(new DiffusionIntegrator(D2_water));
+//			// D2 z2 (c2 grad(phi3^k), grad(v2))_{\Omega_s}
+//			prec->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_n, &D2_prod_z2_water));
+			// - <{D2 grad(c2)}, [v2]> + sigma <[c2], {D2 grad(v2)}> + kappa <{h^{-1} D2} [c2], [v2]> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
+			prec->AddInteriorFaceIntegrator(new selfDGDiffusionIntegrator(D2_water, sigma, kappa, mesh, water_marker));
+			prec->AddBdrFaceIntegrator(new selfDGDiffusionIntegrator(D2_water, sigma, kappa, mesh, water_marker), ess_bdr);
+//			// - <{D2 z2 c2 grad(phi^k)}, [v2]> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
+//			prec->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(D2_prod_z2_water, *phi3_n, mesh, water_marker));
+//			prec->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(D2_prod_z2_water, *phi3_n, mesh, water_marker), ess_bdr);
+//			// sigma <[c2], {D2 z2 v2 grad(phi3^k}> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
+//			prec->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_Cl_v_Cl, *phi3_n, mesh, water_marker));
+//			prec->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_Cl_v_Cl, *phi3_n, mesh, water_marker), ess_bdr);
+            prec->Assemble(0);
+            prec->Finalize(0);
+
+            PetscParMatrix PC;
+            prec->SetOperatorType(Operator::PETSC_MATAIJ);
+            prec->FormSystemMatrix(ess_tdof_list, PC);
+
+            PetscLinearSolver* pc = new PetscLinearSolver(PC, "np2SPDPC_");
+            solver->SetPreconditioner(*pc);
+        }
 
         chrono.Clear();
         chrono.Start();
