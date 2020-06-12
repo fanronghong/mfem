@@ -1507,6 +1507,17 @@ public:
         cout << "L2 norm of   c1: " << c1->ComputeL2Error(zero) << endl;
         cout << "L2 norm of   c2: " << c2->ComputeL2Error(zero) << '\n' << endl;
 
+        {
+//            ofstream phi3_txt("/home/fan/phi3_Gummel_CG.txt"), c1_txt("/home/fan/c1_Gummel_CG.txt"), c2_txt("/home/fan/c2_Gummel_CG.txt");
+//
+//            phi3_txt.precision(14);
+//            c1_txt.precision(14);
+//            c2_txt.precision(14);
+//            phi3->Print(phi3_txt << phi3->Size() << '\n');
+//            c1->Print(c1_txt << c1->Size() << '\n');
+//            c2->Print(c2_txt << c2->Size() << '\n');
+        }
+
         if (visualize)
         {
 //            (*phi3) += (*phi1); //把总的电势全部加到phi3上面
@@ -1834,6 +1845,7 @@ private:
     ParGridFunction *phi1, *phi2, *phi2_;
     ParGridFunction *phi3, *c1, *c2;       // FE 解
     ParGridFunction *phi3_n, *c1_n, *c2_n; // Gummel迭代解
+    ParGridFunction *phi3_e, *c1_e, *c2_e;
 
     VisItDataCollection* dc;
     // protein_dofs和water_dofs里面不包含interface_ess_tdof_list
@@ -2060,6 +2072,18 @@ private:
         ParFiniteElementSpace* h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
         ParGridFunction* phi2_ = new ParGridFunction(h1_fes);
 
+        phi3_e = new ParGridFunction(h1_fes);
+        c1_e   = new ParGridFunction(h1_fes);
+        c2_e   = new ParGridFunction(h1_fes);
+
+        ifstream phi1_txt("/home/fan/phi3_Gummel_CG.txt"), c1_txt("/home/fan/c1_Gummel_CG.txt"), c2_txt("/home/fan/c2_Gummel_CG.txt"); // 从文件读取
+        phi3_e->Load(phi1_txt);
+        c1_e  ->Load(c1_txt);
+        c2_e  ->Load(c2_txt);
+        cout << "Read from txt, L2 norm of phi3_e: " << phi3_e->ComputeL2Error(zero) << endl;
+        cout << "Read from txt, L2 norm of   c1_e: " << c1_e->ComputeL2Error(zero) << endl;
+        cout << "Read from txt, L2 norm of   c2_e: " << c2_e->ComputeL2Error(zero) << endl;
+
         int size = pmesh->bdr_attributes.Max();
         Array<int> ess_tdof_list_, interface_ess_tdof_list_;
 
@@ -2155,6 +2179,13 @@ private:
     // 3.求解耦合的方程Poisson方程
     void Solve_Poisson()
     {
+        phi3_n->ProjectGridFunction(*phi3_e); // verify code
+        c1_n  ->ProjectGridFunction(*c1_e); // verify code
+        c2_n  ->ProjectGridFunction(*c2_e); // verify code
+        phi3_n->SetTrueVector();
+        c1_n->SetTrueVector();
+        c2_n->SetTrueVector();
+
         GridFunctionCoefficient c1_n_coeff(c1_n), c2_n_coeff(c2_n);
 
         ParBilinearForm *blf(new ParBilinearForm(fes));
@@ -2214,6 +2245,13 @@ private:
 
             PetscLinearSolver* pc = new PetscLinearSolver(PC, "phi3SPDPC_");
             solver->SetPreconditioner(*pc);
+        }
+
+        {
+            Vector tmp = phi3_n->GetTrueVector();
+            A->Mult(1.0, tmp, -1.0, *b);
+            cout << "l2 norm of b: " << b->Norml2() << endl;
+            MFEM_ABORT("Verify Poisson code");
         }
 
         chrono.Clear();
@@ -2386,11 +2424,12 @@ private:
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
 
-		if (0)
+		if (1)
         {
             ParBilinearForm* prec = new ParBilinearForm(fes);
 			// D2 (grad(c2), grad(v2))_{\Omega_s}
-			prec->AddDomainIntegrator(new DiffusionIntegrator(D2_water));
+			ProductCoefficient scale_D2(scale2_coeff, D2_water);
+			prec->AddDomainIntegrator(new DiffusionIntegrator(scale_D2));
 //			// D2 z2 (c2 grad(phi3^k), grad(v2))_{\Omega_s}
 //			prec->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_n, &D2_prod_z2_water));
 			// - <{D2 grad(c2)}, [v2]> + sigma <[c2], {D2 grad(v2)}> + kappa <{h^{-1} D2} [c2], [v2]> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
@@ -2408,6 +2447,7 @@ private:
             PetscParMatrix PC;
             prec->SetOperatorType(Operator::PETSC_MATAIJ);
             prec->FormSystemMatrix(ess_tdof_list, PC);
+            PC.EliminateRows(protein_dofs, 1.0);
 
             PetscLinearSolver* pc = new PetscLinearSolver(PC, "np2SPDPC_");
             solver->SetPreconditioner(*pc);
