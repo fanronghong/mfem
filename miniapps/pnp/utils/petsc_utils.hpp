@@ -22,31 +22,44 @@
 
 // ------------------------------ 读写各种格式的矩阵,向量 ------------------------------
 // 从二进制文件中(只包含一个矩阵)读取一个矩阵
-PetscErrorCode Read_Mat(Mat mat, char *filename, PetscViewer viewer, PetscErrorCode ierr)
+PetscErrorCode Read_Mat(Mat& mat, char *filename)
 {
     PetscBool flg=PETSC_FALSE;
-    PetscOptionsGetBool(NULL, NULL, "-main_show_read_write_data", &flg, NULL);
-    if (flg) {printf("======> Reading Matrix from file: %s", filename); }
+    PetscOptionsGetBool(NULL, NULL, "-show_read_data", &flg, NULL);
+    flg = PETSC_TRUE;
+    if (flg) {printf("======> Reading Matrix from file: %s\n", filename); }
+
+    PetscErrorCode ierr;
+    PetscViewer viewer;
+
+    MatCreate(PETSC_COMM_WORLD, &mat);
+    MatSetType(mat, MATAIJ); /* MATSEQAIJ, MATMPIAIJ, MATAIJ */
 
     MPI_Barrier(PETSC_COMM_WORLD); /* All processors wait until test matrix has been dumped */
     ierr = PetscViewerBinaryOpen(PETSC_COMM_WORLD, filename, FILE_MODE_READ, &viewer); CHKERRQ(ierr);
     ierr = MatLoad(mat, viewer); CHKERRQ(ierr);
+//    MatView(mat, PETSC_VIEWER_STDOUT_WORLD);
     ierr = PetscViewerDestroy(&viewer); CHKERRQ(ierr);
-    if (flg) {printf("  -----> Complete Reading\n"); }
+    if (flg) {printf("------> Complete Reading\n"); }
     return 0;
 }
 // 将一个矩阵(只能是单个矩阵)写入到一个二进制文件中
-PetscErrorCode Write_Mat(Mat mat, char *filename, PetscViewer viewer, PetscErrorCode ierr)
+PetscErrorCode Write_Mat(const Mat& mat, char *filename)
 {
     PetscBool flg=PETSC_FALSE;
-    PetscOptionsGetBool(NULL, NULL, "-main_show_read_write_data", &flg, NULL);
-    if (flg) {printf("======> Writing Matrix from file: %s", filename); }
+    PetscOptionsGetBool(NULL, NULL, "-show_write_data", &flg, NULL);
+    flg = PETSC_TRUE;
+    if (flg) {printf("======> Writing Matrix from file: %s\n", filename); }
+
+    PetscErrorCode ierr;
+    PetscViewer viewer;
 
     MPI_Barrier(PETSC_COMM_WORLD); /* All processors wait until test matrix has been dumped */
-    ierr = PetscViewerBinaryOpen(PETSC_COMM_WORLD, filename, FILE_MODE_WRITE, &viewer);CHKERRQ(ierr);
-    ierr = MatView(mat, viewer);CHKERRQ(ierr);
-    ierr = PetscViewerDestroy(&viewer);CHKERRQ(ierr);
-    if (flg) {printf("-----> Complete Writing\n");}
+    ierr = PetscViewerBinaryOpen(PETSC_COMM_WORLD, filename, FILE_MODE_WRITE, &viewer); CHKERRQ(ierr);
+    ierr = MatView(mat, viewer); CHKERRQ(ierr);
+//    MatView(mat, PETSC_VIEWER_STDOUT_WORLD);
+    ierr = PetscViewerDestroy(&viewer); CHKERRQ(ierr);
+    if (flg) {printf("------> Complete Writing\n");}
     return 0;
 }
 // 从一个二进制文件中(只包含一个向量)读取一个向量
@@ -54,13 +67,13 @@ PetscErrorCode Read_Vec(Vec vec, char *filename, PetscViewer viewer, PetscErrorC
 {
     PetscBool flg=PETSC_FALSE;
     PetscOptionsGetBool(NULL, NULL, "-main_show_read_write_data", &flg, NULL);
-    if (flg) {printf("======> Reading Vector from file: %s", filename); }
+    if (flg) {printf("======> Reading Vector from file: %s\n", filename); }
 
     MPI_Barrier(PETSC_COMM_WORLD); /* All processors wait until test matrix has been dumped */
     ierr = PetscViewerBinaryOpen(PETSC_COMM_WORLD, filename, FILE_MODE_READ, &viewer); CHKERRQ(ierr);
     ierr = VecLoad(vec, viewer); CHKERRQ(ierr);
     ierr = PetscViewerDestroy(&viewer); CHKERRQ(ierr);
-    if (flg) {printf("  -----> Complete Reading\n");}
+    if (flg) {printf("------> Complete Reading\n");}
     return 0;
 }
 // 讲一个向量(只能是单个向量)写入到一个二进制文件中
@@ -68,7 +81,7 @@ PetscErrorCode Write_Vec(Vec vec, const char *filename, PetscViewer viewer, Pets
 {
     PetscBool flg=PETSC_FALSE;
     PetscOptionsGetBool(NULL, NULL, "-main_show_read_write_data", &flg, NULL);
-    if (flg) {printf("======> Writing Vector from file: %s", filename); }
+    if (flg) {printf("======> Writing Vector from file: %s\n", filename); }
 
     MPI_Barrier(PETSC_COMM_WORLD); /* All processors wait until test matrix has been dumped */
     ierr = PetscViewerBinaryOpen(PETSC_COMM_WORLD, filename, FILE_MODE_WRITE, &viewer);CHKERRQ(ierr);
@@ -77,6 +90,7 @@ PetscErrorCode Write_Vec(Vec vec, const char *filename, PetscViewer viewer, Pets
     if (flg) {printf("-----> Complete Writing\n");}
     return 0;
 }
+
 void Read_CSRMat_txt(const char* filename, Mat& mat)
 {
 //    std::string path = getcwd(NULL, 0);

@@ -742,13 +742,6 @@ void Test_PrintSparsePattern()
 }
 
 
-void PetscParMatrix2SparseMatrix(const PetscParMatrix& mat)
-{
-
-
-}
-
-
 void PrintMatrix(const SparseMatrix& sp, ostream& output= std::cout)
 {
     DenseMatrix* mat = sp.ToDenseMatrix();

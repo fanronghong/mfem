@@ -10,38 +10,46 @@ int main(int argc,char **argv)
     ierr = SlepcInitialize(&argc,&argv,(char*)0,NULL);if (ierr) return ierr;
 
     Mat A, P;
-    Read_CSRMat_txt("/home/fan/Desktop/A82.txt", A);
-    Read_CSRMat_txt("/home/fan/Desktop/B82.txt", P);
+    Read_Mat(A, "../pnp_box/A_matlab.txt");
+//    Read_CSRMat_txt("../pnp_box/A_matlab.txt", A);
+//    Read_CSRMat_txt("/home/fan/Desktop/B82.txt", P);
 //    MatView(A, PETSC_VIEWER_STDOUT_WORLD);
+    PetscInt dim;
+    MatGetSize(A, &dim, NULL);
 
     Vec xr,xi;
     ierr = MatCreateVecs(A,NULL,&xr); CHKERRQ(ierr);
     ierr = MatCreateVecs(A,NULL,&xi); CHKERRQ(ierr);
 
+    // create eigensolver
     EPS eps;
     ierr = EPSCreate(PETSC_COMM_WORLD,&eps); CHKERRQ(ierr);
-    ierr = EPSSetOperators(eps,A,P); CHKERRQ(ierr); // Ax = kPx
-//    ierr = EPSSetOperators(eps,A,NULL); CHKERRQ(ierr); // Ax = kx
-    ierr = EPSSetProblemType(eps, EPS_GNHEP); CHKERRQ(ierr);
-    ierr = EPSSetWhichEigenpairs(eps, EPS_LARGEST_MAGNITUDE); CHKERRQ(ierr);
-    EPSSetTarget(eps, 0.5);
-//    ierr = EPSSetWhichEigenpairs(eps, EPS_SMALLEST_MAGNITUDE); CHKERRQ(ierr);
-//    ierr = EPSSetWhichEigenpairs(eps,EPS_ALL);CHKERRQ(ierr);
-//    ierr = EPSSetInterval(eps,-1.0, 2.0);CHKERRQ(ierr);
+//    ierr = EPSSetOperators(eps,A,P); CHKERRQ(ierr); // Ax = kPx
+    ierr = EPSSetOperators(eps,A,NULL); CHKERRQ(ierr); // Ax = kx
+    ierr = EPSSetType(eps, EPSKRYLOVSCHUR); CHKERRQ(ierr);
+    ierr = EPSSetProblemType(eps, EPS_NHEP); CHKERRQ(ierr);
+
+    // set intereseted eigenvalues
+    PetscInt nev=dim;
+    EPSSetTarget(eps, 1.0);
+//    ierr = EPSSetDimensions(eps,nev,3*nev,PETSC_DECIDE);CHKERRQ(ierr);
+
+    // set options for eigensolver
     ST st;
     ierr = EPSGetST(eps,&st);CHKERRQ(ierr);
-    ierr = STSetType(st,STSINVERT);CHKERRQ(ierr);
+    ierr = STSetType(st, STSHIFT);CHKERRQ(ierr);
+    ierr = STSetShift(st, 0.0);CHKERRQ(ierr);
     KSP ksp;
     ierr = STGetKSP(st,&ksp);CHKERRQ(ierr);
+    ierr = KSPSetType(ksp,KSPGMRES);CHKERRQ(ierr);
     PC pc;
     ierr = KSPGetPC(ksp,&pc);CHKERRQ(ierr);
-    ierr = KSPSetType(ksp,KSPPREONLY);CHKERRQ(ierr);
-    ierr = PCSetType(pc,PCCHOLESKY);CHKERRQ(ierr);
-    ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
+    ierr = PCSetType(pc,PCILU);CHKERRQ(ierr);
 
+    ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
     ierr = EPSSolve(eps); CHKERRQ(ierr);
 
-    { // 额外的信息(可选)
+    if (0) { // 额外的信息(可选)
         PetscInt its;
         ierr = EPSGetIterationNumber(eps,&its); CHKERRQ(ierr);
         ierr = PetscPrintf(PETSC_COMM_WORLD," Number of iterations of the method: %D\n",its); CHKERRQ(ierr);

@@ -536,7 +536,7 @@ protected:
 
 public:
     DGSelfTraceIntegrator_1(Coefficient &q, GridFunction &w)
-            : Q(&q)
+            : Q(&q), mesh(NULL)
     { gradw = new GradientGridFunctionCoefficient(&w); }
     DGSelfTraceIntegrator_1(Coefficient &q, GridFunction &w, const Mesh* mesh_, int marker_)
             : Q(&q), mesh(mesh_), marker(marker_)
@@ -565,7 +565,7 @@ public:
         elmat.SetSize(ndof1 + ndof2);
         elmat = 0.0;
 
-        {
+        if (mesh) {
             const Element *elm1, *elm2;
             int attr1, attr2;
             elm1 = mesh->GetElement(Trans.Elem1No);
@@ -666,7 +666,7 @@ protected:
 
 public:
     DGSelfTraceIntegrator_2(Coefficient &q, GridFunction &w)
-            : Q(&q)
+            : Q(&q), mesh(NULL)
     { gradw = new GradientGridFunctionCoefficient(&w); }
     DGSelfTraceIntegrator_2(Coefficient &q, GridFunction &w, const Mesh* mesh_, int marker_)
             : Q(&q), mesh(mesh_), marker(marker_)
@@ -698,7 +698,7 @@ public:
         elmat.SetSize(ndof1 + ndof2);
         elmat = 0.0;
 
-        {
+        if (mesh) {
             const Element *elm1, *elm2;
             int attr1, attr2;
             elm1 = mesh->GetElement(Trans.Elem1No);
