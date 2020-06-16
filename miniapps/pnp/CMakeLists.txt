@@ -7,6 +7,17 @@ if (PythonLibs_FOUND)
     message("===> python library: ${PYTHON_LIBRARIES}")
 endif()
 
+#list(APPEND CMAKE_MODULE_PATH ${CMAKE_PREFIX_PATH})
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR})
+message("===> CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
+FIND_PACKAGE(SLEPc 3.12 REQUIRED)
+if (SLEPC_FOUND)
+    include_directories(${SLEPC_INC})
+    link_libraries(${SLEPC_LIB})
+    message("===> slepc include path: ${SLEPC_INC}")
+    message("===> slepc library: ${SLEPC_LIB}")
+endif()
+
 
 add_subdirectory(pnp_box)
 
@@ -17,3 +28,4 @@ add_subdirectory(utils)
 add_subdirectory(examples)
 
 add_subdirectory(EAFE_SUPG_advection_diffusion)
+
