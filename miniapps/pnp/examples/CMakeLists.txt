@@ -17,10 +17,11 @@ add_mfem_miniapp(h1_project_dg
         MAIN h1_project_dg.cpp
         LIBRARIES mfem)
 
-add_mfem_miniapp(slepc_demo
-        MAIN slepc_demo.cpp
-        LIBRARIES mfem slepc)
-
+if (SLEPC_FOUND)
+    add_mfem_miniapp(slepc_demo
+            MAIN slepc_demo.cpp
+            LIBRARIES mfem slepc)
+endif()
 
 
 

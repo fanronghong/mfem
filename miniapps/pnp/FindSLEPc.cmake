@@ -17,7 +17,7 @@
 
 ## Try to set SLEPC_DIR ##
 ##########################
-message("===> environment variable SLEPc: $ENV{SLEPC_DIR}")
+message("===> SLEPC_DIR: ${SLEPC_DIR}")
 if(NOT DEFINED SLEPC_DIR)
     MESSAGE("HHH")
     set(SLEPC_DIR $ENV{SLEPC_DIR})
@@ -36,7 +36,6 @@ endif()
 
 ## Library ##
 #############
-message("fffffffffffffffffffffffff: ${SLEPC_DIR}")
 if(EXISTS "${SLEPC_DIR}/${PETSC_ARCH}/lib/libslepc.so")
     set(SLEPC_LIB "${SLEPC_DIR}/${PETSC_ARCH}/lib/libslepc.so")
 elseif(EXISTS "${SLEPC_DIR}/${PETSC_ARCH}/lib/libslepc.a")
