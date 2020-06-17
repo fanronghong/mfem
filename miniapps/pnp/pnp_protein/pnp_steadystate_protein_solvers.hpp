@@ -1547,8 +1547,7 @@ public:
 private:
     // 1.求解奇异电荷部分的电势
     void Solve_Singular()
-    {//        cout << "            L2 norm of phi3: " << phi3->ComputeL2Error(zero) << endl;
-
+    {
         phi1->ProjectCoefficient(G_coeff); // phi1求解完成, 直接算比较慢, 也可以从文件读取
 
         if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
@@ -2068,6 +2067,7 @@ private:
     void Solve_Singular()
     {
         phi1->ProjectCoefficient(G_coeff); // phi1求解完成, 直接算比较慢, 也可以从文件读取
+
         cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
     }
 
@@ -2077,6 +2077,14 @@ private:
         h1_fec = new H1_FECollection(p_order, mesh->Dimension());
         h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
         ParGridFunction* phi2_ = new ParGridFunction(h1_fes);
+        {
+            ParGridFunction* phi1_ = new ParGridFunction(h1_fes);
+            phi1_->ProjectCoefficient(G_coeff);
+            cout << "L2 norm of phi1_: " << phi1_->ComputeL2Error(zero) << endl;
+            phi1->ProjectGridFunction(*phi1_);
+            cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
+
+        }
 
         phi3_e = new ParGridFunction(h1_fes);
         c1_e   = new ParGridFunction(h1_fes);
@@ -2195,14 +2203,14 @@ private:
         phi3_n->SetTrueVector();
         c1_n->SetTrueVector();
         c2_n->SetTrueVector();
+//        cout << "L2 norm phi3_n (project from file): " << phi3_n->ComputeL2Error(zero) << endl;
+//        cout << "L2 norm   c1_n (project from file): " << c1_n->ComputeL2Error(zero) << endl;
+//        cout << "L2 norm   c2_n (project from file): " << c2_n->ComputeL2Error(zero) << endl;
+//        MFEM_ABORT("stop for verify project from file");
 
         GridFunctionCoefficient c1_n_coeff(c1_n), c2_n_coeff(c2_n);
 
         ParBilinearForm *blf(new ParBilinearForm(fes));
-//        // epsilon_s (grad(phi3), grad(psi3))_{\Omega_s}
-//        blf->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water_mark));
-//        // epsilon_m (grad(phi3), grad(psi3))_{\Oemga_m}
-//        blf->AddDomainIntegrator(new DiffusionIntegrator(epsilon_protein_mark));
         // Epsilon (grad(phi3), grad(psi3))_{\Omega}. Epsilon=epsilon_m in \Omega_m, Epsilon=epsilon_s in \Omega_s
         blf->AddDomainIntegrator(new DiffusionIntegrator(Epsilon));
         // - <{Epsilon grad(phi3)}, [psi3]> + sigma <[phi3], {Epsilon grad(psi3)}> + kappa <{h^{-1} Epsilon}>
@@ -2226,8 +2234,8 @@ private:
         // - epsilon_m <grad(phi1 + phi2).n, psi3>_{\Gamma}, interface integrator, see below another way to define interface integrate
         lf->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator(&neg_epsilon_protein, &grad_phi1_plus_grad_phi2, mesh, protein_marker, water_marker));
         // sigma <phi3_D, (Epsilon grad(psi3).n)> + kappa <{h^{-1} Epsilon} phi3_D, psi3>. phi3_D includes phi_D_top and phi_D_bottom
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_top_coeff, sigma, kappa), top_bdr);
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_bottom_coeff, sigma, kappa), bottom_bdr);
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_top_coeff, epsilon_water, sigma, kappa), top_bdr);
+        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_bottom_coeff, epsilon_water, sigma, kappa), bottom_bdr);
         // omit 0 Neumann bdc on \Gamma_N and \Gamma_M
         lf->Assemble();
 
@@ -2258,16 +2266,20 @@ private:
         }
 
         {
-            Vector tmp = phi3_n->GetTrueVector();
-            A->Mult(1.0, tmp, -1.0, *b);
-            cout << "l2 norm of b: " << b->Norml2() << endl;
-            MFEM_ABORT("Verify Poisson code");
+            Vector temp(*b);
+            A->Mult(1.0, *phi3_n, -1.0, temp);
+            cout << "l2 norm of ||A phi3_e - b|| / ||b||: " << temp.Norml2() / b->Norml2() << endl;
         }
 
         chrono.Clear();
         chrono.Start();
         solver->Mult(*b, *x);
-//        MFEM_ABORT("phi3 spd pc");
+        {
+            Vector temp(*b);
+            A->Mult(1.0, *x, -1.0, temp);
+            cout << "l2 norm of ||A x - b|| / ||b||: " << temp.Norml2() / b->Norml2() << endl;
+        }
+        MFEM_ABORT("Verify Poisson code");
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *phi3);
 
