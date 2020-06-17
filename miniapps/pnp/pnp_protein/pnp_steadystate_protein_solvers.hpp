@@ -1670,16 +1670,6 @@ private:
         // omit 0 Neumann bdc on \Gamma_N and \Gamma_M
         lf->Assemble();
 
-        if (false) // 另外一种第一种interface积分. Verify equivalence by seeing below l2 norm of b
-        {
-            // Poisson方程的奇异项导出的interface部分
-            SelfDefined_LinearForm interface_term(h1_space);
-            interface_term.AddSelfDefined_LFFacetIntegrator(new SelfDefined_LFFacetIntegrator(h1_space, grad_phi1_plus_grad_phi2, protein_marker, water_marker));
-            interface_term.SelfDefined_Assemble();
-            interface_term *= protein_rel_permittivity;
-            (*lf) -= interface_term; //界面项要移到方程的右端
-        }
-
         PetscParMatrix *A = new PetscParMatrix();
         PetscParVector *x = new PetscParVector(h1_space);
         PetscParVector *b = new PetscParVector(h1_space);
@@ -1699,7 +1689,8 @@ private:
         (*phi3)   += (*phi3_n); // 利用松弛方法更新phi3
         (*phi3_n) /= relax_phi+TOL; // 还原phi3_n.避免松弛因子为0的情况造成除0
 
-        if (verbose) {
+        if (verbose)
+        {
             cout << "            L2 norm of phi3: " << phi3->ComputeL2Error(zero) << endl;
             if (solver->GetConverged() == 1 && myid == 0)
                 cout << "phi3 solver: successfully converged by iterating " << solver->GetNumIterations()
@@ -1707,6 +1698,7 @@ private:
             else if (solver->GetConverged() != 1)
                 cerr << "phi3 solver: failed to converged" << endl;
         }
+
         delete blf, lf, solver, A, x, b;
     }
 
@@ -1766,7 +1758,8 @@ private:
                      << " times, taking " << chrono.RealTime() << " s." << endl;
             else if (solver->GetConverged() != 1)
                 cerr << "np1  solver: failed to converged" << endl;
-        }        delete lf, blf, solver, A, x, b;
+        }
+        delete lf, blf, solver, A, x, b;
     }
 
     // 5.求解耦合的方程NP2方程
@@ -1845,6 +1838,9 @@ private:
     ParGridFunction *phi1, *phi2, *phi2_;
     ParGridFunction *phi3, *c1, *c2;       // FE 解
     ParGridFunction *phi3_n, *c1_n, *c2_n; // Gummel迭代解
+
+    H1_FECollection* h1_fec;
+    ParFiniteElementSpace* h1_fes;
     ParGridFunction *phi3_e, *c1_e, *c2_e;
 
     VisItDataCollection* dc;
@@ -1943,18 +1939,21 @@ public:
 
             ParGridFunction phi3_D_h1(&h1_fes), c1_D_h1(&h1_fes), c2_D_h1(&h1_fes);
             phi3_D_h1 = 0.0;
-            c1_D_h1 = 0.0;
-            c2_D_h1 = 0.0;
+            c1_D_h1   = 0.0;
+            c2_D_h1   = 0.0;
 
             phi3_D_h1.ProjectBdrCoefficient(phi_D_top_coeff, top_bdr);
+            phi3_D_h1.SetTrueVector();
             phi3_D_h1.ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
             phi3_D_h1.SetTrueVector();
+
             phi3->ProjectGridFunction(phi3_D_h1);
             phi3->SetTrueVector();
             phi3_n->ProjectGridFunction(phi3_D_h1);
             phi3_n->SetTrueVector();
 
             c1_D_h1.ProjectBdrCoefficient(c1_D_top_coeff, top_bdr);
+            c1_D_h1.SetTrueVector();
             c1_D_h1.ProjectBdrCoefficient(c1_D_bottom_coeff, bottom_bdr);
             c1_D_h1.SetTrueVector();
             c1->ProjectGridFunction(c1_D_h1);
@@ -1963,6 +1962,7 @@ public:
             c1_n->SetTrueVector();
 
             c2_D_h1.ProjectBdrCoefficient(c2_D_top_coeff, top_bdr);
+            c2_D_h1.SetTrueVector();
             c2_D_h1.ProjectBdrCoefficient(c2_D_bottom_coeff, bottom_bdr);
             c2_D_h1.SetTrueVector();
             c2->ProjectGridFunction(c2_D_h1);
@@ -1981,6 +1981,7 @@ public:
 //        Visualize(*dc, "phi3", "phi3");
 //        Visualize(*dc, "c1", "c1");
 //        Visualize(*dc, "c2", "c2");
+//        MFEM_ABORT("stop for visualizing");
     }
     ~PNP_Gummel_DG_Solver_par()
     {
@@ -2061,28 +2062,34 @@ public:
 private:
     // 1.求解奇异电荷部分的电势
     void Solve_Singular()
-    {//        cout << "            L2 norm of phi3: " << phi3->ComputeL2Error(zero) << endl;
+    {
         phi1->ProjectCoefficient(G_coeff); // phi1求解完成, 直接算比较慢, 也可以从文件读取
+        cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
     }
 
     // 2.求解调和方程部分的电势
     void Solve_Harmonic()
     {
-        H1_FECollection* h1_fec = new H1_FECollection(p_order, mesh->Dimension());
-        ParFiniteElementSpace* h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
+        h1_fec = new H1_FECollection(p_order, mesh->Dimension());
+        h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
         ParGridFunction* phi2_ = new ParGridFunction(h1_fes);
 
         phi3_e = new ParGridFunction(h1_fes);
         c1_e   = new ParGridFunction(h1_fes);
         c2_e   = new ParGridFunction(h1_fes);
 
-        ifstream phi1_txt("/home/fan/phi3_Gummel_CG.txt"), c1_txt("/home/fan/c1_Gummel_CG.txt"), c2_txt("/home/fan/c2_Gummel_CG.txt"); // 从文件读取
-        phi3_e->Load(phi1_txt);
-        c1_e  ->Load(c1_txt);
-        c2_e  ->Load(c2_txt);
-        cout << "Read from txt, L2 norm of phi3_e: " << phi3_e->ComputeL2Error(zero) << endl;
-        cout << "Read from txt, L2 norm of   c1_e: " << c1_e->ComputeL2Error(zero) << endl;
-        cout << "Read from txt, L2 norm of   c2_e: " << c2_e->ComputeL2Error(zero) << endl;
+        ifstream phi3_txt(phi3_Gummel_CG_txt), c1_txt(c1_Gummel_CG_txt), c2_txt(c2_Gummel_CG_txt); // 从文件读取
+        if (phi3_txt.is_open() && c1_txt.is_open() && c2_txt.is_open())
+        {
+            phi3_e->Load(phi3_txt);
+            c1_e  ->Load(c1_txt);
+            c2_e  ->Load(c2_txt);
+            cout << "Read from txt, L2 norm of phi3_e: " << phi3_e->ComputeL2Error(zero) << endl;
+            cout << "Read from txt, L2 norm of   c1_e: " << c1_e->ComputeL2Error(zero) << endl;
+            cout << "Read from txt, L2 norm of   c2_e: " << c2_e->ComputeL2Error(zero) << endl;
+        } else {
+            MFEM_ABORT("Not found: GridFunction txt files of phi3, c1, c2");
+        }
 
         int size = pmesh->bdr_attributes.Max();
         Array<int> ess_tdof_list_, interface_ess_tdof_list_;
@@ -2125,7 +2132,6 @@ private:
             protein_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
             water_dofs_.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
         }
-
 
         ParBilinearForm blf(h1_fes);
         // (grad(phi2), grad(psi2))_{\Omega_m}, \Omega_m: protein domain
@@ -2172,7 +2178,7 @@ private:
         }
 
         phi2->ProjectGridFunction(*phi2_); // project from h1 space to dg1
-
+        cout << "L2 norm of phi2: " << phi2->ComputeL2Error(zero) << endl;
         delete solver, A, x, b;
     }
 
