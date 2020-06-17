@@ -50,7 +50,7 @@ const char* mesh_file   = "./1MAG_2.msh"; // 带有蛋白的网格,与PQR文件�
 const char* pqr_file    = "./1MAG.pqr"; // PQR文件,与网格文件必须匹配
 int p_order             = 1; //有限元基函数的多项式次数
 const char* Linearize   = "gummel"; // newton, gummel
-const char* Discretize  = "cg"; // cg, dg
+const char* Discretize  = "dg"; // cg, dg
 const char* options_src = "./pnp_protein_petsc_opts";
 bool self_debug         = false;
 bool verbose            = false;
@@ -59,10 +59,11 @@ double sigma            = -1.0; // symmetric parameter for DG
 double kappa            = 20; // penalty parameter for DG
 
 const int refine_times  = 0;
-const char* phi1_txt    = "./phi1_1MAG_2.txt";
+bool save_right_solution       = true;
+const char* phi1_txt           = "./phi1_1MAG_2.txt";
 const char* phi3_Gummel_CG_txt = "./phi3_Gummel_CG.txt";
-const char* c1_Gummel_CG_txt = "./c1_Gummel_CG.txt";
-const char* c2_Gummel_CG_txt = "./c2_Gummel_CG.txt";
+const char* c1_Gummel_CG_txt   = "./c1_Gummel_CG.txt";
+const char* c2_Gummel_CG_txt   = "./c2_Gummel_CG.txt";
 
 const int protein_marker   = 1; // 这些marker信息可以从Gmsh中可视化得到
 const int water_marker     = 2;

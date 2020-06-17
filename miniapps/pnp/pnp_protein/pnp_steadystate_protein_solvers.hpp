@@ -1507,15 +1507,19 @@ public:
         cout << "L2 norm of   c1: " << c1->ComputeL2Error(zero) << endl;
         cout << "L2 norm of   c2: " << c2->ComputeL2Error(zero) << '\n' << endl;
 
+        if (save_right_solution)
         {
-//            ofstream phi3_txt("/home/fan/phi3_Gummel_CG.txt"), c1_txt("/home/fan/c1_Gummel_CG.txt"), c2_txt("/home/fan/c2_Gummel_CG.txt");
-//
-//            phi3_txt.precision(14);
-//            c1_txt.precision(14);
-//            c2_txt.precision(14);
-//            phi3->Print(phi3_txt << phi3->Size() << '\n');
-//            c1->Print(c1_txt << c1->Size() << '\n');
-//            c2->Print(c2_txt << c2->Size() << '\n');
+            ofstream phi3_txt(phi3_Gummel_CG_txt), c1_txt(c1_Gummel_CG_txt), c2_txt(c2_Gummel_CG_txt);
+            if (phi3_txt.is_open() && c1_txt.is_open() && c2_txt.is_open()) {
+                phi3_txt.precision(14);
+                c1_txt.precision(14);
+                c2_txt.precision(14);
+                phi3->Print(phi3_txt << phi3->Size() << '\n');
+                c1->Print(c1_txt << c1->Size() << '\n');
+                c2->Print(c2_txt << c2->Size() << '\n');
+            } else {
+                MFEM_ABORT("Open files failed.");
+            }
         }
 
         if (visualize)
