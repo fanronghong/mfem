@@ -29,16 +29,39 @@ int main(int argc,char **argv)
     ierr = EPSSetType(eps, EPSKRYLOVSCHUR); CHKERRQ(ierr);
     ierr = EPSSetProblemType(eps, EPS_NHEP); CHKERRQ(ierr);
 
-    // set intereseted eigenvalues
-    PetscInt nev=dim;
-    EPSSetTarget(eps, 1.0);
-//    ierr = EPSSetDimensions(eps,nev,3*nev,PETSC_DECIDE);CHKERRQ(ierr);
-
-    // set options for eigensolver
     ST st;
     ierr = EPSGetST(eps,&st);CHKERRQ(ierr);
-    ierr = STSetType(st, STSHIFT);CHKERRQ(ierr);
-    ierr = STSetShift(st, 0.0);CHKERRQ(ierr);
+
+    // select intereseted eigenvalues
+    PetscInt nev=dim;
+
+    switch (3)
+    {
+        case 0:
+            ierr = EPSSetTarget(eps,1);CHKERRQ(ierr);
+            ierr = EPSSetWhichEigenpairs(eps,EPS_TARGET_MAGNITUDE);CHKERRQ(ierr);
+            // Use shift-and-invert to avoid solving linear systems with a singular B in case nulldim>0
+            ierr = EPSGetST(eps,&st);CHKERRQ(ierr);
+            ierr = STSetType(st,STSINVERT);CHKERRQ(ierr);
+            break;
+        case 1:
+            ierr = EPSSetWhichEigenpairs(eps,EPS_ALL);CHKERRQ(ierr);
+            ierr = EPSSetInterval(eps,1.1,1.3);CHKERRQ(ierr);
+//            ierr = EPSSetInterval(eps, -1.2, -0.9);CHKERRQ(ierr);
+//            ierr = EPSSetInterval(eps, 0.9, 1.2);CHKERRQ(ierr);
+            break;
+        case 2:
+            ierr = EPSSetDimensions(eps,nev,3*nev,PETSC_DECIDE);CHKERRQ(ierr);
+            break;
+        case 3:
+            ierr = EPSSetWhichEigenpairs(eps,EPS_LARGEST_REAL);CHKERRQ(ierr);
+//            ierr = EPSSetWhichEigenpairs(eps,EPS_SMALLEST_REAL);CHKERRQ(ierr);
+//            ierr = EPSSetWhichEigenpairs(eps,EPS_LARGEST_MAGNITUDE);CHKERRQ(ierr);
+//            ierr = EPSSetWhichEigenpairs(eps,EPS_SMALLEST_MAGNITUDE);CHKERRQ(ierr);
+            break;
+    }
+
+    // set options for eigensolver
     KSP ksp;
     ierr = STGetKSP(st,&ksp);CHKERRQ(ierr);
     ierr = KSPSetType(ksp,KSPGMRES);CHKERRQ(ierr);
