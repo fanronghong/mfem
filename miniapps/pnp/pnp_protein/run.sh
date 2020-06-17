@@ -6,6 +6,6 @@ exec &> >(tee "./out") # https://unix.stackexchange.com/questions/145651/using-e
 
 # ------>
 ./pnp_steadystate_protein -p 1 -lin gummel -dis cg -v -debug
-#./pnp_steadystate_protein -p 1 -lin newton -dis cg
-
+./pnp_steadystate_protein -p 1 -lin newton -dis cg
+./pnp_steadystate_protein -p 1 -lin gummel -dis dg
 
