@@ -19,7 +19,6 @@
 ##########################
 message("===> SLEPC_DIR: ${SLEPC_DIR}")
 if(NOT DEFINED SLEPC_DIR)
-    MESSAGE("HHH")
     set(SLEPC_DIR $ENV{SLEPC_DIR})
 endif()
 set(SLEPC_DIR $ENV{SLEPC_DIR})

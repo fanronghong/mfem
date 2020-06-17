@@ -12,8 +12,8 @@
 #include <Python.h>
 #include <fstream>
 
-#include "../utils/matplotlibcpp.hpp"
-#include "../utils/gnuplot_cpp.hpp" //Gnuplot class handles POSIX-Pipe-communikation with Gnuplot
+//#include "../utils/matplotlibcpp.hpp"
+//#include "../utils/gnuplot_cpp.hpp" //Gnuplot class handles POSIX-Pipe-communikation with Gnuplot
 #include "mfem.hpp"
 
 using namespace std;
@@ -643,103 +643,104 @@ void Test_Compute_PhysicalPoints_Values()
 }
 
 
-/* style: points, dots, filledcurves
- * */
-void PlotSparsePattern()
-{
-    namespace plt = matplotlibcpp;
-
-    int II[5] = {0, 2, 4, 7, 9};
-    int JJ[9] = {0, 1, 1, 2, 0, 2, 3, 1, 3};
-    double VVals[9] = {1, 7, 2, 8, 5, 3, 9, 6, 4};
-    SparseMatrix mat(II, JJ, VVals, 4, 4);
-
-    const int* I = mat.GetI();
-    const int* J = mat.GetJ();
-    const double* Vals = mat.GetData();
-    int size = mat.Size();
-
-    std::vector<int> x, y;
-    std::vector<double> vals;
-    for (int i=0; i<size; ++i) {
-        for (int j=I[i]; j<I[i+1]; ++j) {
-            if (abs(Vals[j]) < 1E-10) continue;
-            x.push_back(i);
-            y.push_back(J[j]);
-            vals.push_back(Vals[j]);
-        }
-    }
-
-    // Set the size of output image = 1200x780 pixels
-    plt::figure();
-
-    // Plot line from given x and y data. Color is selected automatically.
-//    plt::scatter(x, y);
-    plt::plot(x, y);
-
-    plt::show();
-}
-void PrintSparsePattern(const SparseMatrix& mat,
-        const string title="",
-        const string style="points")
-{
-    const int* I = mat.GetI();
-    const int* J = mat.GetJ();
-    const double* Vals = mat.GetData();
-    int size = mat.Size();
-
-    std::vector<int> x, y;
-    std::vector<double> vals;
-    for (int i=0; i<size; ++i) {
-        for (int j=I[i]; j<I[i+1]; ++j) {
-            if (abs(Vals[j]) < 1E-10) continue;
-            x.push_back(i);
-            y.push_back(J[j]);
-//            cout << Vals[j] << endl;
-            vals.push_back(Vals[j]);
-        }
-    }
-
-    double min_val = 0.0, max_val = 0.0;
-    for (const auto& itm: vals) {
-//        cout << itm << endl;
-        if (min_val > itm) min_val = itm;
-        if (max_val < itm) max_val = itm;
-    }
-
-    // points, dots, filledcurves, ...
-    Gnuplot gp(style);
-    gp.reset_plot();
-    gp.set_xrange(0.0-size/10.0, size + size/10.0);
-    gp.set_yrange(0.0-size/10.0, size + size/10.0);
-    gp.set_zrange(min_val, max_val);
-
-    gp.set_pointsize(3);
-    gp.set_title(title);
-
-    if (style == "dots" || style == "points") {
-        gp.plot_xy(x, y);
-    } else {
-        assert(style == "filledcurves");
-        gp.plot_xyz(x, y, vals);
-    }
-
-    cout << endl << "Press ENTER to continue..." << endl;
-    std::cin.clear();
-    std::cin.ignore(std::cin.rdbuf()->in_avail());
-    std::cin.get();
-}
-void Test_PrintSparsePattern()
-{
-    int I[5] = {0, 2, 4, 7, 9};
-    int J[9] = {0, 1, 1, 2, 0, 2, 3, 1, 3};
-    double Vals[9] = {1, 7, 2, 8, 5, 3, 9, 6, 4};
-
-    SparseMatrix sp(I, J, Vals, 4, 4);
-//    sp.Print(cout);
-
-    PrintSparsePattern(sp);
-}
+// comment for not use in computer cluster
+///* style: points, dots, filledcurves
+// * */
+//void PlotSparsePattern()
+//{
+//    namespace plt = matplotlibcpp;
+//
+//    int II[5] = {0, 2, 4, 7, 9};
+//    int JJ[9] = {0, 1, 1, 2, 0, 2, 3, 1, 3};
+//    double VVals[9] = {1, 7, 2, 8, 5, 3, 9, 6, 4};
+//    SparseMatrix mat(II, JJ, VVals, 4, 4);
+//
+//    const int* I = mat.GetI();
+//    const int* J = mat.GetJ();
+//    const double* Vals = mat.GetData();
+//    int size = mat.Size();
+//
+//    std::vector<int> x, y;
+//    std::vector<double> vals;
+//    for (int i=0; i<size; ++i) {
+//        for (int j=I[i]; j<I[i+1]; ++j) {
+//            if (abs(Vals[j]) < 1E-10) continue;
+//            x.push_back(i);
+//            y.push_back(J[j]);
+//            vals.push_back(Vals[j]);
+//        }
+//    }
+//
+//    // Set the size of output image = 1200x780 pixels
+//    plt::figure();
+//
+//    // Plot line from given x and y data. Color is selected automatically.
+////    plt::scatter(x, y);
+//    plt::plot(x, y);
+//
+//    plt::show();
+//}
+//void PrintSparsePattern(const SparseMatrix& mat,
+//        const string title="",
+//        const string style="points")
+//{
+//    const int* I = mat.GetI();
+//    const int* J = mat.GetJ();
+//    const double* Vals = mat.GetData();
+//    int size = mat.Size();
+//
+//    std::vector<int> x, y;
+//    std::vector<double> vals;
+//    for (int i=0; i<size; ++i) {
+//        for (int j=I[i]; j<I[i+1]; ++j) {
+//            if (abs(Vals[j]) < 1E-10) continue;
+//            x.push_back(i);
+//            y.push_back(J[j]);
+////            cout << Vals[j] << endl;
+//            vals.push_back(Vals[j]);
+//        }
+//    }
+//
+//    double min_val = 0.0, max_val = 0.0;
+//    for (const auto& itm: vals) {
+////        cout << itm << endl;
+//        if (min_val > itm) min_val = itm;
+//        if (max_val < itm) max_val = itm;
+//    }
+//
+//    // points, dots, filledcurves, ...
+//    Gnuplot gp(style);
+//    gp.reset_plot();
+//    gp.set_xrange(0.0-size/10.0, size + size/10.0);
+//    gp.set_yrange(0.0-size/10.0, size + size/10.0);
+//    gp.set_zrange(min_val, max_val);
+//
+//    gp.set_pointsize(3);
+//    gp.set_title(title);
+//
+//    if (style == "dots" || style == "points") {
+//        gp.plot_xy(x, y);
+//    } else {
+//        assert(style == "filledcurves");
+//        gp.plot_xyz(x, y, vals);
+//    }
+//
+//    cout << endl << "Press ENTER to continue..." << endl;
+//    std::cin.clear();
+//    std::cin.ignore(std::cin.rdbuf()->in_avail());
+//    std::cin.get();
+//}
+//void Test_PrintSparsePattern()
+//{
+//    int I[5] = {0, 2, 4, 7, 9};
+//    int J[9] = {0, 1, 1, 2, 0, 2, 3, 1, 3};
+//    double Vals[9] = {1, 7, 2, 8, 5, 3, 9, 6, 4};
+//
+//    SparseMatrix sp(I, J, Vals, 4, 4);
+////    sp.Print(cout);
+//
+//    PrintSparsePattern(sp);
+//}
 
 
 void PrintMatrix(const SparseMatrix& sp, ostream& output= std::cout)
