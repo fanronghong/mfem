@@ -19,6 +19,9 @@ if (SLEPC_FOUND)
     message("===> slepc library: ${SLEPC_LIB}")
 endif()
 
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/bsub.script
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/bsub.script
+               COPYONLY)
 
 add_subdirectory(pnp_box)
 
