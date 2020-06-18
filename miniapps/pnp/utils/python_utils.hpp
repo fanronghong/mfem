@@ -6,7 +6,7 @@
 #define LEARN_MFEM_PYTHON_UTILS_HPP
 
 #include <Python.h>
-#include <numpy/arrayobject.h>
+//#include <numpy/arrayobject.h> // wrong in computer cluster
 #include <vector>
 #include <string>
 #include <iostream>
