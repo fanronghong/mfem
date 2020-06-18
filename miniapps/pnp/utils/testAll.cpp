@@ -2,6 +2,7 @@
 #include "DGSelfTraceIntegrator.hpp"
 #include "EAFE_ModifyStiffnessMatrix.hpp"
 #include "GradConvection_Integrator.hpp"
+#include "LocalConservation.hpp"
 #include "MeshInfo.hpp"
 #include "MFEM2PETSc.hpp"
 #include "mfem_utils.hpp"
