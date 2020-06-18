@@ -1,5 +1,5 @@
 #BSUB -n 1
-#BSUB -o bsub.script.out
+#BSUB -o bsub.out
 
 cd pnp_box/
 make pnp_steadystate_box

@@ -2129,13 +2129,13 @@ private:
         ParBilinearForm *blf = new ParBilinearForm(fsp);
         ProductCoefficient neg_D_K_v_K(neg, D_K_prod_v_K);
         ProductCoefficient sigma_D_K_v_K(sigma_coeff, D_K_prod_v_K);
-//        // D1 (grad(c1), grad(v1))
-//        blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
-//        // D1 z1 (c1 grad(phi^k), grad(v1))
-//        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_K_prod_v_K));
-//        // -<{D1 grad(c1).n}, [v1]> + sigma <[c1], {D1 grad(v1).n}> + kappa <{h^{-1} D1} [c1], [v1]>
-//        blf->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
-//        blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa), Dirichlet);
+        // D1 (grad(c1), grad(v1))
+        blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+        // D1 z1 (c1 grad(phi^k), grad(v1))
+        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_K_prod_v_K));
+        // -<{D1 grad(c1).n}, [v1]> + sigma <[c1], {D1 grad(v1).n}> + kappa <{h^{-1} D1} [c1], [v1]>
+        blf->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
+        blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa), Dirichlet);
         // -D1 z1 <{c1 grad(phi^k).n}, [v1]>
         blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n));
         blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n), Dirichlet);
@@ -2172,9 +2172,9 @@ private:
         blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
 
         {
-            Mat A_mat = Mat(*A);
-            Write_Mat(A_mat, "./A_matlab.txt");
-            MFEM_ABORT("output matrix A.");
+//            Mat A_mat = Mat(*A);
+//            Write_Mat(A_mat, "./A_matlab.txt");
+//            MFEM_ABORT("output matrix A.");
         }
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");

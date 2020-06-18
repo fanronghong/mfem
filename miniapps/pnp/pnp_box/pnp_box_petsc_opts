@@ -1,6 +1,6 @@
 # ------> Gummel Params
 -phi_ksp_type cg
--phi_pc_type ilu
+-phi_pc_type lu
 -phi_ksp_max_it 10000
 -phi_ksp_rtol 1e-10
 -phi_ksp_atol 1e-20
@@ -20,7 +20,7 @@
 #-np1_ksp_view
 
 -np2_ksp_type gmres
--np2_pc_type ilu
+-np2_pc_type lu
 -np2_ksp_max_it 10000
 -np2_ksp_rtol 1e-10
 -np2_ksp_atol 1e-20
