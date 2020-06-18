@@ -2199,12 +2199,12 @@ private:
     // 3.求解耦合的方程Poisson方程
     void Solve_Poisson()
     {
-        phi3_n->ProjectGridFunction(*phi3_e); // verify code
-        c1_n  ->ProjectGridFunction(*c1_e); // verify code
-        c2_n  ->ProjectGridFunction(*c2_e); // verify code
-        phi3_n->SetTrueVector();
-        c1_n->SetTrueVector();
-        c2_n->SetTrueVector();
+//        phi3_n->ProjectGridFunction(*phi3_e); // verify code
+//        c1_n  ->ProjectGridFunction(*c1_e); // verify code
+//        c2_n  ->ProjectGridFunction(*c2_e); // verify code
+//        phi3_n->SetTrueVector();
+//        c1_n->SetTrueVector();
+//        c2_n->SetTrueVector();
 //        cout << "L2 norm phi3_n (project from file): " << phi3_n->ComputeL2Error(zero) << endl;
 //        cout << "L2 norm   c1_n (project from file): " << c1_n->ComputeL2Error(zero) << endl;
 //        cout << "L2 norm   c2_n (project from file): " << c2_n->ComputeL2Error(zero) << endl;
