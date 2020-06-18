@@ -2077,11 +2077,13 @@ private:
         h1_fec = new H1_FECollection(p_order, mesh->Dimension());
         h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
         ParGridFunction* phi2_ = new ParGridFunction(h1_fes);
+
         {
             ParGridFunction* phi1_ = new ParGridFunction(h1_fes);
             phi1_->ProjectCoefficient(G_coeff);
             cout << "L2 norm of phi1_: " << phi1_->ComputeL2Error(zero) << endl;
-            phi1->ProjectGridFunction(*phi1_);
+
+//            phi1->ProjectGridFunction(*phi1_);
             cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
 
         }
@@ -2231,8 +2233,8 @@ private:
         lf->AddDomainIntegrator(new DomainLFIntegrator(lf1));
         // (alpha2 alpha3 z2 c2^k, psi3)_{\Omega_s}
         lf->AddDomainIntegrator(new DomainLFIntegrator(lf2));
-        // - epsilon_m <grad(phi1 + phi2).n, psi3>_{\Gamma}, interface integrator, see below another way to define interface integrate
-        lf->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator(&neg_epsilon_protein, &grad_phi1_plus_grad_phi2, mesh, protein_marker, water_marker));
+        // - epsilon_m <grad(phi1 + phi2).n, {psi3}>_{\Gamma}, interface integrator, see below another way to define interface integrate
+        lf->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator1(&neg_epsilon_protein, &grad_phi1_plus_grad_phi2, mesh, protein_marker, water_marker));
         // sigma <phi3_D, (Epsilon grad(psi3).n)> + kappa <{h^{-1} Epsilon} phi3_D, psi3>. phi3_D includes phi_D_top and phi_D_bottom
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_top_coeff, epsilon_water, sigma, kappa), top_bdr);
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_bottom_coeff, epsilon_water, sigma, kappa), bottom_bdr);
@@ -2279,7 +2281,7 @@ private:
             A->Mult(1.0, *x, -1.0, temp);
             cout << "l2 norm of ||A x - b|| / ||b||: " << temp.Norml2() / b->Norml2() << endl;
         }
-        MFEM_ABORT("Verify Poisson code");
+//        MFEM_ABORT("Verify Poisson code");
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *phi3);
 
@@ -2398,7 +2400,9 @@ private:
                      << " times, taking " << chrono.RealTime() << " s." << endl;
             else if (solver->GetConverged() != 1)
                 cerr << "np1  solver: failed to converged" << endl;
-        }        delete lf, blf, solver, A, x, b;
+        }
+
+        delete lf, blf, solver, A, x, b;
     }
 
     // 5.求解耦合的方程NP2方程
@@ -2500,6 +2504,7 @@ private:
             else if (solver->GetConverged() != 1)
                 cerr << "np2  solver: failed to converged" << endl;
         }
+
         delete lf, blf, solver, A, x, b;
     }
 };
