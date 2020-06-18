@@ -27,7 +27,7 @@
 #-phi3_ksp_view
 
 -np1_ksp_type gmres
--np1_pc_type lu
+#-np1_pc_type lu
 #-np1_pc_type gamg -np1_pc_gamg_type classical -np1_pc_gamg_agg_nsmooths 1
 -np1_ksp_max_it 1000
 -np1_ksp_rtol 1e-10
@@ -42,19 +42,10 @@
 -np1SPDPC_ksp_type gmres
 #-np1SPDPC_pc_type ilu
 -np1SPDPC_pc_type gamg -np1SPDPC_pc_gamg_type classical -np1SPDPC_pc_gamg_agg_nsmooths 1
-#-np1SPDPC_ksp_max_it 1000
-#-np1SPDPC_ksp_rtol 1e-10
-#-np1SPDPC_ksp_atol 1e-20
-#-np1SPDPC_ksp_divtol 1e5
-#-np1SPDPC_ksp_monitor
-#-np1SPDPC_ksp_monitor_short
-#-np1SPDPC_ksp_monitor_true_residual
-#-np1SPDPC_ksp_converged_reason
-#-np1SPDPC_ksp_view
 
 -np2_ksp_type gmres
 #-np2_pc_type ilu
--np2_pc_type gamg -np2_pc_gamg_type classical -np2_pc_gamg_agg_nsmooths 1
+#-np2_pc_type gamg -np2_pc_gamg_type classical -np2_pc_gamg_agg_nsmooths 1
 -np2_ksp_max_it 1000
 -np2_ksp_rtol 1e-10
 -np2_ksp_atol 1e-20
@@ -68,15 +59,6 @@
 -np2SPDPC_ksp_type gmres
 #-np2SPDPC_pc_type lu
 -np2SPDPC_pc_type gamg -np2SPDPC_pc_gamg_type classical -np2SPDPC_pc_gamg_agg_nsmooths 1
-#-np2SPDPC_ksp_rtol 1e-10
-#-np2SPDPC_ksp_atol 1e-20
-#-np2SPDPC_ksp_divtol 1e5
-#-np2SPDPC_ksp_max_it 1000
-#-np2SPDPC_ksp_monitor
-#-np2SPDPC_ksp_monitor_short
-#-np2SPDPC_ksp_monitor_true_residual
-#-np2SPDPC_ksp_converged_reason
-#-np2SPDPC_ksp_view
 
 
 # ----------------------------------> Newton Params
