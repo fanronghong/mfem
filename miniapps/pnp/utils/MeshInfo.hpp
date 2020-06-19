@@ -391,7 +391,7 @@ void FacetInfo2(Mesh& mesh)
         element2facet.GetRow(i, e2f);
         for (int j=0; j<e2f.Size(); j++)
         {
-            const Element* face = mesh.GetFace(j);
+            const Element* face = mesh.GetFace(e2f[j]);
 //            cout << face->GetAttribute() << endl;
         }
     }

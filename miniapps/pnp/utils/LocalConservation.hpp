@@ -13,38 +13,46 @@
 using namespace std;
 using namespace mfem;
 
+
 // \int_{\partial K} q grad(gf).n ds
 void ComputeLocalConservation(Coefficient& q, const GridFunction& gf, Vector& error)
 {
     const FiniteElementSpace* fes = gf.FESpace();
+    Mesh* mesh = fes->GetMesh();
     const FiniteElement* fe;
-    ElementTransformation* T;
-    int dim = fes->GetMesh()->Dimension();
+    int dim = mesh->Dimension();
 
     Vector grad, nor;
     grad.SetSize(dim);
     nor.SetSize(dim);
-    double q_val = 0.0;
 
     error.SetSize(fes->GetNE());
     error = 0.0;
 
-    for (int i=0; i<fes->GetNE(); ++i)
+    const Table& element2face = mesh->ElementToFaceTable();
+    Array<int> e2f;
+
+    for (int i=0; i<fes->GetNE(); ++i) // loop over for all elements
     {
         fe = fes->GetFE(i);
-        const IntegrationRule* ir = &(IntRules.Get(fe->GetGeomType(), 2*fe->GetOrder()+3));
-        T = fes->GetElementTransformation(i);
 
-        for (int j=0; j<ir->GetNPoints(); ++j)
+        element2face.GetRow(i, e2f);
+        for (int j=0; j<e2f.Size(); ++j) // loop over for all edges for each element
         {
-            const IntegrationPoint& ip = ir->IntPoint(j);
-            T->SetIntPoint(&ip);
+            FaceElementTransformations* Trans = mesh->GetFaceElementTransformations(e2f[j]);
+            const IntegrationRule* ir = &(IntRules.Get(Trans->GetGeometryType(), 2*fe->GetOrder()+3));
 
-            gf.GetGradient(*T, grad);
-            q_val = q.Eval(*T, ip);
-            CalcOrtho(T->Jacobian(), nor);
+            for (int k=0; k<ir->GetNPoints(); ++k)
+            {
+                const IntegrationPoint& ip = ir->IntPoint(k);
+                Trans->SetIntPoint(&ip);
 
-            error[i] += ip.weight * q_val * (grad * nor);
+                gf.GetGradient(*Trans, grad); // error!
+                double q_val = q.Eval(*Trans, ip);
+                CalcOrtho(Trans->Jacobian(), nor);
+
+                error[i] += ip.weight * q_val * (grad * nor);
+            }
         }
     }
 }

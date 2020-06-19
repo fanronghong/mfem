@@ -562,8 +562,8 @@ public:
 };
 
 
-/* 计算(区域边界积分): q<u_D, v grad(w).n>_E,
- * q, u_D are Coefficient, w is GridFunction */
+// 计算(区域边界积分): q<u_D, v grad(w).n>_E,
+// q, u_D are Coefficient, w is GridFunction
 class DGSelfBdrFaceIntegrator: public LinearFormIntegrator
 {
 protected:
@@ -630,8 +630,8 @@ public:
 };
 
 
-/* 计算(边界或者内部Face都可以): q <{u grad(w).n}, [v]>_E,
- * u is trial function, v is test function; q are Coefficient, q在边E的两边连续; w is GridFunction, 但是w是不连续的(至少grad_w是不连续的) */
+// 计算(边界或者内部Face都可以): q <{u grad(w).n}, [v]>_E,
+// u is trial function, v is test function; q are Coefficient, q在边E的两边连续; w is GridFunction, 但是w是不连续的(至少grad_w是不连续的)
 class DGSelfTraceIntegrator_1 : public BilinearFormIntegrator
 {
 protected:
@@ -761,8 +761,8 @@ public:
 };
 
 
-/* 计算(边界或者内部Face都可以): <[u], {q v grad(w).n}>_E,
- * u is trial function, v is test function; q is Coefficient, w is GridFunction */
+// 计算(边界或者内部Face都可以): <[u], {q v grad(w).n}>_E,
+// u is trial function, v is test function; q is Coefficient, w is GridFunction */
 class DGSelfTraceIntegrator_2 : public BilinearFormIntegrator
 {
 protected:
@@ -898,8 +898,8 @@ public:
 };
 
 
-/* 计算(边界或者内部Face都可以): <{h^{-1} q} [u], [v]>_E,
- * u is trial function, v is test function; q are Coefficient */
+// 计算(边界或者内部Face都可以): <{h^{-1} q} [u], [v]>_E,
+// u is trial function, v is test function; q are Coefficient */
 class DGSelfTraceIntegrator_3: public BilinearFormIntegrator
 {
 protected:
@@ -1011,8 +1011,8 @@ public:
 };
 
 
-/* 计算(边界或者内部Face都可以): <{h^{-1} q} [u], [v]>_E,
- * u is Coefficient, v is test function; q are Coefficient */
+// 计算(边界或者内部Face都可以): <{h^{-1} q} [u], [v]>_E,
+// u is Coefficient, v is test function; q are Coefficient */
 class DGSelfTraceIntegrator_4: public LinearFormIntegrator
 {
 protected:
@@ -1180,8 +1180,8 @@ public:
 };
 
 
-/* 计算(边界或者内部Face都可以): <{q grad(u).n}, [v]>_E,
- * u is GridFunction, v is test function; q are Coefficient */
+// 计算(边界或者内部Face都可以): <{q grad(u).n}, [v]>_E,
+// u is GridFunction, v is test function; q are Coefficient */
 class DGSelfTraceIntegrator_5 : public LinearFormIntegrator
 {
 protected:
@@ -1355,8 +1355,8 @@ public:
 };
 
 
-/* 计算(边界或者内部Face都可以): - <{Q grad(u).n}, [v]>_E,
- * u is trial function, v is test function, Q is Coefficient */
+// 计算(边界或者内部Face都可以): - <{Q grad(u).n}, [v]>_E,
+// u is trial function, v is test function, Q is Coefficient */
 class DGSelfTraceIntegrator_6 : public BilinearFormIntegrator
 {
 protected:
@@ -1588,8 +1588,8 @@ public:
 };
 
 
-/* 计算(边界或者内部Face都可以): <[u], {q grad(v).n}>_E,
- * u is Coefficient, v is test function; q is Coefficient */
+// 计算(边界或者内部Face都可以): <[u], {q grad(v).n}>_E,
+// u is Coefficient, v is test function; q is Coefficient */
 class DGSelfTraceIntegrator_7 : public LinearFormIntegrator
 {
 protected:
@@ -1783,8 +1783,8 @@ public:
 };
 
 
-/* 计算(边界或者内部Face都可以): <{q u}, [v]>_E,
- * u is trial function, v is test function; q are Coefficient */
+// 计算(边界或者内部Face都可以): <{q u}, [v]>_E,
+// u is trial function, v is test function; q are Coefficient */
 class DGSelfTraceIntegrator_8 : public BilinearFormIntegrator
 {
 protected:
