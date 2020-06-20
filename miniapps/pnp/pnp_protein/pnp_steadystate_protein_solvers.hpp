@@ -12,6 +12,7 @@
 #include "../utils/SelfDefined_LinearForm.hpp"
 #include "../utils/petsc_utils.hpp"
 #include "../utils/DGSelfTraceIntegrator.hpp"
+#include "../utils/LocalConservation.hpp"
 using namespace std;
 using namespace mfem;
 
@@ -1541,6 +1542,26 @@ public:
             phi3->SaveVTK(results, "phi", ref);
             c1  ->SaveVTK(results, "c1", ref);
             c2  ->SaveVTK(results, "c2", ref);
+        }
+
+        if (local_conservation)
+        {
+            Vector error, error1, error2;
+            ComputeLocalConservation(Epsilon, *phi3, error);
+            ComputeLocalConservation(D_K_, *c1, v_K_coeff, *phi3, error1);
+            ComputeLocalConservation(D_Cl_, *c2, v_Cl_coeff, *phi3, error2);
+
+            ofstream file("./phi3_local_conservation_CG_Gummel_protein.txt"),
+                     file1("./c1_local_conservation_CG_Gummel_protein.txt"),
+                     file2("./c2_local_conservation_CG_Gummel_protein.txt");
+            if (file.is_open() && file1.is_open() && file2.is_open())
+            {
+                error.Print(file, 1);
+                error1.Print(file1, 1);
+                error2.Print(file2, 1);
+            } else {
+                MFEM_ABORT("local conservation quantities not save!");
+            }
         }
     }
 

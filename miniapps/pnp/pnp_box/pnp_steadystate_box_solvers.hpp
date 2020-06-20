@@ -11,7 +11,7 @@
 #include "pnp_steadystate_box.hpp"
 #include "petsc.h"
 #include "../utils/petsc_utils.hpp"
-
+#include "../utils/LocalConservation.hpp"
 
 class PNP_CG_Gummel_Solver
 {
@@ -1627,6 +1627,25 @@ public:
             (*c2)  *= (alpha3);
         }
 
+        if (local_conservation)
+        {
+            Vector error, error1, error2;
+            ComputeLocalConservation(epsilon_water, *phi, error);
+            ComputeLocalConservation(D_K_, *c1, v_K_coeff, *phi, error1);
+            ComputeLocalConservation(D_Cl_, *c2, v_Cl_coeff, *phi, error2);
+
+            ofstream file("./phi_local_conservation_CG_Gummel_box.txt"),
+                     file1("./c1_local_conservation_CG_Gummel_box.txt"),
+                     file2("./c2_local_conservation_CG_Gummel_box.txt");
+            if (file.is_open() && file1.is_open() && file2.is_open())
+            {
+                error.Print(file, 1);
+                error1.Print(file1, 1);
+                error2.Print(file2, 1);
+            } else {
+                MFEM_ABORT("local conservation quantities not save!");
+            }
+        }
 
         map<string, Array<double>>::iterator it1;
         for (it1=out1.begin(); it1!=out1.end(); ++it1)
@@ -2039,6 +2058,26 @@ public:
             (*phi) *= (alpha1);
             (*c1) *= (alpha3);
             (*c2) *= (alpha3);
+        }
+
+        if (local_conservation)
+        {
+            Vector error, error1, error2;
+            ComputeLocalConservation(epsilon_water, *phi, error);
+            ComputeLocalConservation(D_K_, *c1, v_K_coeff, *phi, error1);
+            ComputeLocalConservation(D_Cl_, *c2, v_Cl_coeff, *phi, error2);
+
+            ofstream file("./phi_local_conservation_DG_Gummel_box.txt"),
+                     file1("./c1_local_conservation_DG_Gummel_box.txt"),
+                     file2("./c2_local_conservation_DG_Gummel_box.txt");
+            if (file.is_open() && file1.is_open() && file2.is_open())
+            {
+                error.Print(file, 1);
+                error1.Print(file1, 1);
+                error2.Print(file2, 1);
+            } else {
+                MFEM_ABORT("local conservation quantities not save!");
+            }
         }
 
         map<string, Array<double>>::iterator it1;
@@ -2860,6 +2899,25 @@ public:
              << "L2 norm of c2 : " << c2_k.ComputeL2Error(zero) << endl;
 #endif
 
+        if (local_conservation)
+        {
+            Vector error, error1, error2;
+            ComputeLocalConservation(epsilon_water, phi, error);
+            ComputeLocalConservation(D_K_, c1_k, v_K_coeff, phi, error1);
+            ComputeLocalConservation(D_Cl_, c2_k, v_Cl_coeff, phi, error2);
+
+            ofstream file("./phi_local_conservation_CG_Newton_box.txt"),
+                     file1("./c1_local_conservation_CG_Newton_box.txt"),
+                     file2("./c2_local_conservation_CG_Newton_box.txt");
+            if (file.is_open() && file1.is_open() && file2.is_open()) {
+                error.Print(file, 1);
+                error1.Print(file1, 1);
+                error2.Print(file2, 1);
+            } else {
+                MFEM_ABORT("local conservation quantities not save!");
+            }
+        }
+
         map<string, Array<double>>::iterator it1;
         for (it1=out1.begin(); it1!=out1.end(); ++it1)
             (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
@@ -3464,6 +3522,26 @@ public:
              << "L2 norm of c1 : " << c1_k.ComputeL2Error(zero) << '\n'
              << "L2 norm of c2 : " << c2_k.ComputeL2Error(zero) << endl;
 #endif
+
+        if (local_conservation)
+        {
+            Vector error, error1, error2;
+            ComputeLocalConservation(epsilon_water, phi, error);
+            ComputeLocalConservation(D_K_, c1_k, v_K_coeff, phi, error1);
+            ComputeLocalConservation(D_Cl_, c2_k, v_Cl_coeff, phi, error2);
+
+            ofstream file("./phi_local_conservation_DG_Gummel_box.txt"),
+                    file1("./c1_local_conservation_DG_Gummel_box.txt"),
+                    file2("./c2_local_conservation_DG_Gummel_box.txt");
+            if (file.is_open() && file1.is_open() && file2.is_open())
+            {
+                error.Print(file, 1);
+                error1.Print(file1, 1);
+                error2.Print(file2, 1);
+            } else {
+                MFEM_ABORT("local conservation quantities not save!");
+            }
+        }
 
         map<string, Array<double>>::iterator it1;
         for (it1=out1.begin(); it1!=out1.end(); ++it1)

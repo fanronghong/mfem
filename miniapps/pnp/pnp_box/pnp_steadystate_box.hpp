@@ -18,6 +18,7 @@ const char* Linearize       = "gummel"; // newton, gummel
 const char* Discretize      = "dg"; // cg, dg
 bool ComputeConvergenceRate = false; // 利用解析解计算误差阶
 const char* options_src     = "./pnp_box_petsc_opts";
+bool local_conservation     = true;
 
 const int bottom_attr       = 1;
 const int top_attr          = 6;

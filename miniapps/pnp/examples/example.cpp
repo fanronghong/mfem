@@ -36,7 +36,8 @@ int main()
     dg_gf.ProjectGridFunction(h1_gf);
 
     Vector error;
-    ComputeLocalConservation(one, h1_gf, error);
+    ComputeLocalConservation(one, dg_gf, error);
+    error.Print(cout << "error:\n", 1);
 
     cout << "all good" << endl;
 }

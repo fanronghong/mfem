@@ -17,12 +17,11 @@
 
 ## Try to set SLEPC_DIR ##
 ##########################
-message("===> SLEPC_DIR: ${SLEPC_DIR}")
 if(NOT DEFINED SLEPC_DIR)
     set(SLEPC_DIR $ENV{SLEPC_DIR})
 endif()
 set(SLEPC_DIR $ENV{SLEPC_DIR})
-message("===> cmake variable SLEPC_DIR: ${SLEPC_DIR}")
+message("===> SLEPC_DIR: ${SLEPC_DIR}")
 
 ## Includes ##
 ##############
