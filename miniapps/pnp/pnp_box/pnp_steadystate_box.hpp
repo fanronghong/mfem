@@ -14,11 +14,11 @@ using namespace mfem;
 const char* mesh_file       = "./4_4_4_translate.msh";
 int p_order                 = 1; //有限元基函数的多项式次数
 int refine_times            = 0;
-const char* Linearize       = "gummel"; // newton, gummel
+const char* Linearize       = "newton"; // newton, gummel
 const char* Discretize      = "dg"; // cg, dg
 bool ComputeConvergenceRate = false; // 利用解析解计算误差阶
 const char* options_src     = "./pnp_box_petsc_opts";
-bool local_conservation     = true;
+bool local_conservation     = false;
 
 const int bottom_attr       = 1;
 const int top_attr          = 6;
@@ -34,7 +34,7 @@ const double relax_phi = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * 
 const double relax_c1  = 0.2;
 const double relax_c2  = 0.2;
 const double sigma = -1.0; // symmetric parameter for DG
-const double kappa = 20; // penalty parameter for DG
+const double kappa = 10; // penalty parameter for DG
 
 /* 可以定义如下模型参数: 前三个宏定义参数在其他头文件定义
  * Angstrom_SCALE: 埃米尺度
