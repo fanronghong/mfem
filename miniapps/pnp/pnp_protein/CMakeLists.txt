@@ -33,3 +33,7 @@ configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_protein/run.sh
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_protein/run.sh
                COPYONLY)
 
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_protein/bsub.protein
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_protein/bsub.protein
+               COPYONLY)
+

@@ -15,6 +15,10 @@ add_mfem_miniapp(pnp_steadystate_box
         LIBRARIES mfem)
 
 
-#configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/run.sh
-#        ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/run.sh
-#        COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/run.sh
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/run.sh
+               COPYONLY)
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/bsub.box
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/bsub.box
+               COPYONLY)

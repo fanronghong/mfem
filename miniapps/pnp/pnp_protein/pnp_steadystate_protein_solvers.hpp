@@ -1670,10 +1670,8 @@ private:
         GridFunctionCoefficient c1_n_coeff(c1_n), c2_n_coeff(c2_n);
 
         ParBilinearForm *blf(new ParBilinearForm(h1_space));
-        // epsilon_s (grad(phi3), grad(psi3))_{\Omega_s}
-        blf->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water_mark));
-        // epsilon_m (grad(phi3), grad(psi3))_{\Oemga_m}
-        blf->AddDomainIntegrator(new DiffusionIntegrator(epsilon_protein_mark));
+        // epsilon (grad(phi3), grad(psi3))_{\Oemga}
+        blf->AddDomainIntegrator(new DiffusionIntegrator(Epsilon));
         blf->Assemble();
         blf->Finalize();
 
@@ -2023,6 +2021,10 @@ public:
         int iter = 1;
         while (iter < Gummel_max_iters)
         {
+            cout << "1" << endl;
+            Solve_NP2();
+            cout << "2" << endl;
+
             Solve_Poisson();
 
             Vector diff(fes->GetNDofs());
@@ -2088,6 +2090,7 @@ private:
     void Solve_Singular()
     {
         phi1->ProjectCoefficient(G_coeff); // phi1求解完成, 直接算比较慢, 也可以从文件读取
+        phi1->SetTrueVector();
 
         cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
     }
@@ -2099,15 +2102,14 @@ private:
         h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
         ParGridFunction* phi2_ = new ParGridFunction(h1_fes);
 
-        {
-            ParGridFunction* phi1_ = new ParGridFunction(h1_fes);
-            phi1_->ProjectCoefficient(G_coeff);
-            cout << "L2 norm of phi1_: " << phi1_->ComputeL2Error(zero) << endl;
-
+//        {
+//            ParGridFunction* phi1_ = new ParGridFunction(h1_fes);
+//            phi1_->ProjectCoefficient(G_coeff);
+//            cout << "L2 norm of phi1_: " << phi1_->ComputeL2Error(zero) << endl;
+//
 //            phi1->ProjectGridFunction(*phi1_);
-            cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
-
-        }
+//            cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
+//        }
 
         phi3_e = new ParGridFunction(h1_fes);
         c1_e   = new ParGridFunction(h1_fes);
@@ -2213,6 +2215,7 @@ private:
         }
 
         phi2->ProjectGridFunction(*phi2_); // project from h1 space to dg1
+        phi2->SetTrueVector();
         cout << "L2 norm of phi2: " << phi2->ComputeL2Error(zero) << endl;
         delete solver, A, x, b;
     }
@@ -2232,6 +2235,7 @@ private:
 //        MFEM_ABORT("stop for verify project from file");
 
         GridFunctionCoefficient c1_n_coeff(c1_n), c2_n_coeff(c2_n);
+        double kappa = 20;
 
         ParBilinearForm *blf(new ParBilinearForm(fes));
         // Epsilon (grad(phi3), grad(psi3))_{\Omega}. Epsilon=epsilon_m in \Omega_m, Epsilon=epsilon_s in \Omega_s
@@ -2254,8 +2258,8 @@ private:
         lf->AddDomainIntegrator(new DomainLFIntegrator(lf1));
         // (alpha2 alpha3 z2 c2^k, psi3)_{\Omega_s}
         lf->AddDomainIntegrator(new DomainLFIntegrator(lf2));
-        // - epsilon_m <grad(phi1 + phi2).n, {psi3}>_{\Gamma}, interface integrator, see below another way to define interface integrate
-        lf->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator1(&neg_epsilon_protein, &grad_phi1_plus_grad_phi2, mesh, protein_marker, water_marker));
+        // epsilon_m <grad(phi1 + phi2).n, {psi3}>_{\Gamma}, interface integrator, see below another way to define interface integrate
+        lf->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator1(&epsilon_protein_mark, &grad_phi1_plus_grad_phi2, mesh, protein_marker, water_marker));
         // sigma <phi3_D, (Epsilon grad(psi3).n)> + kappa <{h^{-1} Epsilon} phi3_D, psi3>. phi3_D includes phi_D_top and phi_D_bottom
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_top_coeff, epsilon_water, sigma, kappa), top_bdr);
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_bottom_coeff, epsilon_water, sigma, kappa), bottom_bdr);
@@ -2289,18 +2293,20 @@ private:
         }
 
         {
-            Vector temp(*b);
-            A->Mult(1.0, *phi3_n, -1.0, temp);
-            cout << "l2 norm of ||A phi3_e - b|| / ||b||: " << temp.Norml2() / b->Norml2() << endl;
+//            phi3_n->ProjectGridFunction(*phi3_e); // verify code
+//            phi3_n->SetTrueVector();
+//            Vector temp(*b);
+//            A->Mult(1.0, *phi3_n, -1.0, temp);
+//            cout << "l2 norm of ||A phi3_e - b|| / ||b||: " << temp.Norml2() / b->Norml2() << endl;
         }
 
         chrono.Clear();
         chrono.Start();
         solver->Mult(*b, *x);
         {
-            Vector temp(*b);
-            A->Mult(1.0, *x, -1.0, temp);
-            cout << "l2 norm of ||A x - b|| / ||b||: " << temp.Norml2() / b->Norml2() << endl;
+//            Vector temp(*b);
+//            A->Mult(1.0, *x, -1.0, temp);
+//            cout << "l2 norm of ||A x - b|| / ||b||: " << temp.Norml2() / b->Norml2() << endl;
         }
 //        MFEM_ABORT("Verify Poisson code");
         chrono.Stop();
@@ -2366,35 +2372,6 @@ private:
         }
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
-
-        if (1)
-        {
-            ParBilinearForm* prec = new ParBilinearForm(fes);
-            // D1 (grad(c1), grad(v1))_{\Omega_s}
-            ProductCoefficient scale_D1(scale_coeff, D1_water);
-            prec->AddDomainIntegrator(new DiffusionIntegrator(scale_D1));
-            // - <{D1 grad(c1)}, [v1]> + sigma <[c1], {D1 grad(v1)}> + kappa <{h^{-1} D1} [c1], [v1]> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
-            prec->AddInteriorFaceIntegrator(new selfDGDiffusionIntegrator(D1_water, sigma, kappa, mesh, water_marker));
-            prec->AddBdrFaceIntegrator(new selfDGDiffusionIntegrator(D1_water, sigma, kappa, mesh, water_marker), ess_bdr);
-//            // D1 z1 (c1 grad(phi3^k), grad(v1))_{\Omega_s}
-//            prec->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_n, &D1_prod_z1_water));
-//            // - <{D1 z1 c1 grad(phi^k)}, [v1]> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
-//            prec->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(D1_prod_z1_water, *phi3_n, mesh, water_marker));
-//            prec->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(D1_prod_z1_water, *phi3_n, mesh, water_marker), ess_bdr);
-//            // sigma <[c1], {D1 z1 v1 grad(phi3^k}> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
-//            prec->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi3_n, mesh, water_marker));
-//            prec->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi3_n, mesh, water_marker), ess_bdr);
-            prec->Assemble(0);
-            prec->Finalize(0);
-
-            PetscParMatrix PC;
-            prec->SetOperatorType(Operator::PETSC_MATAIJ);
-            prec->FormSystemMatrix(ess_tdof_list, PC);
-        	PC.EliminateRows(protein_dofs, 1.0);
-
-            PetscLinearSolver* pc = new PetscLinearSolver(PC, "np1SPDPC_");
-            solver->SetPreconditioner(*pc);
-        }
 
         chrono.Clear();
         chrono.Start();
@@ -2470,35 +2447,7 @@ private:
         }
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
-
-		if (1)
-        {
-            ParBilinearForm* prec = new ParBilinearForm(fes);
-			// D2 (grad(c2), grad(v2))_{\Omega_s}
-			ProductCoefficient scale_D2(scale2_coeff, D2_water);
-			prec->AddDomainIntegrator(new DiffusionIntegrator(scale_D2));
-//			// D2 z2 (c2 grad(phi3^k), grad(v2))_{\Omega_s}
-//			prec->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_n, &D2_prod_z2_water));
-			// - <{D2 grad(c2)}, [v2]> + sigma <[c2], {D2 grad(v2)}> + kappa <{h^{-1} D2} [c2], [v2]> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
-			prec->AddInteriorFaceIntegrator(new selfDGDiffusionIntegrator(D2_water, sigma, kappa, mesh, water_marker));
-			prec->AddBdrFaceIntegrator(new selfDGDiffusionIntegrator(D2_water, sigma, kappa, mesh, water_marker), ess_bdr);
-//			// - <{D2 z2 c2 grad(phi^k)}, [v2]> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
-//			prec->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(D2_prod_z2_water, *phi3_n, mesh, water_marker));
-//			prec->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(D2_prod_z2_water, *phi3_n, mesh, water_marker), ess_bdr);
-//			// sigma <[c2], {D2 z2 v2 grad(phi3^k}> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
-//			prec->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_Cl_v_Cl, *phi3_n, mesh, water_marker));
-//			prec->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_Cl_v_Cl, *phi3_n, mesh, water_marker), ess_bdr);
-            prec->Assemble(0);
-            prec->Finalize(0);
-
-            PetscParMatrix PC;
-            prec->SetOperatorType(Operator::PETSC_MATAIJ);
-            prec->FormSystemMatrix(ess_tdof_list, PC);
-            PC.EliminateRows(protein_dofs, 1.0);
-
-            PetscLinearSolver* pc = new PetscLinearSolver(PC, "np2SPDPC_");
-            solver->SetPreconditioner(*pc);
-        }
+        solver->iterative_mode = true;
 
         chrono.Clear();
         chrono.Start();
