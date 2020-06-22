@@ -16,6 +16,9 @@
 using namespace std;
 using namespace mfem;
 
+class PNP_Newton_CG_Operator_par;
+
+
 class PNP_Gummel_Solver
 {
 private:
@@ -1937,14 +1940,16 @@ public:
                 water_dofs.Append(dofs);
             }
         }
-        protein_dofs.Sort();
-        protein_dofs.Unique();
-        water_dofs.Sort();
-        water_dofs.Unique();
-        for (int i=0; i<interface_ess_tdof_list.Size(); i++) // 去掉protein和water中的interface上的dofs
-        {
-            protein_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
-            water_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
+        { // 因为是DG, 所以不可能有重复的dof
+//            protein_dofs.Sort();
+//            protein_dofs.Unique();
+//            water_dofs.Sort();
+//            water_dofs.Unique();
+//            for (int i=0; i<interface_ess_tdof_list.Size(); i++) // 去掉protein和water中的interface上的dofs
+//            {
+//                protein_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
+//                water_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
+//            }
         }
 
         *phi3 = 0.0;
@@ -2360,7 +2365,7 @@ private:
         PetscParVector *x = new PetscParVector(fes);
         PetscParVector *b = new PetscParVector(fes);
         blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
+        blf->FormLinearSystem(null_array, *c1, *lf, *A, *x, *b);
 
         A->EliminateRows(protein_dofs, 1.0);
         if (self_debug) {
@@ -2481,7 +2486,6 @@ private:
 
 
 
-class PNP_Newton_CG_Operator_par;
 class BlockPreconditionerSolver: public Solver
 {
 private:
@@ -2566,6 +2570,104 @@ public:
 //        MFEM_ABORT("in BlockPreconditionerSolver::Mult()");
     }
 };
+class UzawaPreconditionerSolver: public Solver
+{
+private:
+    IS index_set[3];
+    Mat **sub;
+    KSP kspblock[3];
+    mutable PetscParVector *X, *Y; // Create PetscParVectors as placeholders X and Y
+
+public:
+    UzawaPreconditionerSolver(const OperatorHandle& oh): Solver()
+    {
+        PetscErrorCode ierr;
+
+        // Get the PetscParMatrix out of oh.
+        PetscParMatrix *Jacobian_;
+        oh.Get(Jacobian_);
+        Mat Jacobian = *Jacobian_; // type cast to Petsc Mat
+
+        // update base (Solver) class
+        width = Jacobian_->Width();
+        height = Jacobian_->Height();
+        X = new PetscParVector(PETSC_COMM_WORLD, *this, true, false);
+        Y = new PetscParVector(PETSC_COMM_WORLD, *this, false, false);
+
+        PetscInt M, N;
+        ierr = MatNestGetSubMats(Jacobian, &N, &M, &sub); PCHKERRQ(sub[0][0], ierr); // get block matrices
+        ierr = MatNestGetISs(Jacobian, index_set, NULL); PCHKERRQ(index_set, ierr); // get the index sets of the blocks
+
+        for (int i=0; i<3; ++i)
+        {
+            ierr = KSPCreate(MPI_COMM_WORLD, &kspblock[i]); PCHKERRQ(kspblock[i], ierr);
+            ierr = KSPSetOperators(kspblock[i], sub[i][i], sub[i][i]); PCHKERRQ(sub[i][i], ierr);
+
+            if (i == 0)
+                KSPAppendOptionsPrefix(kspblock[i], "sub_block1_");
+            else if (i == 1)
+                KSPAppendOptionsPrefix(kspblock[i], "sub_block2_");
+            else if (i == 2)
+                KSPAppendOptionsPrefix(kspblock[i], "sub_block3_");
+            else MFEM_ABORT("Wrong block preconditioner solver!");
+
+            KSPSetFromOptions(kspblock[i]);
+            KSPSetUp(kspblock[i]);
+        }
+    }
+    virtual ~UzawaPreconditionerSolver()
+    {
+        for (int i=0; i<3; i++)
+        {
+            KSPDestroy(&kspblock[i]);
+            //ISDestroy(&index_set[i]); no need to delete it
+        }
+
+        delete X;
+        delete Y;
+    }
+
+    virtual void SetOperator(const Operator& op) { MFEM_ABORT("Not support!"); }
+
+    virtual void Mult(const Vector& x, Vector& y) const
+    {
+        Vec block_phi_k, block_c1_k, block_c2_k;
+        Vec block_phi, block_c1, block_c2;
+
+        Vec blockx, blocky;
+        Vec blockx0, blocky0;
+
+        X->PlaceArray(x.GetData()); // no copy, only the data pointer is passed to PETSc
+        Y->PlaceArray(y.GetData());
+
+        VecGetSubVector(*X, index_set[0], &block_phi_k); // known
+        VecGetSubVector(*X, index_set[1], &block_c1_k);
+        VecGetSubVector(*X, index_set[2], &block_c2_k);
+
+        VecGetSubVector(*Y, index_set[0], &block_phi); // unknown
+        VecGetSubVector(*Y, index_set[1], &block_c1);
+        VecGetSubVector(*Y, index_set[2], &block_c2);
+
+        KSPSolve(kspblock[1], )
+        // solve 3 equations
+        for (int i=0; i<3; ++i)
+        {
+            VecGetSubVector(*X, index_set[i], &blockx);
+            VecGetSubVector(*Y, index_set[i], &blocky);
+
+            KSPSolve(kspblock[i], blockx, blocky);
+
+            VecRestoreSubVector(*X, index_set[i], &blockx);
+            VecRestoreSubVector(*Y, index_set[i], &blocky);
+        }
+
+        X->ResetArray();
+        Y->ResetArray();
+//        cout << "in BlockPreconditionerSolver::Mult(), l2 norm y after: " << y.Norml2() << endl;
+//        MFEM_ABORT("in BlockPreconditionerSolver::Mult()");
+    }
+};
+
 class PreconditionerFactory: public PetscPreconditionerFactory
 {
 private:
