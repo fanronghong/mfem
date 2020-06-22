@@ -1873,6 +1873,7 @@ private:
 
     StopWatch chrono;
     int num_procs, myid;
+    Array<int> null_array;
 
 public:
     PNP_Gummel_DG_Solver_par(Mesh* mesh_) : mesh(mesh_)
@@ -1900,22 +1901,19 @@ public:
             ess_bdr                    = 0;
             ess_bdr[top_marker - 1]    = 1;
             ess_bdr[bottom_marker - 1] = 1;
-            fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+//            fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list); // error, https://github.com/mfem/mfem/issues/1048
 
             top_bdr.SetSize(size);
             top_bdr                 = 0;
             top_bdr[top_marker - 1] = 1;
-            fes->GetEssentialTrueDofs(top_bdr, top_ess_tdof_list);
 
             bottom_bdr.SetSize(size);
             bottom_bdr                    = 0;
             bottom_bdr[bottom_marker - 1] = 1;
-            fes->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
 
             interface_bdr.SetSize(size);
             interface_bdr                       = 0;
             interface_bdr[interface_marker - 1] = 1;
-            fes->GetEssentialTrueDofs(interface_bdr, interface_ess_tdof_list);
 
             Gamma_m.SetSize(size);
             Gamma_m                     = 0;
@@ -2270,7 +2268,7 @@ private:
         PetscParVector *x = new PetscParVector(fes);
         PetscParVector *b = new PetscParVector(fes);
         blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        blf->FormLinearSystem(ess_tdof_list, *phi3, *lf, *A, *x, *b); // ess_tdof_list include: top, bottom
+        blf->FormLinearSystem(null_array, *phi3, *lf, *A, *x, *b); // ess_tdof_list include: top, bottom
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "phi3_");
 
@@ -2420,8 +2418,8 @@ private:
         // sigma <[c2], {D2 z2 v2 grad(phi3^k}> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
         blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_Cl_v_Cl, *phi3_n, mesh, water_marker));
         blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_Cl_v_Cl, *phi3_n, mesh, water_marker), ess_bdr);
-        blf->Assemble(0);
-        blf->Finalize(0);
+        blf->Assemble(1);
+        blf->Finalize(1);
 
         ParLinearForm *lf(new ParLinearForm(fes));
         // sigma <c2_D, D2 grad(v2).n> + kappa <{h^{-1} D2} c2_D, v2>
@@ -2437,14 +2435,16 @@ private:
         PetscParVector *x = new PetscParVector(fes);
         PetscParVector *b = new PetscParVector(fes);
         blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        blf->FormLinearSystem(ess_tdof_list, *c2, *lf, *A, *x, *b);
+        blf->FormLinearSystem(null_array, *c2, *lf, *A, *x, *b);
 
-        A->EliminateRows(protein_dofs, 1.0);
         if (self_debug) {
             for (int i = 0; i < protein_dofs.Size(); ++i) {
                 assert(abs((*b)(protein_dofs[i])) < 1E-10);
             }
         }
+
+        cout << "A size: " << A->Height() << endl;
+        MFEM_ABORT("after A size:");
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
         solver->iterative_mode = true;
