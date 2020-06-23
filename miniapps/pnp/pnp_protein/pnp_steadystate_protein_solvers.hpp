@@ -2634,32 +2634,182 @@ public:
         Vec block_phi_k, block_c1_k, block_c2_k;
         Vec block_phi, block_c1, block_c2;
 
-        Vec blockx, blocky;
-        Vec blockx0, blocky0;
-
         X->PlaceArray(x.GetData()); // no copy, only the data pointer is passed to PETSc
         Y->PlaceArray(y.GetData());
 
         VecGetSubVector(*X, index_set[0], &block_phi_k); // known
         VecGetSubVector(*X, index_set[1], &block_c1_k);
         VecGetSubVector(*X, index_set[2], &block_c2_k);
-
         VecGetSubVector(*Y, index_set[0], &block_phi); // unknown
         VecGetSubVector(*Y, index_set[1], &block_c1);
         VecGetSubVector(*Y, index_set[2], &block_c2);
 
-        KSPSolve(kspblock[1], )
-        // solve 3 equations
-        for (int i=0; i<3; ++i)
+        KSPSolve(kspblock[1], block_c1_k, block_c1); // solve A1 y_{c1} = x_{c1}
+        KSPSolve(kspblock[2], block_c2_k, block_c2); // solve A2 y_{c2} = x_{c2}
+
+        Vec temp1, temp2;
+        VecDuplicate(block_phi_k, &temp1);
+        VecDuplicate(block_phi_k, &temp2);
+
+        MatMult(sub[0][1], block_c1, temp1); // B1 c1
+        MatMult(sub[0][2], block_c2, temp2); // B2 c2
+        VecAXPY(block_phi_k, -1.0, temp1); // f - B1 c1
+        VecAXPY(block_phi_k, -1.0, temp2); // f - B2 c2
+
+        KSPSolve(kspblock[0], block_phi_k, block_phi); // solve A y_{phi} = x_{phi}
+
+        VecRestoreSubVector(*X, index_set[0], &block_phi_k);
+        VecRestoreSubVector(*X, index_set[1], &block_c1_k);
+        VecRestoreSubVector(*X, index_set[2], &block_c2_k);
+        VecRestoreSubVector(*Y, index_set[0], &block_phi);
+        VecRestoreSubVector(*Y, index_set[1], &block_c1);
+        VecRestoreSubVector(*Y, index_set[2], &block_c2);
+
+        X->ResetArray();
+        Y->ResetArray();
+//        cout << "in BlockPreconditionerSolver::Mult(), l2 norm y after: " << y.Norml2() << endl;
+//        MFEM_ABORT("in BlockPreconditionerSolver::Mult()");
+    }
+};
+class SIMPLEPreconditionerSolver: public Solver
+{
+private:
+    IS index_set[3];
+    Mat **sub;
+    Mat schur;
+    KSP kspblock[3];
+    mutable PetscParVector *X, *Y; // Create PetscParVectors as placeholders X and Y
+
+public:
+    SIMPLEPreconditionerSolver(const OperatorHandle& oh): Solver()
+    {
+        PetscErrorCode ierr;
+
+        // Get the PetscParMatrix out of oh.
+        PetscParMatrix *Jacobian_;
+        oh.Get(Jacobian_);
+        Mat Jacobian = *Jacobian_; // type cast to Petsc Mat
+
+        // update base (Solver) class
+        width = Jacobian_->Width();
+        height = Jacobian_->Height();
+        X = new PetscParVector(PETSC_COMM_WORLD, *this, true, false);
+        Y = new PetscParVector(PETSC_COMM_WORLD, *this, false, false);
+
+        PetscInt M, N;
+        ierr = MatNestGetSubMats(Jacobian, &N, &M, &sub); PCHKERRQ(sub[0][0], ierr); // get block matrices
+        ierr = MatNestGetISs(Jacobian, index_set, NULL); PCHKERRQ(index_set, ierr); // get the index sets of the blocks
+
+        Vec diag1, diag2;
+        VecCreate(PETSC_COMM_WORLD, &diag1);
+        VecSetSizes(diag1, PETSC_DECIDE, (PetscInt)(width/3));
+        VecSetFromOptions(diag1);
+        VecDuplicate(diag1, &diag2);
+        MatGetDiagonal(sub[1][1], diag1); // diagonal of A1
+        MatGetDiagonal(sub[2][2], diag2); // diagonal of A2
+        VecReciprocal(diag1); // diag(A1)^-1 => diag1
+        VecReciprocal(diag2); // diag(A2)^-1 => diag2
+
+        Mat temp1, temp2;
+        MatDuplicate(sub[0][1], MAT_COPY_VALUES, &temp1); // B1 => temp1
+        MatDuplicate(sub[0][2], MAT_COPY_VALUES, &temp2); // B2 => temp2
+        MatDiagonalScale(temp1, NULL, diag1); // B1 diag(A1)^-1 => temp1
+        MatDiagonalScale(temp2, NULL, diag2); // B2 diag(A2)^-1 => temp2
+
+        MatDuplicate(sub[0][0], MAT_COPY_VALUES, &schur); // A => schur
+        Mat temp3, temp4;
+        MatDuplicate(schur, MAT_DO_NOT_COPY_VALUES, &temp3);
+        MatDuplicate(schur, MAT_DO_NOT_COPY_VALUES, &temp4);
+        MatMatMult(temp1, sub[1][0], MAT_INITIAL_MATRIX, PETSC_DEFAULT, &temp3); // B1 diag(A1)^-1 C1 => temp3
+        MatMatMult(temp2, sub[2][0], MAT_INITIAL_MATRIX, PETSC_DEFAULT, &temp4); // B2 diag(A2)^-1 C2 => temp4
+        MatAXPY(schur, -1.0, temp3, DIFFERENT_NONZERO_PATTERN); // A - B1 diag(A1)^-1 C1 => schur
+        MatAXPY(schur, -1.0, temp4, DIFFERENT_NONZERO_PATTERN); // A - B1 diag(A1)^-1 C1 - B2 diag(A2)^-1 => schur
+
+        ierr = KSPCreate(MPI_COMM_WORLD, &kspblock[0]); PCHKERRQ(kspblock[0], ierr);
+        ierr = KSPSetOperators(kspblock[0], schur, schur); PCHKERRQ(schur, ierr);
+        KSPAppendOptionsPrefix(kspblock[0], "sub_block1_");
+        KSPSetFromOptions(kspblock[0]);
+        KSPSetUp(kspblock[0]);
+
+        ierr = KSPCreate(MPI_COMM_WORLD, &kspblock[1]); PCHKERRQ(kspblock[1], ierr);
+        ierr = KSPSetOperators(kspblock[1], sub[1][1], sub[1][1]); PCHKERRQ(sub[1][1], ierr);
+        KSPAppendOptionsPrefix(kspblock[1], "sub_block2_");
+        KSPSetFromOptions(kspblock[1]);
+        KSPSetUp(kspblock[1]);
+
+        ierr = KSPCreate(MPI_COMM_WORLD, &kspblock[2]); PCHKERRQ(kspblock[2], ierr);
+        ierr = KSPSetOperators(kspblock[2], sub[2][2], sub[2][2]); PCHKERRQ(sub[2][2], ierr);
+        KSPAppendOptionsPrefix(kspblock[2], "sub_block3_");
+        KSPSetFromOptions(kspblock[2]);
+        KSPSetUp(kspblock[2]);
+
+    }
+    virtual ~SIMPLEPreconditionerSolver()
+    {
+        for (int i=0; i<3; i++)
         {
-            VecGetSubVector(*X, index_set[i], &blockx);
-            VecGetSubVector(*Y, index_set[i], &blocky);
-
-            KSPSolve(kspblock[i], blockx, blocky);
-
-            VecRestoreSubVector(*X, index_set[i], &blockx);
-            VecRestoreSubVector(*Y, index_set[i], &blocky);
+            KSPDestroy(&kspblock[i]);
+            //ISDestroy(&index_set[i]); no need to delete it
         }
+
+        delete X;
+        delete Y;
+    }
+
+    virtual void SetOperator(const Operator& op) { MFEM_ABORT("Not support!"); }
+
+    virtual void Mult(const Vector& x, Vector& y) const
+    {
+        Vec phi_k, c1_k, c2_k;
+        Vec phi, c1, c2;
+
+        X->PlaceArray(x.GetData()); // no copy, only the data pointer is passed to PETSc
+        Y->PlaceArray(y.GetData());
+
+        VecGetSubVector(*X, index_set[0], &phi_k); // known
+        VecGetSubVector(*X, index_set[1], &c1_k);
+        VecGetSubVector(*X, index_set[2], &c2_k);
+        VecGetSubVector(*Y, index_set[0], &phi); // unknown
+        VecGetSubVector(*Y, index_set[1], &c1);
+        VecGetSubVector(*Y, index_set[2], &c2);
+
+        KSPSolve(kspblock[1], c1_k, c1); // solve A1 c1^* = c1_k
+        KSPSolve(kspblock[2], c2_k, c2); // solve A2 c2^*  c2_k
+
+        Vec temp1, temp2;
+        VecDuplicate(phi_k, &temp1);
+        VecDuplicate(phi_k, &temp2);
+
+        MatMult(sub[0][1], c1, temp1); // temp1: B1 c1
+        MatMult(sub[0][2], c2, temp2); // temp2: B2 c2
+        VecAXPY(phi_k, -1.0, temp1); // f: f - B1 c1
+        VecAXPY(phi_k, -1.0, temp2); // f: f - B1 c1 - B2 c2
+
+        KSPSolve(kspblock[0], phi_k, phi); // solve S y_{phi} = x_{phi}, S is schur complement
+
+        Vec delta_c1, delta_c2, neg_C1_delta_phi, neg_C2_delta_phi;
+        VecDuplicate(c1, &delta_c1);
+        VecDuplicate(c2, &delta_c2);
+        VecDuplicate(c1, &neg_C1_delta_phi);
+        VecDuplicate(c2, &neg_C2_delta_phi);
+
+        MatMult(sub[1][0], phi, neg_C1_delta_phi); // C1 delta_phi
+        VecScale(neg_C1_delta_phi, -1.0); // - C1 delta_phi
+        KSPSolve(kspblock[1], neg_C1_delta_phi, delta_c1); // solve delta_c1
+
+        MatMult(sub[2][0], phi, neg_C2_delta_phi); // C2 delta_phi
+        VecScale(neg_C2_delta_phi, -1.0); // - C2 delta_phi
+        KSPSolve(kspblock[2], neg_C2_delta_phi, delta_c2); // solve delta_c2
+
+        VecAXPY(c1, 1.0, delta_c1); // update c1: c1 + delta_c1
+        VecAYPX(c2, 1.0, delta_c2); // update c2: c2 + delta_c2
+
+        VecRestoreSubVector(*X, index_set[0], &phi_k);
+        VecRestoreSubVector(*X, index_set[1], &c1_k);
+        VecRestoreSubVector(*X, index_set[2], &c2_k);
+        VecRestoreSubVector(*Y, index_set[0], &phi);
+        VecRestoreSubVector(*Y, index_set[1], &c1);
+        VecRestoreSubVector(*Y, index_set[2], &c2);
 
         X->ResetArray();
         Y->ResetArray();
@@ -2672,14 +2822,21 @@ class PreconditionerFactory: public PetscPreconditionerFactory
 {
 private:
     const PNP_Newton_CG_Operator_par& op; // op就是Nonlinear Operator(可用来计算Residual, Jacobian)
+    string name;
 
 public:
-    PreconditionerFactory(const PNP_Newton_CG_Operator_par& op_, const string& name_): PetscPreconditionerFactory(name_), op(op_) {}
+    PreconditionerFactory(const PNP_Newton_CG_Operator_par& op_, const string& name_)
+        : PetscPreconditionerFactory(name_), op(op_), name(name_) {}
     virtual ~PreconditionerFactory() {}
 
     virtual Solver* NewPreconditioner(const OperatorHandle& oh) // oh就是当前Newton迭代步的Jacobian的句柄
     {
-        return new BlockPreconditionerSolver(oh);
+        if (name == "block")
+            return new BlockPreconditionerSolver(oh); // block preconditioner
+        else if (name == "uzawa")
+            return new UzawaPreconditionerSolver(oh); // uzawa preconditioner
+        else if (name == "simple")
+            return new SIMPLEPreconditionerSolver(oh); // simple preconditioner
     }
 };
 
@@ -2882,9 +3039,9 @@ public:
         phi3_k->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
-        cout << "in Mult(), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
-        cout << "in Mult(), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
-        cout << "in Mult(), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
+//        cout << "in Mult(), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
+//        cout << "in Mult(), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
+//        cout << "in Mult(), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
 
         GridFunctionCoefficient c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
@@ -3012,7 +3169,7 @@ public:
 
     virtual Operator &GetGradient(const Vector& x) const
     {
-        cout << "in PNP_Newton_Operator::GetGradient()" << endl;
+//        cout << "in PNP_Newton_Operator::GetGradient()" << endl;
         int sc = height / 3;
         Vector& x_ = const_cast<Vector&>(x);
 
@@ -3022,9 +3179,9 @@ public:
         phi3_k->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
-        cout << "in GetGradient(), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
-        cout << "in GetGradient(), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
-        cout << "in GetGradient(), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
+//        cout << "in GetGradient(), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
+//        cout << "in GetGradient(), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
+//        cout << "in GetGradient(), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
 
         GridFunctionCoefficient c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
@@ -3291,7 +3448,7 @@ public:
         op = new PNP_Newton_CG_Operator_par(h1_space, phi1, phi2);
 
         // Set the newton solve parameters
-        jac_factory   = new PreconditionerFactory(*op, "Block Preconditioner");
+        jac_factory   = new PreconditionerFactory(*op, prec_type);
         newton_solver = new PetscNonlinearSolver(h1_space->GetComm(), *op, "newton_");
         newton_solver->iterative_mode = true;
         newton_solver->SetPreconditionerFactory(jac_factory);
@@ -3304,6 +3461,7 @@ public:
     void Solve()
     {
         cout << "\nNewton, CG" << p_order << ", protein, parallel"
+             << ", preconditioner: " << prec_type
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 
         phi3_k.MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
@@ -3312,9 +3470,9 @@ public:
         phi3_k.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
-        cout << "L2 norm of phi3(before newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
-        cout << "L2 norm of   c1(before newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
-        cout << "L2 norm of   c2(before newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
+//        cout << "L2 norm of phi3(before newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
+//        cout << "L2 norm of   c1(before newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
+//        cout << "L2 norm of   c2(before newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
 
         Vector zero_vec;
         cout << "u_k l2 norm: " << u_k->Norml2() << endl;
