@@ -18,26 +18,29 @@ double sin_func(const Vector& x)
 
 int main()
 {
-    Mesh mesh(4, 4, 4, Element::TETRAHEDRON, true, 1.0, 1.0, 1.0);
+    Mesh mesh(2, 2, 2, Element::TETRAHEDRON, true, 1.0, 1.0, 1.0);
 
     H1_FECollection h1_fec(1, mesh.Dimension());
-    FiniteElementSpace h1_fes(&mesh, &h1_fec);
+    FiniteElementSpace h1_fes(&mesh, &h1_fec); // byVDIM, byNODES
 
     DG_FECollection dg_fec(1, mesh.Dimension());
     FiniteElementSpace dg_fes(&mesh, &dg_fec);
 
-    FunctionCoefficient sin_coeff(sin_func);
-    ConstantCoefficient one(1.0);
+    BilinearForm blf(&h1_fes);
+    blf.AddDomainIntegrator(new DiffusionIntegrator);
+    for (int i=0; i<2; ++i)
+    {
+        Array<int> vdofs;
+        DenseMatrix elmat;
+        blf.ComputeElementMatrix(i, elmat);
+        blf.AssembleElementMatrix(i, elmat, vdofs, 1);
+    }
+    blf.Finalize();
+    SparseMatrix spmat = blf.SpMat();
+    spmat.Print(cout << "spmat:\n");
 
-    GridFunction h1_gf(&h1_fes);
-    h1_gf.ProjectCoefficient(sin_coeff);
 
-    GridFunction dg_gf(&dg_fes);
-    dg_gf.ProjectGridFunction(h1_gf);
 
-    Vector error;
-    ComputeLocalConservation(one, dg_gf, error);
-    error.Print(cout << "error:\n", 1);
 
     cout << "all good" << endl;
 }
