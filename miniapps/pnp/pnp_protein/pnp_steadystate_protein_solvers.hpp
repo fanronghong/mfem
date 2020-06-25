@@ -2449,11 +2449,7 @@ private:
         }
 
         cout << "A size: " << A->Height() << endl;
-        SparseMatrix A_sp = blf->SpMat();
-        cout << "A_sp size: " << A_sp.Size() << endl;
-        DenseMatrix den(water_dofs.Size());
-        A_sp.SetSubMatrix(water_dofs, water_dofs, den);
-        cout << "den size: " << den.Size() << endl;
+        water_dofs.Print(cout << "water_dofs:\n", water_dofs.Size());
         MFEM_ABORT("after A size:");
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
