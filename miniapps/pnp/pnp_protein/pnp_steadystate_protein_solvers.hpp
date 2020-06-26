@@ -2363,7 +2363,6 @@ private:
         blf->SetOperatorType(Operator::PETSC_MATAIJ);
         blf->FormLinearSystem(null_array, *c1, *lf, *A, *x, *b);
 
-        A->EliminateRows(protein_dofs, 1.0);
         if (self_debug) {
             for (int i = 0; i < protein_dofs.Size(); ++i) {
                 assert(abs((*b)(protein_dofs[i])) < 1E-10);
@@ -2401,6 +2400,13 @@ private:
 
             VecRestoreSubVector(vec, is, &subb);
             VecRestoreSubVector(sol, is, &subx);
+
+            MatDestroy(&mat);
+            VecDestroy(&vec);
+            VecDestroy(&sol);
+            ISDestroy(&is);
+            KSPDestroy(&ksp);
+            MFEM_ABORT("ssssss");
         }
         else
         {
@@ -2433,7 +2439,6 @@ private:
         (*c1)   *= 1-relax_c1;
         (*c1)   += (*c1_n); // 利用松弛方法更新c1
         (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
-
 
         delete lf, blf, A, x, b;
     }
@@ -2511,6 +2516,12 @@ private:
 
             VecRestoreSubVector(vec, is, &subb);
             VecRestoreSubVector(sol, is, &subx);
+
+            MatDestroy(&mat);
+            VecDestroy(&vec);
+            VecDestroy(&sol);
+            ISDestroy(&is);
+            KSPDestroy(&ksp);
         }
         else
         {
