@@ -2024,10 +2024,6 @@ public:
         int iter = 1;
         while (iter < Gummel_max_iters)
         {
-            cout << "1" << endl;
-            Solve_NP2();
-            cout << "2" << endl;
-
             Solve_Poisson();
 
             Vector diff(fes->GetNDofs());
@@ -2348,8 +2344,8 @@ private:
         // sigma <[c1], {D1 z1 v1 grad(phi3^k}> on \mathcal(E)_h^{0,s} \cupp \mathcal(E)_h^D
         blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi3_n, mesh, water_marker));
         blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi3_n, mesh, water_marker), ess_bdr);
-        blf->Assemble(0);
-        blf->Finalize(0);
+        blf->Assemble(1);
+        blf->Finalize(1);
 
         ParLinearForm *lf(new ParLinearForm(fes));
         // sigma <c1_D, D1 grad(v1).n> + kappa <{h^{-1} D1} c1_D, v1>
@@ -2374,13 +2370,57 @@ private:
             }
         }
 
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
+        if (1)
+        {
+            Mat mat = Mat(*A);
+            Vec vec = Vec(*b);
+            Vec sol = Vec(*x);
+            PetscInt size = PetscInt(water_dofs.Size());
 
-        chrono.Clear();
-        chrono.Start();
-        solver->Mult(*b, *x);
-//        MFEM_ABORT("c1SPDPC stop");
-        chrono.Stop();
+            PetscInt* indices;
+            PetscMalloc1(size, &indices);
+            for (int i=0; i<size; ++i) indices[i] = water_dofs[i];
+
+            IS is;
+            ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
+            PetscFree(indices);
+
+            // subsystem subA * subx = subb
+            Mat subA;
+            Vec subx, subb;
+            MatCreateSubMatrix(*A, is, is, MAT_INITIAL_MATRIX, &subA);
+            VecGetSubVector(vec, is, &subb);
+            VecGetSubVector(sol, is, &subx);
+
+            KSP ksp;
+            KSPCreate(MPI_COMM_WORLD, &ksp);
+            KSPSetOptionsPrefix(ksp, "np1_");
+            KSPSetOperators(ksp, subA, subA);
+            KSPSetFromOptions(ksp);
+            KSPSolve(ksp, subb, subx);
+
+            VecRestoreSubVector(vec, is, &subb);
+            VecRestoreSubVector(sol, is, &subx);
+        }
+        else
+        {
+            PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
+            chrono.Clear();
+            chrono.Start();
+            solver->Mult(*b, *x);
+            chrono.Stop();
+
+            if (verbose) {
+                cout << "            L2 norm of c1: " << c1->ComputeL2Error(zero) << endl;
+                if (solver->GetConverged() == 1 && myid == 0)
+                    cout << "np1  solver: successfully converged by iterating " << solver->GetNumIterations()
+                         << " times, taking " << chrono.RealTime() << " s." << endl;
+                else if (solver->GetConverged() != 1)
+                    cerr << "np1  solver: failed to converged" << endl;
+            }
+
+            delete solver;
+        }
         blf->RecoverFEMSolution(*x, *lf, *c1);
 
         if (self_debug) {
@@ -2394,16 +2434,8 @@ private:
         (*c1)   += (*c1_n); // 利用松弛方法更新c1
         (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
 
-        if (verbose) {
-            cout << "            L2 norm of c1: " << c1->ComputeL2Error(zero) << endl;
-            if (solver->GetConverged() == 1 && myid == 0)
-                cout << "np1  solver: successfully converged by iterating " << solver->GetNumIterations()
-                     << " times, taking " << chrono.RealTime() << " s." << endl;
-            else if (solver->GetConverged() != 1)
-                cerr << "np1  solver: failed to converged" << endl;
-        }
 
-        delete lf, blf, solver, A, x, b;
+        delete lf, blf, A, x, b;
     }
 
     // 5.求解耦合的方程NP2方程
@@ -2448,17 +2480,59 @@ private:
             }
         }
 
-        cout << "A size: " << A->Height() << endl;
-        water_dofs.Print(cout << "water_dofs:\n", water_dofs.Size());
-        MFEM_ABORT("after A size:");
+        if (1)
+        {
+            Mat mat = Mat(*A);
+            Vec vec = Vec(*b);
+            Vec sol = Vec(*x);
+            PetscInt size = PetscInt(water_dofs.Size());
 
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
-        solver->iterative_mode = true;
+            PetscInt* indices;
+            PetscMalloc1(size, &indices);
+            for (int i=0; i<size; ++i) indices[i] = water_dofs[i];
 
-        chrono.Clear();
-        chrono.Start();
-        solver->Mult(*b, *x);
-        chrono.Stop();
+            IS is;
+            ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
+            PetscFree(indices);
+
+            // subsystem subA * subx = subb
+            Mat subA;
+            Vec subx, subb;
+            MatCreateSubMatrix(*A, is, is, MAT_INITIAL_MATRIX, &subA);
+            VecGetSubVector(vec, is, &subb);
+            VecGetSubVector(sol, is, &subx);
+
+            KSP ksp;
+            KSPCreate(MPI_COMM_WORLD, &ksp);
+            KSPSetOptionsPrefix(ksp, "np2_");
+            KSPSetOperators(ksp, subA, subA);
+            KSPSetFromOptions(ksp);
+            KSPSolve(ksp, subb, subx);
+
+            VecRestoreSubVector(vec, is, &subb);
+            VecRestoreSubVector(sol, is, &subx);
+        }
+        else
+        {
+            PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
+            solver->iterative_mode = true;
+
+            chrono.Clear();
+            chrono.Start();
+            solver->Mult(*b, *x);
+            chrono.Stop();
+
+            if (verbose) {
+                cout << "            L2 norm of c2: " << c2->ComputeL2Error(zero) << endl;
+                if (solver->GetConverged() == 1 && myid == 0)
+                    cout << "np2  solver: successfully converged by iterating " << solver->GetNumIterations()
+                         << " times, taking " << chrono.RealTime() << " s." << endl;
+                else if (solver->GetConverged() != 1)
+                    cerr << "np2  solver: failed to converged" << endl;
+            }
+
+            delete solver;
+        }
         blf->RecoverFEMSolution(*x, *lf, *c2);
 
         if (self_debug) {
@@ -2472,16 +2546,7 @@ private:
         (*c2)   += (*c2_n); // 利用松弛方法更新c2
         (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
 
-        if (verbose) {
-            cout << "            L2 norm of c2: " << c2->ComputeL2Error(zero) << endl;
-            if (solver->GetConverged() == 1 && myid == 0)
-                cout << "np2  solver: successfully converged by iterating " << solver->GetNumIterations()
-                     << " times, taking " << chrono.RealTime() << " s." << endl;
-            else if (solver->GetConverged() != 1)
-                cerr << "np2  solver: failed to converged" << endl;
-        }
-
-        delete lf, blf, solver, A, x, b;
+        delete lf, blf, A, x, b;
     }
 };
 
