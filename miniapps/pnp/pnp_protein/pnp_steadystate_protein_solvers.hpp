@@ -2101,14 +2101,14 @@ private:
         h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
         ParGridFunction* phi2_ = new ParGridFunction(h1_fes);
 
-//        {
-//            ParGridFunction* phi1_ = new ParGridFunction(h1_fes);
-//            phi1_->ProjectCoefficient(G_coeff);
-//            cout << "L2 norm of phi1_: " << phi1_->ComputeL2Error(zero) << endl;
-//
-//            phi1->ProjectGridFunction(*phi1_);
-//            cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
-//        }
+        {
+            ParGridFunction* phi1_ = new ParGridFunction(h1_fes);
+            phi1_->ProjectCoefficient(G_coeff);
+            cout << "L2 norm of phi1_: " << phi1_->ComputeL2Error(zero) << endl;
+
+            phi1->ProjectGridFunction(*phi1_);
+            cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
+        }
 
         phi3_e = new ParGridFunction(h1_fes);
         c1_e   = new ParGridFunction(h1_fes);
@@ -2307,7 +2307,6 @@ private:
 //            A->Mult(1.0, *x, -1.0, temp);
 //            cout << "l2 norm of ||A x - b|| / ||b||: " << temp.Norml2() / b->Norml2() << endl;
         }
-//        MFEM_ABORT("Verify Poisson code");
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *phi3);
 
@@ -2406,7 +2405,6 @@ private:
             VecDestroy(&sol);
             ISDestroy(&is);
             KSPDestroy(&ksp);
-            MFEM_ABORT("ssssss");
         }
         else
         {
@@ -2435,10 +2433,10 @@ private:
             }
         }
 
-        (*c1_n) *= relax_c1;
-        (*c1)   *= 1-relax_c1;
-        (*c1)   += (*c1_n); // 利用松弛方法更新c1
-        (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
+//        (*c1_n) *= relax_c1;
+//        (*c1)   *= 1-relax_c1;
+//        (*c1)   += (*c1_n); // 利用松弛方法更新c1
+//        (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
 
         delete lf, blf, A, x, b;
     }
@@ -2552,10 +2550,10 @@ private:
             }
         }
 
-        (*c2_n) *= relax_c2;
-        (*c2)   *= 1-relax_c2;
-        (*c2)   += (*c2_n); // 利用松弛方法更新c2
-        (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
+//        (*c2_n) *= relax_c2;
+//        (*c2)   *= 1-relax_c2;
+//        (*c2)   += (*c2_n); // 利用松弛方法更新c2
+//        (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
 
         delete lf, blf, A, x, b;
     }

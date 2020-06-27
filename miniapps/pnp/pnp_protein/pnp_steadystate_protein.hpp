@@ -57,7 +57,7 @@ bool self_debug         = false;
 bool verbose            = false;
 bool visualize          = false;
 bool local_conservation = false;
-double sigma            = -1.0; // symmetric parameter for DG
+double sigma            = 0.0; // symmetric parameter for DG
 double kappa            = 20; // penalty parameter for DG
 
 const int refine_times  = 0;
