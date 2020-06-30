@@ -51,7 +51,7 @@ const char* pqr_file    = "./1MAG.pqr"; // PQR文件,与网格文件必须匹配
 int p_order             = 1; //有限元基函数的多项式次数
 const char* Linearize   = "gummel"; // newton, gummel
 const char* Discretize  = "dg"; // cg, dg
-const char* prec_type   = "simple"; // preconditioner for Newton discretization: block, uzawa
+const char* prec_type   = "simple"; // preconditioner for Newton discretization: block, uzawa, simple
 const char* options_src = "./pnp_protein_petsc_opts";
 bool self_debug         = false;
 bool verbose            = false;
@@ -206,18 +206,21 @@ const int jacobi_printlv = -1;
 
 
 // ------------------------- 一些辅助变量(避免在main函数里面定义) ------------------------
-MarkProteinCoefficient mark_protein_coeff(protein_marker, water_marker); //在蛋白单元取值为1.0,在水中单元取值为0.0
-MarkWaterCoefficient   mark_water_coeff(protein_marker, water_marker);   //在水中单元取值为1.0,在蛋白单元取值为0.0
-ProductCoefficient     epsilon_water_mark(epsilon_water, mark_water_coeff);
-ProductCoefficient     epsilon_protein_mark(epsilon_protein, mark_protein_coeff);
-EpsilonCoefficient     Epsilon(protein_marker, water_marker, protein_rel_permittivity, water_rel_permittivity);
-
 ConstantCoefficient neg(-1.0);
 ConstantCoefficient zero(0.0);
 ConstantCoefficient one(1.0);
 ConstantCoefficient two(2.0);
 ConstantCoefficient sigma_coeff(sigma);
 ConstantCoefficient kappa_coeff(kappa);
+
+MarkProteinCoefficient mark_protein_coeff(protein_marker, water_marker); //在蛋白单元取值为1.0,在水中单元取值为0.0
+MarkWaterCoefficient   mark_water_coeff(protein_marker, water_marker);   //在水中单元取值为1.0,在蛋白单元取值为0.0
+ProductCoefficient     epsilon_water_mark(epsilon_water, mark_water_coeff);
+ProductCoefficient     epsilon_protein_mark(epsilon_protein, mark_protein_coeff);
+EpsilonCoefficient     Epsilon(protein_marker, water_marker, protein_rel_permittivity, water_rel_permittivity);
+ProductCoefficient     neg_Epsilon(neg, Epsilon);
+ProductCoefficient     sigma_Epsilon(sigma_coeff, Epsilon);
+ProductCoefficient     kappa_Epsilon(kappa_coeff, Epsilon);
 
 Green_func                     G_func(pqr_file);     // i.e., phi1
 gradGreen_func                 gradG_func(pqr_file); // also can be obtained from grad(phi1)

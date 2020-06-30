@@ -69,7 +69,12 @@ int main(int argc, char **argv)
         solver->Solve();
         delete solver;
     }
-
+    else if (strcmp(Linearize, "newton") == 0 && strcmp(Discretize, "dg") == 0)
+    {
+        PNP_Newton_DG_Solver_par* solver = new PNP_Newton_DG_Solver_par(mesh);
+        solver->Solve();
+        delete solver;
+    }
     MFEMFinalizePetsc();
     MPI_Finalize();
     cout << "------------------------------ All Good! -------------------------\n\n" << endl;

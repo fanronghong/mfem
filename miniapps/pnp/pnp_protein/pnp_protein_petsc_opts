@@ -27,8 +27,8 @@
 #-phi3_ksp_view
 
 -np1_ksp_type gmres
--np1_pc_type lu
-#-np1_pc_type gamg -np1_pc_gamg_type classical -np1_pc_gamg_agg_nsmooths 1
+#-np1_pc_type lu
+-np1_pc_type gamg -np1_pc_gamg_type classical -np1_pc_gamg_agg_nsmooths 1
 -np1_ksp_max_it 100000
 -np1_ksp_rtol 1e-8
 -np1_ksp_atol 1e-20
@@ -40,8 +40,8 @@
 #-np1_ksp_view
 
 -np2_ksp_type gmres
--np2_pc_type lu
-#-np2_pc_type gamg -np2_pc_gamg_type classical -np2_pc_gamg_agg_nsmooths 1
+#-np2_pc_type lu
+-np2_pc_type gamg -np2_pc_gamg_type classical -np2_pc_gamg_agg_nsmooths 1
 -np2_ksp_max_it 100000
 -np2_ksp_rtol 1e-8
 -np2_ksp_atol 1e-20
