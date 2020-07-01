@@ -221,6 +221,8 @@ EpsilonCoefficient     Epsilon(protein_marker, water_marker, protein_rel_permitt
 ProductCoefficient     neg_Epsilon(neg, Epsilon);
 ProductCoefficient     sigma_Epsilon(sigma_coeff, Epsilon);
 ProductCoefficient     kappa_Epsilon(kappa_coeff, Epsilon);
+ProductCoefficient     sigma_water(sigma_coeff, mark_water_coeff);
+ProductCoefficient     kappa_water(kappa_coeff, mark_water_coeff);
 
 Green_func                     G_func(pqr_file);     // i.e., phi1
 gradGreen_func                 gradG_func(pqr_file); // also can be obtained from grad(phi1)
@@ -233,12 +235,22 @@ ProductCoefficient D2_prod_z2_water(D_Cl_prod_v_Cl, mark_water_coeff);
 ProductCoefficient D1_water(D_K_, mark_water_coeff);
 ProductCoefficient D2_water(D_Cl_, mark_water_coeff);
 ProductCoefficient neg_epsilon_protein(neg, epsilon_protein);
+ProductCoefficient neg_D1(neg, D_K_);
+ProductCoefficient neg_D2(neg, D_Cl_);
+ProductCoefficient neg_D1_z1(neg_D1, v_K_coeff);
+ProductCoefficient sigma_D1_z1(sigma_coeff, D1_prod_z1_water);
+ProductCoefficient neg_D2_z2(neg_D2, v_Cl_coeff);
+ProductCoefficient sigma_D2_z2(sigma_coeff, D2_prod_z2_water);
 
 ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K(neg, alpha2_prod_alpha3_prod_v_K);
 ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl(neg, alpha2_prod_alpha3_prod_v_Cl);
 ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K_water(neg_alpha2_prod_alpha3_prod_v_K, mark_water_coeff);
 ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl_water(neg_alpha2_prod_alpha3_prod_v_Cl, mark_water_coeff);
 
+ProductCoefficient sigma_D1(sigma_coeff, D_K_);
+ProductCoefficient kappa_D1(kappa_coeff, D_K_);
+ProductCoefficient sigma_D2(sigma_coeff, D_Cl_);
+ProductCoefficient kappa_D2(kappa_coeff, D_Cl_);
 ProductCoefficient sigma_D_K_v_K(sigma_coeff, D_K_prod_v_K);
 ProductCoefficient sigma_D_Cl_v_Cl(sigma_coeff, D_Cl_prod_v_Cl);
 
