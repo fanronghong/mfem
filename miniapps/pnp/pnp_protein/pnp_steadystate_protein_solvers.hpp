@@ -3604,6 +3604,7 @@ protected:
     Array<int> block_trueoffsets;
     mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
     mutable BlockOperator *jac_k; // Jacobian at current solution
+    PetscNonlinearSolver* newton_solver;
 
     mutable ParLinearForm *f, *f1, *f2, *g, *g1, *g2;
     mutable PetscParMatrix A11, A12, A13, A21, A22, A31, A33;
@@ -3613,10 +3614,8 @@ protected:
     VectorCoefficient* grad_phi1_plus_grad_phi2;
     ParGridFunction *phi3_k, *c1_k, *c2_k;
 
-    PetscNonlinearSolver* newton_solver;
-
-    Array<int> ess_bdr;
     Array<int> null_array, Dirichlet_attr;
+    Array<int> water_dofs, protein_dofs, interface_dofs;
 
     StopWatch chrono;
     int num_procs, myid;
@@ -3629,6 +3628,52 @@ public:
         MPI_Comm_rank(fsp->GetComm(), &myid);
 
         mesh = fsp->GetMesh();
+
+        {
+            for (int i=0; i<fsp->GetNE(); ++i)
+            {
+                Element* el = mesh->GetElement(i);
+                int attr = el->GetAttribute();
+                Array<int> dofs;
+                if (attr == protein_marker)
+                {
+                    fsp->GetElementDofs(i, dofs);
+                    protein_dofs.Append(dofs);
+                } else {
+                    assert(attr == water_marker);
+                    fsp->GetElementDofs(i,dofs);
+                    water_dofs.Append(dofs);
+                }
+            }
+            for (int i=0; i<mesh->GetNumFaces(); ++i)
+            {
+                FaceElementTransformations* tran = mesh->GetFaceElementTransformations(i);
+                if (tran->Elem2No > 0) // interior facet
+                {
+                    const Element* e1  = mesh->GetElement(tran->Elem1No);
+                    const Element* e2  = mesh->GetElement(tran->Elem2No);
+                    int attr1 = e1->GetAttribute();
+                    int attr2 = e2->GetAttribute();
+                    Array<int> fdofs;
+                    if (attr1 != attr2) // interface facet
+                    {
+                        fsp->GetFaceVDofs(i, fdofs);
+                        interface_dofs.Append(fdofs);
+                    }
+                }
+            }
+            protein_dofs.Sort();
+            protein_dofs.Unique();
+            water_dofs.Sort();
+            water_dofs.Unique();
+            interface_dofs.Sort();
+            interface_dofs.Unique();
+            for (int i=0; i<interface_dofs.Size(); i++) // 去掉protein和water中的interface上的dofs
+            {
+                protein_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
+                water_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
+            }
+        }
 
         int bdr_size = mesh->bdr_attributes.Max();
         Dirichlet_attr.SetSize(bdr_size);
@@ -3815,6 +3860,7 @@ public:
         f1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D1_prod_z1_prod_c1_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
         f1->Assemble();
         (*f1) -= (*g1);
+        f1->SetSubVector(protein_dofs, 0.0);
 
         delete f2;
         f2 = new ParLinearForm(fsp);
@@ -3851,6 +3897,7 @@ public:
         f2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D2_prod_z2_prod_c2_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
         f2->Assemble();
         (*f2) -= (*g2);
+        f2->SetSubVector(protein_dofs, 0.0);
     }
 
     virtual Operator &GetGradient(const Vector& x) const
@@ -3904,6 +3951,7 @@ public:
         a22->Finalize();
         a22->SetOperatorType(Operator::PETSC_MATAIJ);
         a22->FormSystemMatrix(null_array, A22);
+        A22.EliminateRows(protein_dofs, 1.0);
 
         delete a31;
         a31 = new ParBilinearForm(fsp);
@@ -3941,6 +3989,7 @@ public:
         a33->Finalize();
         a33->SetOperatorType(Operator::PETSC_MATAIJ);
         a33->FormSystemMatrix(null_array, A33);
+        A33.EliminateRows(protein_dofs, 1.0);
 
         jac_k = new BlockOperator(block_trueoffsets);
         jac_k->SetBlock(0, 0, &A11);
