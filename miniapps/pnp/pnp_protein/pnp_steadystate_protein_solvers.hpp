@@ -3709,16 +3709,16 @@ public:
         g1 = new ParLinearForm(fsp);
         // sigma <c1_D, D1 grad(v1).n> + kappa <{h^{-1}} D1 c1_D, v1>
         g1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, kappa), Dirichlet_attr);
-        // kappa <{h^{-1}} phi3_D, v1>
-        g1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_D_coeff), Dirichlet_attr);
+//        // kappa <{h^{-1}} phi3_D, v1>
+//        g1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_D_coeff), Dirichlet_attr);
         // omit zero Neumann bdc
         g1->Assemble();
 
         g2 = new ParLinearForm(fsp);
         // sigma <c2_D, D2 grad(v2).n> + kappa <{h^{-1}} D2 c2_D, v2>
         g2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_coeff, D_Cl_, sigma, kappa), Dirichlet_attr);
-        // kappa <{h^{-1}} phi3_D, v2>
-        g2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_D_coeff), Dirichlet_attr);
+//        // kappa <{h^{-1}} phi3_D, v2>
+//        g2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_D_coeff), Dirichlet_attr);
         // omit zero Neumann bdc
         g2->Assemble();
     }
@@ -3874,9 +3874,9 @@ public:
         // D1 z1 c1^k (grad(dphi3), grad(v1))_{\Omega_s}
         a21->AddDomainIntegrator(new DiffusionIntegrator(D1_prod_z1_water_c1_k));
         // - <{D1 z1 c1^k grad(dphi3)}, [v1]> + sigma <[dphi3], {D1 z1 c1^k grad(v1)}>
-        //                                    + kappa <{h^{-1} D1 z1 c1^k} [dphi3], [v1]>
-        a21->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D1_prod_z1_water_c1_k, sigma, kappa));
-        a21->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D1_prod_z1_water_c1_k, sigma, kappa), Dirichlet_attr_);
+        //                                    + kappa <{h^{-1} D1 z1 c1^k} [dphi3], [v1]>, 在水单元的边界积分
+        a21->AddInteriorFaceIntegrator(new selfDGDiffusionIntegrator(D1_prod_z1_water_c1_k, sigma, kappa, mesh, water_marker));
+        a21->AddBdrFaceIntegrator(new selfDGDiffusionIntegrator(D1_prod_z1_water_c1_k, sigma, kappa, mesh, water_marker), Dirichlet_attr_);
         a21->Assemble();
         a21->Finalize();
         a21->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3886,22 +3886,22 @@ public:
         a22 = new ParBilinearForm(fsp);
         // D1 (grad(dc1), grad(v1))_{\Omega_s}
         a22->AddDomainIntegrator(new DiffusionIntegrator(D1_water));
-        // - <{D1 grad(dc1)}, [v1]> + sigma <[dc1], {D1 grad(v1)}> + kappa <{h^{-1} D1} [dc1], [v1]>
-        a22->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D1_water, sigma, kappa));
-        a22->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D1_water, sigma, kappa), Dirichlet_attr_);
-        // (D1 z1 dc1 grad(phi3^k), grad(v1))
-        a22->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_k, &D_K_prod_v_K));
+        // - <{D1 grad(dc1)}, [v1]> + sigma <[dc1], {D1 grad(v1)}> + kappa <{h^{-1} D1} [dc1], [v1]>, 在水单元的边界积分
+        a22->AddInteriorFaceIntegrator(new selfDGDiffusionIntegrator(D1_water, sigma, kappa, mesh, water_marker));
+        a22->AddBdrFaceIntegrator(new selfDGDiffusionIntegrator(D1_water, sigma, kappa, mesh, water_marker), Dirichlet_attr_);
+        // (D1 z1 dc1 grad(phi3^k), grad(v1))_{\Omega_s}
+        a22->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_k, &D1_prod_z1_water));
         // - <{D1 z1 dc1 grad(phi3^k)}, [v1]>
-        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi3_k));
-        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi3_k), Dirichlet_attr_);
+        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi3_k, mesh, water_marker));
+        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi3_k, mesh, water_marker), Dirichlet_attr_);
         // sigma <[dc1], {D1 z1 v1 grad(phi3^k)}>
-        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi3_k));
-        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi3_k), Dirichlet_attr_);
+        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi3_k, mesh, water_marker));
+        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi3_k, mesh, water_marker), Dirichlet_attr_);
         // kappa <h^{-1} [dc1], [v1]>
-        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
-        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff), Dirichlet_attr_);
-        a22->Assemble(0);
-        a22->Finalize(0);
+        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker));
+        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker), Dirichlet_attr_);
+        a22->Assemble();
+        a22->Finalize();
         a22->SetOperatorType(Operator::PETSC_MATAIJ);
         a22->FormSystemMatrix(null_array, A22);
 
@@ -3911,9 +3911,9 @@ public:
         // D2 z2 c2^k (grad(dphi3), grad(v2))_{\Omega_s}
         a31->AddDomainIntegrator(new DiffusionIntegrator(D2_prod_z2_water_c2_k));
         // - <{D2 z2 c2^k grad(dphi3)}, [v2]> + sigma <[dphi3], {D2 z2 c2^k grad(v2)}>
-        //                                    + kappa <{h^{-1} D2 z2 c2^k} [dphi3], [v2]>
-        a31->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D2_prod_z2_water_c2_k, sigma, kappa));
-        a31->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D2_prod_z2_water_c2_k, sigma, kappa), Dirichlet_attr_);
+        //                                    + kappa <{h^{-1} D2 z2 c2^k} [dphi3], [v2]>, 在水单元的边界积分
+        a31->AddInteriorFaceIntegrator(new selfDGDiffusionIntegrator(D2_prod_z2_water_c2_k, sigma, kappa, mesh, water_marker));
+        a31->AddBdrFaceIntegrator(new selfDGDiffusionIntegrator(D2_prod_z2_water_c2_k, sigma, kappa, mesh, water_marker), Dirichlet_attr_);
         a31->Assemble();
         a31->Finalize();
         a31->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3923,22 +3923,22 @@ public:
         a33 = new ParBilinearForm(fsp);
         // D2 (grad(dc2), grad(v2))_{\Omega_s}
         a33->AddDomainIntegrator(new DiffusionIntegrator(D2_water));
-        // - <{D2 grad(dc2)}, [v2]> + sigma <[dc2], {D2 grad(v2)}> + kappa <{h^{-1} D2} [dc2], [v2]>
-        a33->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D2_water, sigma, kappa));
-        a33->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D2_water, sigma, kappa), Dirichlet_attr_);
-        // (D2 z2 dc2 grad(phi3^k), grad(v2))
-        a33->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_k, &D_Cl_prod_v_Cl));
+        // - <{D2 grad(dc2)}, [v2]> + sigma <[dc2], {D2 grad(v2)}> + kappa <{h^{-1} D2} [dc2], [v2]>, 在水单元的边界积分
+        a33->AddInteriorFaceIntegrator(new selfDGDiffusionIntegrator(D2_water, sigma, kappa, mesh, water_marker));
+        a33->AddBdrFaceIntegrator(new selfDGDiffusionIntegrator(D2_water, sigma, kappa, mesh, water_marker), Dirichlet_attr_);
+        // (D2 z2 dc2 grad(phi3^k), grad(v2))_{\Omega_s}
+        a33->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_k, &D2_prod_z2_water));
         // - <{D2 z2 dc2 grad(phi3^k)}, [v2]>
-        a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D2_z2, *phi3_k));
-        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D2_z2, *phi3_k), Dirichlet_attr_);
+        a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D2_z2, *phi3_k, mesh, water_marker));
+        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D2_z2, *phi3_k, mesh, water_marker), Dirichlet_attr_);
         // sigma <[dc2], {D2 z2 v2 grad(phi3^k)}>
-        a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi3_k));
-        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi3_k), Dirichlet_attr_);
+        a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi3_k, mesh, water_marker));
+        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi3_k, mesh, water_marker), Dirichlet_attr_);
         // kappa <h^{-1} [dc2], [v2]>
-        a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff));
-        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3(kappa_coeff), Dirichlet_attr_);
-        a33->Assemble(0);
-        a33->Finalize(0);
+        a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker));
+        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker), Dirichlet_attr_);
+        a33->Assemble();
+        a33->Finalize();
         a33->SetOperatorType(Operator::PETSC_MATAIJ);
         a33->FormSystemMatrix(null_array, A33);
 
