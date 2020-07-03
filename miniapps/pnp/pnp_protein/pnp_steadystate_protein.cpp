@@ -29,7 +29,7 @@ int main(int argc, char **argv)
     args.AddOption(&self_debug, "-debug", "--self_debug", "-nodebug", "--no_self_debug", "Run many asserts to debug");
     args.AddOption(&verbose, "-ver", "--verbose", "-nover", "--noverbose", "Verbose for more outputs");
     args.AddOption(&visualize, "-v", "--vis", "-nov", "--novis", "Visualize outputs");
-    args.AddOption(&prec_type, "-prec", "--prec_type", "Preconditioner type for Newton disretization, choose: block, uzawa");
+    args.AddOption(&prec_type, "-prec", "--prec_type", "Preconditioner type for Newton disretization, choose: block, uzawa, simple");
     args.Parse();
     if (!args.Good())
     {
@@ -75,6 +75,7 @@ int main(int argc, char **argv)
         solver->Solve();
         delete solver;
     }
+
     MFEMFinalizePetsc();
     MPI_Finalize();
     cout << "------------------------------ All Good! -------------------------\n\n" << endl;
