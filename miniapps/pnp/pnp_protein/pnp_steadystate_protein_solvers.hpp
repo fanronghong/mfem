@@ -3056,8 +3056,7 @@ protected:
 
 public:
     PNP_Newton_CG_Operator_par(ParFiniteElementSpace *fsp_, ParGridFunction* phi1_, ParGridFunction* phi2_)
-    : fsp(fsp_), phi1(phi1_), phi2(phi2_)
-    {
+    : fsp(fsp_), phi1(phi1_), phi2(phi2_) {
         MPI_Comm_size(fsp->GetComm(), &num_procs);
         MPI_Comm_rank(fsp->GetComm(), &myid);
 
@@ -3065,50 +3064,47 @@ public:
             int size = fsp->GetMesh()->bdr_attributes.Max();
 
             ess_bdr.SetSize(size);
-            ess_bdr                    = 0;
-            ess_bdr[top_marker - 1]    = 1;
+            ess_bdr = 0;
+            ess_bdr[top_marker - 1] = 1;
             ess_bdr[bottom_marker - 1] = 1;
             fsp->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
             top_bdr.SetSize(size);
-            top_bdr                 = 0;
+            top_bdr = 0;
             top_bdr[top_marker - 1] = 1;
             fsp->GetEssentialTrueDofs(top_bdr, top_ess_tdof_list);
 
             bottom_bdr.SetSize(size);
-            bottom_bdr                    = 0;
+            bottom_bdr = 0;
             bottom_bdr[bottom_marker - 1] = 1;
             fsp->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
 
             interface_bdr.SetSize(size);
-            interface_bdr                       = 0;
+            interface_bdr = 0;
             interface_bdr[interface_marker - 1] = 1;
             fsp->GetEssentialTrueDofs(interface_bdr, interface_ess_tdof_list);
         }
 
-        Mesh* mesh = fsp->GetMesh();
-        for (int i=0; i<fsp->GetNE(); ++i)
-        {
-            Element* el = mesh->GetElement(i);
+        Mesh *mesh = fsp->GetMesh();
+        for (int i = 0; i < fsp->GetNE(); ++i) {
+            Element *el = mesh->GetElement(i);
             int attr = el->GetAttribute();
             Array<int> dofs;
-            if (attr == protein_marker)
-            {
+            if (attr == protein_marker) {
                 fsp->GetElementDofs(i, dofs);
                 protein_dofs.Append(dofs);
             } else {
                 assert(attr == water_marker);
-                fsp->GetElementDofs(i,dofs);
+                fsp->GetElementDofs(i, dofs);
                 water_dofs.Append(dofs);
             }
         }
-        for (int i=0; i<mesh->GetNumFaces(); ++i)
-        {
-            FaceElementTransformations* tran = mesh->GetFaceElementTransformations(i);
+        for (int i = 0; i < mesh->GetNumFaces(); ++i) {
+            FaceElementTransformations *tran = mesh->GetFaceElementTransformations(i);
             if (tran->Elem2No > 0) // interior facet
             {
-                const Element* e1  = mesh->GetElement(tran->Elem1No);
-                const Element* e2  = mesh->GetElement(tran->Elem2No);
+                const Element *e1 = mesh->GetElement(tran->Elem1No);
+                const Element *e2 = mesh->GetElement(tran->Elem2No);
                 int attr1 = e1->GetAttribute();
                 int attr2 = e2->GetAttribute();
                 Array<int> fdofs;
@@ -3125,19 +3121,35 @@ public:
         water_dofs.Unique();
         interface_dofs.Sort();
         interface_dofs.Unique();
-        for (int i=0; i<interface_dofs.Size(); i++) // 去掉protein和water中的interface上的dofs
+        for (int i = 0; i < interface_dofs.Size(); i++) // 去掉protein和water中的interface上的dofs
         {
             protein_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
             water_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
         }
 
-        need_dofs.Append(water_dofs);
-        need_dofs.Append(interface_ess_tdof_list);
-        need_dofs.Sort();
+        {
+            need_dofs.Append(water_dofs);
+            need_dofs.Append(interface_ess_tdof_list);
+            need_dofs.Sort();
 
-        all_dofs.SetSize(fsp->GetTrueVSize());
-        for (int i=0; i<fsp->GetTrueVSize(); ++i)
-            all_dofs[i] = i;
+            all_dofs.SetSize(fsp->GetTrueVSize());
+            for (int i = 0; i < fsp->GetTrueVSize(); ++i)
+                all_dofs[i] = i;
+
+            PetscInt *indices;
+            PetscInt size = PetscInt(need_dofs.Size());
+            PetscMalloc1(size, &indices);
+            for (int i = 0; i < need_dofs.Size(); ++i) indices[i] = need_dofs[i];
+            ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
+            PetscFree(indices);
+
+            PetscInt *long_indices;
+            PetscInt long_size = PetscInt(all_dofs.Size());
+            PetscMalloc1(long_size, &long_indices);
+            for (int i = 0; i < all_dofs.Size(); ++i) long_indices[i] = all_dofs[i];
+            ISCreateGeneral(MPI_COMM_WORLD, long_size, long_indices, PETSC_COPY_VALUES, &long_is);
+            PetscFree(long_indices);
+        }
 
         block_trueoffsets.SetSize(4); // number of variables + 1;
         block_trueoffsets[0] = 0;
@@ -3155,7 +3167,7 @@ public:
         c1_k  = new ParGridFunction(fsp);
         c2_k  = new ParGridFunction(fsp);
 
-        f  = new ParLinearForm(fsp);
+        f   = new ParLinearForm(fsp);
         f1  = new ParLinearForm(fsp);
         f2  = new ParLinearForm(fsp);
         a21 = new ParBilinearForm(fsp);
@@ -3170,18 +3182,6 @@ public:
         // epsilon_m <grad(phi1 + phi2).n, psi3>_{\Gamma}
         g->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator(&epsilon_protein, grad_phi1_plus_grad_phi2, mesh, protein_marker, water_marker));
         g->Assemble();
-
-        if (false) // another way to do interface integrate
-        {
-            SelfDefined_LinearForm* g1  = new SelfDefined_LinearForm(fsp);
-            ScalarVectorProductCoefficient eps_m_prod_grad_phi1_plus_grad_phi2(epsilon_protein, *grad_phi1_plus_grad_phi2);
-            // epsilon_m <grad(phi1 + phi2).n, psi3>_{\Gamma}
-            g1->AddSelfDefined_LFFacetIntegrator(new SelfDefined_LFFacetIntegrator(fsp, eps_m_prod_grad_phi1_plus_grad_phi2, protein_marker, water_marker));
-            g1->SelfDefined_Assemble();
-
-            cout << "l2 norm of g1: " << g1->Norml2() << endl;
-            cout << "l2 norm of  g: " << g->Norml2() << endl;
-        }
 
         a11 = new ParBilinearForm(fsp);
         // epsilon_s (grad(dphi3), grad(psi3))_{\Omega_s}
@@ -3200,6 +3200,9 @@ public:
         a12->Finalize();
         a12->SetOperatorType(Operator::PETSC_MATAIJ);
         a12->FormSystemMatrix(null_array, A12);
+        Mat A12_;
+        MatCreateSubMatrix(A12, long_is, is, MAT_INITIAL_MATRIX, &A12_);
+        A12__ = new PetscParMatrix(A12_, true);
 
         a13 = new ParBilinearForm(fsp);
         // - alpha2 alpha3 z2 (dc2, psi3)_{\Omega_s}
@@ -3208,30 +3211,10 @@ public:
         a13->Finalize();
         a13->SetOperatorType(Operator::PETSC_MATAIJ);
         a13->FormSystemMatrix(null_array, A13);
+        Mat A13_;
+        MatCreateSubMatrix(A13, long_is, is, MAT_INITIAL_MATRIX, &A13_);
+        A13__ = new PetscParMatrix(A13_, true);
 
-        {
-            PetscInt *indices;
-            PetscInt size = PetscInt(need_dofs.Size());
-            PetscMalloc1(size, &indices);
-            for (int i=0; i<need_dofs.Size(); ++i) indices[i] = need_dofs[i];
-            ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
-            PetscFree(indices);
-
-            PetscInt *long_indices;
-            PetscInt long_size = PetscInt(all_dofs.Size());
-            PetscMalloc1(long_size, &long_indices);
-            for (int i=0; i<all_dofs.Size(); ++i)   long_indices[i] = all_dofs[i];
-            ISCreateGeneral(MPI_COMM_WORLD, long_size, long_indices, PETSC_COPY_VALUES, &long_is);
-            PetscFree(long_indices);
-
-            Mat A12_;
-            MatCreateSubMatrix(A12, long_is, is, MAT_INITIAL_MATRIX, &A12_);
-            A12__ = new PetscParMatrix(A12_, true);
-
-            Mat A13_;
-            MatCreateSubMatrix(A13, long_is, is, MAT_INITIAL_MATRIX, &A13_);
-            A13__ = new PetscParMatrix(A13_, true);
-        }
     }
     virtual ~PNP_Newton_CG_Operator_par()
     {
@@ -3414,22 +3397,14 @@ public:
         MatCreateSubMatrix(A33, is, is, MAT_INITIAL_MATRIX, &A33_);
         A33__ = new PetscParMatrix(A33_, true);
 
-//        cout << "jacobian size: " << endl;
-//        cout << "A11: " << A11.Height() << ", " << A11.Width() << endl;
-//        cout << "A12: " << A12__->Height() << ", " << A12__->Width() << endl;
-//        cout << "A13: " << A13__->Height() << ", " << A13__->Width() << endl;
-//        cout << "A21: " << A21__.Height() << ", " << A21__.Width() << endl;
-//        cout << "A22: " << A22__.Height() << ", " << A22__.Width() << endl;
-//        cout << "A31: " << A31__.Height() << ", " << A31__.Width() << endl;
-//        cout << "A33: " << A33__.Height() << ", " << A33__.Width() << endl;
         jac_k = new BlockOperator(block_trueoffsets);
         jac_k->SetBlock(0, 0, &A11);
         jac_k->SetBlock(0, 1, A12__);
         jac_k->SetBlock(0, 2, A13__);
         jac_k->SetBlock(1, 0, A21__);
         jac_k->SetBlock(1, 1, A22__);
-        jac_k->SetBlock(2, 2, A33__);
         jac_k->SetBlock(2, 0, A31__);
+        jac_k->SetBlock(2, 2, A33__);
         return *jac_k;
     }
 };
@@ -3440,6 +3415,7 @@ protected:
     ParMesh* pmesh;
     H1_FECollection* h1_fec;
     ParFiniteElementSpace* h1_space;
+
     PNP_Newton_CG_Operator_par* op;
     PetscPreconditionerFactory *jac_factory;
     PetscNonlinearSolver* newton_solver;
@@ -3457,9 +3433,7 @@ public:
     PNP_Newton_CG_Solver_par(Mesh* mesh_): mesh(mesh_)
     {
         int mesh_dim = mesh->Dimension(); //网格的维数:1D,2D,3D
-
-        pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
-
+        pmesh    = new ParMesh(MPI_COMM_WORLD, *mesh);
         h1_fec   = new H1_FECollection(p_order, mesh_dim);
         h1_space = new ParFiniteElementSpace(pmesh, h1_fec);
 
@@ -3486,6 +3460,7 @@ public:
             Gamma_m_bdr[Gamma_m_marker - 1] = 1;
         }
 
+        // extract protein dofs, water dofs and interface dofs
         for (int i=0; i<h1_space->GetNE(); ++i)
         {
             Element* el = mesh->GetElement(i);
@@ -3519,18 +3494,16 @@ public:
 
             }
         }
-        protein_dofs.Sort();
-        protein_dofs.Unique();
-        water_dofs.Sort();
-        water_dofs.Unique();
-        interface_dofs.Sort();
-        interface_dofs.Unique();
+        protein_dofs.Sort();   protein_dofs.Unique();
+        water_dofs.Sort();     water_dofs.Unique();
+        interface_dofs.Sort(); interface_dofs.Unique();
         for (int i=0; i<interface_dofs.Size(); i++) // 去掉protein和water中的interface上的dofs
         {
             protein_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
             water_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
         }
 
+        // combine water dofs and interface dofs to use in variable concentration.
         need_dofs.Append(water_dofs);
         need_dofs.Append(interface_ess_tdof_list);
         need_dofs.Sort();
@@ -3562,15 +3535,9 @@ public:
         c1_k.ProjectBdrCoefficient(c1_D_bottom_coeff, bottom_bdr);
         c2_k.ProjectBdrCoefficient(c2_D_top_coeff, top_bdr);
         c2_k.ProjectBdrCoefficient(c2_D_bottom_coeff, bottom_bdr);
-//        phi3_k.ProjectCoefficient(phi_D_coeff);
-//        c1_k  .ProjectCoefficient(c1_D_coeff);
-//        c2_k  .ProjectCoefficient(c2_D_coeff);
         phi3_k.SetTrueVector();
         c1_k.SetTrueVector();
         c2_k.SetTrueVector();
-//        phi3_k.SetFromTrueVector();
-//        c1_k.SetFromTrueVector();
-//        c2_k.SetFromTrueVector();
         cout << "L2 norm of phi3(before before newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
         cout << "L2 norm of   c1(before before newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
         cout << "L2 norm of   c2(before before newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
@@ -3676,23 +3643,29 @@ public:
         phi3_k.MakeTRef(h1_space, x_, 0);
         c1_k  .MakeTRef(h1_space, x_, sc);
         c2_k  .MakeTRef(h1_space, x_, 2*sc);
+        phi3_k.SetTrueVector();
+        c1_k.SetTrueVector();
+        c2_k.SetTrueVector();
         phi3_k.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
-//        cout << "L2 norm of phi3(before newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
-//        cout << "L2 norm of   c1(before newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
-//        cout << "L2 norm of   c2(before newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of phi3(before newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of   c1(before newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of   c2(before newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
 
         Vector zero_vec;
-        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
+//        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
 
-        for (int i=0; i<sc; ++i)               x_[i]                   = (*u_k)[i];
-        for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]]   = (*u_k)[sc + i];
-        for (int i=0; i<need_dofs.Size(); ++i) x_[2*sc + need_dofs[i]] = (*u_k)[sc + need_dofs.Size() + i];
+        for (int i=0; i<sc; ++i)               x_[i]                   = u_k->GetBlock(0)[i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]]   = u_k->GetBlock(1)[i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[2*sc + need_dofs[i]] = u_k->GetBlock(2)[i];
         phi3_k.MakeTRef(h1_space, x_, 0);
         c1_k  .MakeTRef(h1_space, x_, sc);
         c2_k  .MakeTRef(h1_space, x_, 2*sc);
+//        phi3_k.SetTrueVector();
+//        c1_k.SetTrueVector();
+//        c2_k.SetTrueVector();
         phi3_k.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();

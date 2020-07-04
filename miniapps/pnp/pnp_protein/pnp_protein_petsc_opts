@@ -77,7 +77,7 @@
 #-newton_ksp_norm_type
 #-newton_ksp_monitor
 #-newton_ksp_monitor_short
--newton_ksp_monitor_true_residual
+#-newton_ksp_monitor_true_residual
 -newton_ksp_converged_reason
 #-newton_ksp_view
 
