@@ -1759,13 +1759,18 @@ private:
 
         if (1)
         {
+            Array<int> need_dofs;
+            need_dofs.Append(water_dofs);
+            need_dofs.Append(interface_ess_tdof_list);
+            need_dofs.Sort();
+
             Mat mat = Mat(*A); // form linear system: A x = b
             Vec vec = Vec(*b), sol = Vec(*x);
-            PetscInt size = PetscInt(water_dofs.Size());
+            PetscInt size = PetscInt(need_dofs.Size());
 
             PetscInt* indices;
             PetscMalloc1(size, &indices);
-            for (int i=0; i<size; ++i) indices[i] = water_dofs[i];
+            for (int i=0; i<size; ++i) indices[i] = need_dofs[i];
 
             IS is;
             ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
@@ -1862,13 +1867,18 @@ private:
 
         if (1)
         {
+            Array<int> need_dofs;
+            need_dofs.Append(water_dofs);
+            need_dofs.Append(interface_ess_tdof_list);
+            need_dofs.Sort();
+
             Mat mat = Mat(*A); // form linear system: A * x = b
             Vec vec = Vec(*b), sol = Vec(*x);
-            PetscInt size = PetscInt(water_dofs.Size());
+            PetscInt size = PetscInt(need_dofs.Size());
 
             PetscInt* indices;
             PetscMalloc1(size, &indices);
-            for (int i=0; i<size; ++i) indices[i] = water_dofs[i];
+            for (int i=0; i<size; ++i) indices[i] = need_dofs[i];
 
             IS is;
             ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
@@ -2457,14 +2467,19 @@ private:
 
         if (1)
         {
+            Array<int> need_dofs;
+            need_dofs.Append(water_dofs);
+            need_dofs.Append(interface_ess_tdof_list);
+            need_dofs.Sort();
+
             Mat mat = Mat(*A);
             Vec vec = Vec(*b);
             Vec sol = Vec(*x);
-            PetscInt size = PetscInt(water_dofs.Size());
+            PetscInt size = PetscInt(need_dofs.Size());
 
             PetscInt* indices;
             PetscMalloc1(size, &indices);
-            for (int i=0; i<size; ++i) indices[i] = water_dofs[i];
+            for (int i=0; i<size; ++i) indices[i] = need_dofs[i];
 
             IS is;
             ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
@@ -2573,14 +2588,19 @@ private:
 
         if (1)
         {
+            Array<int> need_dofs;
+            need_dofs.Append(water_dofs);
+            need_dofs.Append(interface_ess_tdof_list);
+            need_dofs.Sort();
+
             Mat mat = Mat(*A);
             Vec vec = Vec(*b);
             Vec sol = Vec(*x);
-            PetscInt size = PetscInt(water_dofs.Size());
+            PetscInt size = PetscInt(need_dofs.Size());
 
             PetscInt* indices;
             PetscMalloc1(size, &indices);
-            for (int i=0; i<size; ++i) indices[i] = water_dofs[i];
+            for (int i=0; i<size; ++i) indices[i] = need_dofs[i];
 
             IS is;
             ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
@@ -3009,7 +3029,9 @@ class PNP_Newton_CG_Operator_par: public Operator
 protected:
     ParFiniteElementSpace *fsp;
 
-    Array<int> block_offsets, block_trueoffsets;
+    Array<int> block_trueoffsets;
+    IS is, long_is;
+
     mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
     mutable BlockOperator *jac_k; // Jacobian at current solution
     PetscNonlinearSolver* newton_solver;
@@ -3017,11 +3039,13 @@ protected:
     mutable ParLinearForm *f, *f1, *f2, *g;
     mutable PetscParMatrix A11, A12, A13, A21, A22, A31, A33;
     mutable ParBilinearForm *a11, *a12, *a13, *a21, *a22, *a31, *a33;
+    mutable PetscParMatrix *A12__, *A13__;
 
     ParGridFunction *phi1, *phi2;
     VectorCoefficient* grad_phi1_plus_grad_phi2;
     ParGridFunction *phi3_k, *c1_k, *c2_k;
 
+    Array<int> need_dofs, all_dofs;
     Array<int> ess_bdr, top_bdr, bottom_bdr, interface_bdr, Gamma_m_bdr;
     Array<int> ess_tdof_list, top_ess_tdof_list, bottom_ess_tdof_list,
             interface_ess_tdof_list, water_dofs, protein_dofs, interface_dofs;
@@ -3032,7 +3056,7 @@ protected:
 
 public:
     PNP_Newton_CG_Operator_par(ParFiniteElementSpace *fsp_, ParGridFunction* phi1_, ParGridFunction* phi2_)
-    : Operator(fsp_->TrueVSize()*3), fsp(fsp_), phi1(phi1_), phi2(phi2_)
+    : fsp(fsp_), phi1(phi1_), phi2(phi2_)
     {
         MPI_Comm_size(fsp->GetComm(), &num_procs);
         MPI_Comm_rank(fsp->GetComm(), &myid);
@@ -3107,19 +3131,22 @@ public:
             water_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
         }
 
-        block_offsets.SetSize(4); // number of variables + 1;
-        block_offsets[0] = 0;
-        block_offsets[1] = fsp->GetVSize(); //GetVSize()返回的就是总的自由度个数,也就是线性方程组的维数
-        block_offsets[2] = fsp->GetVSize();
-        block_offsets[3] = fsp->GetVSize();
-        block_offsets.PartialSum();
+        need_dofs.Append(water_dofs);
+        need_dofs.Append(interface_ess_tdof_list);
+        need_dofs.Sort();
+
+        for (int i=0; i<fsp->GetTrueVSize(); ++i)
+            all_dofs[i] = i;
 
         block_trueoffsets.SetSize(4); // number of variables + 1;
         block_trueoffsets[0] = 0;
         block_trueoffsets[1] = fsp->GetTrueVSize();
-        block_trueoffsets[2] = fsp->GetTrueVSize();
-        block_trueoffsets[3] = fsp->GetTrueVSize();
+        block_trueoffsets[2] = water_dofs.Size() + interface_dofs.Size();
+        block_trueoffsets[3] = water_dofs.Size() + interface_dofs.Size();
         block_trueoffsets.PartialSum();
+        assert(fsp->GetTrueVSize() == (protein_dofs.Size() + water_dofs.Size() + interface_dofs.Size()));
+
+        height = width = fsp->GetTrueVSize() + 2 * (water_dofs.Size() + interface_dofs.Size());
 
         rhs_k = new BlockVector(block_trueoffsets); // not block_offsets !!!
         jac_k = new BlockOperator(block_trueoffsets);
@@ -3180,6 +3207,30 @@ public:
         a13->Finalize(0);
         a13->SetOperatorType(Operator::PETSC_MATAIJ);
         a13->FormSystemMatrix(null_array, A13);
+
+        {
+            PetscInt *indices;
+            PetscInt size = PetscInt(need_dofs.Size());
+            PetscMalloc1(size, &indices);
+            for (int i=0; i<need_dofs.Size(); ++i) indices[i] = need_dofs[i];
+            ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
+            PetscFree(indices);
+
+            PetscInt *long_indices;
+            PetscInt long_size = PetscInt(all_dofs.Size());
+            PetscMalloc1(long_size, &long_indices);
+            for (int i=0; i<all_dofs.Size(); ++i)   long_indices[i] = all_dofs[i];
+            ISCreateGeneral(MPI_COMM_WORLD, long_size, long_indices, PETSC_COPY_VALUES, &long_is);
+            PetscFree(long_indices);
+
+            Mat A12_;
+            MatCreateSubMatrix(A12, long_is, is, MAT_INITIAL_MATRIX, &A12_);
+            A12__ = new PetscParMatrix(A12_, true);
+
+            Mat A13_;
+            MatCreateSubMatrix(A13, long_is, is, MAT_INITIAL_MATRIX, &A13_);
+            A13__ = new PetscParMatrix(A13_, true);
+        }
     }
     virtual ~PNP_Newton_CG_Operator_par()
     {
@@ -3191,10 +3242,16 @@ public:
 
     virtual void Mult(const Vector& x, Vector& y) const
     {
-//        cout << "\nin PNP_Newton_Operator::Mult(), l2 norm of x: " << x.Norml2() << endl;
-//        cout << "l2 norm of y: " << y.Norml2() << endl;
-        int sc = height / 3;
-        Vector& x_ = const_cast<Vector&>(x);
+        cout << "\nin PNP_Newton_Operator::Mult(), l2 norm of x: " << x.Norml2() << endl;
+        cout << "l2 norm of y: " << y.Norml2() << endl;
+        cout << "x size: " << x.Size() << ", y size: " << y.Size() << endl;
+
+        int sc = fsp->GetTrueVSize();
+        Vector x_(sc * 3);
+        x_ = 0.0;
+        for (int i=0; i<sc; ++i)               x_[i]                   = x[i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]]   = x[sc + i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[2*sc + need_dofs[i]] = x[sc + need_dofs.Size() + i];
 
         phi3_k->MakeTRef(fsp, x_, 0);
         c1_k->MakeTRef(fsp, x_, sc);
@@ -3202,9 +3259,6 @@ public:
         phi3_k->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
-//        cout << "in Mult(), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
-//        cout << "in Mult(), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
-//        cout << "in Mult(), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
 
         GridFunctionCoefficient c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
@@ -3228,13 +3282,12 @@ public:
         }
 
         rhs_k->Update(y.GetData(), block_trueoffsets); // update residual
-        Vector y1(y.GetData() +   0, sc);
-        Vector y2(y.GetData() +  sc, sc);
-        Vector y3(y.GetData() +2*sc, sc);
+        Vector y1(y.GetData() + 0, sc);
+        Vector y2(y.GetData() + sc, need_dofs.Size());
+        Vector y3(y.GetData() + sc + need_dofs.Size(), need_dofs.Size());
 
         delete f;
         f = new ParLinearForm(fsp);
-        f->Update(fsp, rhs_k->GetBlock(0), 0);
         ProductCoefficient term1(alpha2_prod_alpha3_prod_v_K,  c1_k_coeff);
         ProductCoefficient term2(alpha2_prod_alpha3_prod_v_Cl, c2_k_coeff);
         SumCoefficient term(term1, term2);
@@ -3250,30 +3303,10 @@ public:
         f->Assemble();
         (*f) += (*g); // add interface integrate
         f->SetSubVector(ess_tdof_list, 0.0);
-        if (0)
-        {
-            SelfDefined_LinearForm* lf = new SelfDefined_LinearForm(fsp);
-            GradientGridFunctionCoefficient grad_phi3_k(phi3_k);
-            ScalarVectorProductCoefficient epsilon_protein_prod_grad_phi3_k(epsilon_protein_mark, grad_phi3_k);
-            ScalarVectorProductCoefficient epsilon_water_prod_grad_phi3_k(epsilon_water_mark, grad_phi3_k);
-            // - alpha2 alpha3 (z1 c1^k + z2 c2^k, psi3)_{\Omega_s}
-            lf->AddDomainIntegrator(new DomainLFIntegrator(neg_term_water));
-            // epsilon_m (grad(phi3^k), grad(psi3))_{\Omega_m}
-            lf->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &epsilon_protein_prod_grad_phi3_k));
-            // epsilon_s (grad(phi3^k), grad(psi3))_{\Omega_s}
-            lf->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &epsilon_water_prod_grad_phi3_k));
-            // omit zero Neumann bdc
-            lf->SelfDefined_Assemble();
-            (*lf) += (*g);
-            lf->SetSubVector(ess_tdof_list, 0.0);
-
-            cout << "l2 norm of f : " << f->Norml2() << endl;
-            cout << "l2 norm of lf: " << lf->Norml2() << endl;
-        }
+        y1 = (*f);
 
         delete f1;
         f1 = new ParLinearForm(fsp);
-        f1->Update(fsp, rhs_k->GetBlock(1), 0);
         ProductCoefficient D1_prod_z1_water_c1_k(D1_prod_z1_water, c1_k_coeff);
         // D1 (grad(c1^k), grad(v1))_{\Omega_s}
         f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D1_water, c1_k));
@@ -3281,28 +3314,10 @@ public:
         f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D1_prod_z1_water_c1_k, phi3_k));
         f1->Assemble();
         f1->SetSubVector(ess_tdof_list, 0.0);
-        if (0)
-        {
-            GradientGridFunctionCoefficient grad_phi3_k(phi3_k);
-            GradientGridFunctionCoefficient grad_c1_k(c1_k);
-            ScalarVectorProductCoefficient D1_prod_grad_c1_k(D1_water, grad_c1_k);
-            ScalarVectorProductCoefficient D1_prod_v_K_prod_c1_k_prod_grad_phi3_k(D1_prod_z1_water_c1_k, grad_phi3_k);
-            VectorSumCoefficient np1(D1_prod_grad_c1_k, D1_prod_v_K_prod_c1_k_prod_grad_phi3_k);
-
-            SelfDefined_LinearForm* lf1 = new SelfDefined_LinearForm(fsp);
-            // D1 (grad(c1^k) + z1 c1^k grad(phi3^k), grad(v1))_{\Omega_s}
-            lf1->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &np1));
-            lf1->SelfDefined_Assemble();
-            lf1->SetSubVector(ess_tdof_list, 0.0);
-
-            cout << "l2 norm of f1 : " << f1->Norml2() << endl;
-            cout << "l2 norm of lf1: " << lf1->Norml2() << endl;
-        }
-        f1->SetSubVector(protein_dofs, 0.0);
+        for (int i=0; i<need_dofs.Size(); ++i) y2[i] = (*f1)[need_dofs[i]];
 
         delete f2;
         f2 = new ParLinearForm(fsp);
-        f2->Update(fsp, rhs_k->GetBlock(2), 0);
         ProductCoefficient D2_prod_z2_water_c2_k(D2_prod_z2_water, c2_k_coeff);
         // D2 (grad(c2^k), grad(v2))_{\Omega_s}
         f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D2_water, c2_k));
@@ -3310,31 +3325,25 @@ public:
         f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D2_prod_z2_water_c2_k, phi3_k));
         f2->Assemble();
         f2->SetSubVector(ess_tdof_list, 0.0);
-        if (0)
-        {
-            GradientGridFunctionCoefficient grad_phi3_k(phi3_k);
-            GradientGridFunctionCoefficient grad_c2_k(c2_k);
-            ScalarVectorProductCoefficient D2_prod_grad_c2_k(D2_water, grad_c2_k);
-            ScalarVectorProductCoefficient D2_prod_v_Cl_prod_c2_k_prod_grad_phi3_k(D2_prod_z2_water_c2_k, grad_phi3_k);
-            VectorSumCoefficient np2(D2_prod_grad_c2_k, D2_prod_v_Cl_prod_c2_k_prod_grad_phi3_k);
+        for (int i=0; i<need_dofs.Size(); ++i) y3[i] = (*f2)[need_dofs[i]];
 
-            SelfDefined_LinearForm* lf2 = new SelfDefined_LinearForm(fsp);
-            // (D2 grad(c2^k) + D2 z2 c2^k grad(phi3^k), grad(v2))_{\Omega_s}
-            lf2->AddSelfConvectionIntegrator(new SelfConvectionIntegrator(&one, &np2));
-            lf2->SelfDefined_Assemble();
-            lf2->SetSubVector(ess_tdof_list, 0.0);
-
-            cout << "l2 norm of f2 : " << f2->Norml2() << endl;
-            cout << "l2 norm of lf2: " << lf2->Norml2() << endl;
-        }
-        f2->SetSubVector(protein_dofs, 0.0);
+        cout << "l2 norm of y: " << y.Norml2() << endl;
     }
 
     virtual Operator &GetGradient(const Vector& x) const
     {
-//        cout << "in PNP_Newton_Operator::GetGradient()" << endl;
-        int sc = height / 3;
-        Vector& x_ = const_cast<Vector&>(x);
+        cout << "in PNP_Newton_Operator::GetGradient()" << endl;
+        cout << "x size: " << x.Size() << endl;
+        Array<int> need_dofs;
+        need_dofs.Append(water_dofs);
+        need_dofs.Append(interface_dofs);
+
+        int sc = fsp->GetTrueVSize();
+        Vector x_(fsp->GetTrueVSize() * 3);
+        x_ = 0.0;
+        for (int i=0; i<sc; ++i)               x_[i]                   = x[i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]]   = x[sc + i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[2*sc + need_dofs[i]] = x[sc + need_dofs.Size() + i];
 
         phi3_k->MakeTRef(fsp, x_, 0);
         c1_k->MakeTRef(fsp, x_, sc);
@@ -3342,9 +3351,6 @@ public:
         phi3_k->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
-//        cout << "in GetGradient(), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
-//        cout << "in GetGradient(), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
-//        cout << "in GetGradient(), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
 
         GridFunctionCoefficient c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
@@ -3358,6 +3364,9 @@ public:
         a21->SetOperatorType(Operator::PETSC_MATAIJ);
         a21->FormSystemMatrix(null_array, A21);
         A21.EliminateRows(ess_tdof_list, 0.0);
+        Mat A21_;
+        MatCreateSubMatrix(A21, is, long_is, MAT_INITIAL_MATRIX, &A21_);
+        PetscParMatrix A21__(A21_, true);
 
         delete a22;
         a22 = new ParBilinearForm(fsp);
@@ -3370,6 +3379,9 @@ public:
         a22->SetOperatorType(Operator::PETSC_MATAIJ);
         a22->FormSystemMatrix(ess_tdof_list, A22);
         A22.EliminateRows(protein_dofs, 1.0);
+        Mat A22_;
+        MatCreateSubMatrix(A22, is, is, MAT_INITIAL_MATRIX, &A22_);
+        PetscParMatrix A22__(A22_, true);
 
         delete a31;
         a31 = new ParBilinearForm(fsp);
@@ -3381,6 +3393,9 @@ public:
         a31->SetOperatorType(Operator::PETSC_MATAIJ);
         a31->FormSystemMatrix(null_array, A31);
         A31.EliminateRows(ess_tdof_list, 0.0);
+        Mat A31_;
+        MatCreateSubMatrix(A31, is, long_is, MAT_INITIAL_MATRIX, &A31_);
+        PetscParMatrix A31__(A31_, true);
 
         delete a33;
         a33 = new ParBilinearForm(fsp);
@@ -3393,15 +3408,18 @@ public:
         a33->SetOperatorType(Operator::PETSC_MATAIJ);
         a33->FormSystemMatrix(ess_tdof_list, A33);
         A33.EliminateRows(protein_dofs, 1.0);
+        Mat A33_;
+        MatCreateSubMatrix(A33, is, is, MAT_INITIAL_MATRIX, &A33_);
+        PetscParMatrix A33__(A33_, true);
 
         jac_k = new BlockOperator(block_trueoffsets);
         jac_k->SetBlock(0, 0, &A11);
-        jac_k->SetBlock(0, 1, &A12);
-        jac_k->SetBlock(0, 2, &A13);
-        jac_k->SetBlock(1, 0, &A21);
-        jac_k->SetBlock(1, 1, &A22);
-        jac_k->SetBlock(2, 0, &A31);
-        jac_k->SetBlock(2, 2, &A33);
+        jac_k->SetBlock(0, 1, A12__);
+        jac_k->SetBlock(0, 2, A13__);
+        jac_k->SetBlock(1, 1, &A22__);
+        jac_k->SetBlock(2, 2, &A33__);
+        jac_k->SetBlock(1, 0, &A21__);
+        jac_k->SetBlock(2, 0, &A31__);
         return *jac_k;
     }
 };
@@ -3417,7 +3435,7 @@ protected:
     PetscNonlinearSolver* newton_solver;
 
     Array<int> block_trueoffsets, top_bdr, bottom_bdr, interface_bdr, Gamma_m_bdr, top_ess_tdof_list, bottom_ess_tdof_list, interface_ess_tdof_list;
-    Array<int> protein_dofs, water_dofs, interface_dofs;
+    Array<int> protein_dofs, water_dofs, interface_dofs, need_dofs;
     BlockVector* u_k;
     ParGridFunction phi3_k, c1_k, c2_k;
     ParGridFunction *phi1, *phi2;
@@ -3432,7 +3450,7 @@ public:
 
         pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
 
-        h1_fec = new H1_FECollection(p_order, mesh_dim);
+        h1_fec   = new H1_FECollection(p_order, mesh_dim);
         h1_space = new ParFiniteElementSpace(pmesh, h1_fec);
 
         {
@@ -3457,44 +3475,6 @@ public:
             Gamma_m_bdr                     = 0;
             Gamma_m_bdr[Gamma_m_marker - 1] = 1;
         }
-
-        block_trueoffsets.SetSize(4);
-        block_trueoffsets[0] = 0;
-        block_trueoffsets[1] = h1_space->GetTrueVSize();
-        block_trueoffsets[2] = h1_space->GetTrueVSize();
-        block_trueoffsets[3] = h1_space->GetTrueVSize();
-        block_trueoffsets.PartialSum();
-
-        // MakeTRef(), SetTrueVector(), SetFromTrueVector() 三者要配套使用ffffffffff
-        u_k = new BlockVector(block_trueoffsets); //必须满足essential边界条件
-        phi3_k.MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
-        c1_k  .MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
-        c2_k  .MakeTRef(h1_space, *u_k, block_trueoffsets[2]);
-//        phi3_k = 0.0;
-//        c1_k   = 0.0;
-//        c2_k   = 0.0;
-        phi3_k.ProjectBdrCoefficient(phi_D_top_coeff, top_bdr);
-        phi3_k.ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
-        c1_k.ProjectBdrCoefficient(c1_D_top_coeff, top_bdr);
-        c1_k.ProjectBdrCoefficient(c1_D_bottom_coeff, bottom_bdr);
-        c2_k.ProjectBdrCoefficient(c2_D_top_coeff, top_bdr);
-        c2_k.ProjectBdrCoefficient(c2_D_bottom_coeff, bottom_bdr);
-//        phi3_k.ProjectCoefficient(phi_D_coeff);
-//        c1_k  .ProjectCoefficient(c1_D_coeff);
-//        c2_k  .ProjectCoefficient(c2_D_coeff);
-        phi3_k.SetTrueVector();
-        c1_k.SetTrueVector();
-        c2_k.SetTrueVector();
-//        phi3_k.SetFromTrueVector();
-//        c1_k.SetFromTrueVector();
-//        c2_k.SetFromTrueVector();
-        cout << "L2 norm of phi3(before before newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
-        cout << "L2 norm of   c1(before before newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
-        cout << "L2 norm of   c2(before before newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
-
-        phi1 = new ParGridFunction(h1_space);
-        phi1->ProjectCoefficient(G_coeff);
-        cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
 
         for (int i=0; i<h1_space->GetNE(); ++i)
         {
@@ -3540,6 +3520,54 @@ public:
             protein_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
             water_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
         }
+
+        need_dofs.Append(water_dofs);
+        need_dofs.Append(interface_ess_tdof_list);
+        need_dofs.Sort();
+
+        block_trueoffsets.SetSize(4);
+        block_trueoffsets[0] = 0;
+        block_trueoffsets[1] = h1_space->GetTrueVSize();
+        block_trueoffsets[2] = need_dofs.Size();
+        block_trueoffsets[3] = need_dofs.Size();
+        block_trueoffsets.PartialSum();
+
+        // MakeTRef(), SetTrueVector(), SetFromTrueVector() 三者要配套使用ffffffffff
+        u_k = new BlockVector(block_trueoffsets); //必须满足essential边界条件
+        int sc = h1_space->GetTrueVSize();
+        Vector x_(sc * 3);
+        x_ = 0.0;
+        for (int i=0; i<sc; ++i)               x_[i]                   = (*u_k)[i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]]   = (*u_k)[sc + i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[2*sc + need_dofs[i]] = (*u_k)[sc + need_dofs.Size() + i];
+        phi3_k.MakeTRef(h1_space, x_, sc);
+        c1_k  .MakeTRef(h1_space, x_, sc);
+        c2_k  .MakeTRef(h1_space, x_, sc);
+//        phi3_k = 0.0;
+//        c1_k   = 0.0;
+//        c2_k   = 0.0;
+        phi3_k.ProjectBdrCoefficient(phi_D_top_coeff, top_bdr);
+        phi3_k.ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
+        c1_k.ProjectBdrCoefficient(c1_D_top_coeff, top_bdr);
+        c1_k.ProjectBdrCoefficient(c1_D_bottom_coeff, bottom_bdr);
+        c2_k.ProjectBdrCoefficient(c2_D_top_coeff, top_bdr);
+        c2_k.ProjectBdrCoefficient(c2_D_bottom_coeff, bottom_bdr);
+//        phi3_k.ProjectCoefficient(phi_D_coeff);
+//        c1_k  .ProjectCoefficient(c1_D_coeff);
+//        c2_k  .ProjectCoefficient(c2_D_coeff);
+        phi3_k.SetTrueVector();
+        c1_k.SetTrueVector();
+        c2_k.SetTrueVector();
+//        phi3_k.SetFromTrueVector();
+//        c1_k.SetFromTrueVector();
+//        c2_k.SetFromTrueVector();
+        cout << "L2 norm of phi3(before before newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of   c1(before before newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
+        cout << "L2 norm of   c2(before before newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
+
+        phi1 = new ParGridFunction(h1_space);
+        phi1->ProjectCoefficient(G_coeff);
+        cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
 
         phi2 = new ParGridFunction(h1_space);
         {
@@ -3627,9 +3655,17 @@ public:
              << ", preconditioner: " << prec_type
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 
-        phi3_k.MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
-        c1_k  .MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
-        c2_k  .MakeTRef(h1_space, *u_k, block_trueoffsets[2]);
+        u_k = new BlockVector(block_trueoffsets);
+        Vector x_; // convert u_k to x_
+        int sc = h1_space->GetTrueVSize();
+        x_.SetSize(sc * 3);
+        x_ = 0.0;
+        for (int i=0; i<sc; ++i)               x_[i]                   = (*u_k)[i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]]   = (*u_k)[sc + i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[2*sc + need_dofs[i]] = (*u_k)[sc + need_dofs.Size() + i];
+        phi3_k.MakeTRef(h1_space, x_, sc);
+        c1_k  .MakeTRef(h1_space, x_, sc);
+        c2_k  .MakeTRef(h1_space, x_, sc);
         phi3_k.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
@@ -3641,6 +3677,12 @@ public:
         cout << "u_k l2 norm: " << u_k->Norml2() << endl;
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
 
+        for (int i=0; i<sc; ++i)               x_[i]                   = (*u_k)[i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]]   = (*u_k)[sc + i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[2*sc + need_dofs[i]] = (*u_k)[sc + need_dofs.Size() + i];
+        phi3_k.MakeTRef(h1_space, x_, sc);
+        c1_k  .MakeTRef(h1_space, x_, sc);
+        c2_k  .MakeTRef(h1_space, x_, sc);
         phi3_k.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
