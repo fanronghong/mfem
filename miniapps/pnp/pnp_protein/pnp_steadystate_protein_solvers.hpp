@@ -1449,6 +1449,9 @@ public:
         phi3_n->SetTrueVector();
         c1_n  ->SetTrueVector();
         c2_n  ->SetTrueVector();
+        cout << "After set bdc, L2 norm of phi3: " << phi3_n->ComputeL2Error(zero) << endl;
+        cout << "After set bdc, L2 norm of   c1: " << c1_n->ComputeL2Error(zero) << endl;
+        cout << "After set bdc, L2 norm of   c2: " << c2_n->ComputeL2Error(zero) << endl;
 
         dc = new VisItDataCollection("data collection", mesh);
         dc->RegisterField("phi1", phi1);
@@ -1573,6 +1576,7 @@ private:
     void Solve_Singular()
     {
         phi1->ProjectCoefficient(G_coeff); // phi1求解完成, 直接算比较慢, 也可以从文件读取
+        cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
 
         if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
         {
@@ -1595,6 +1599,7 @@ private:
             assert(abs(L2norm_ - 9.2879E+03) < 10); //数据由张倩如提供
             cout << "======> Test Pass: L2 norm of grad(phi1) (no units)" << endl;
         }
+
     }
 
     // 2.求解调和方程部分的电势
@@ -1634,6 +1639,7 @@ private:
         solver->Mult(*b, *x);
         chrono.Stop();
         blf.RecoverFEMSolution(*x, lf, *phi2);
+        cout << "L2 norm of phi2: " << phi2->ComputeL2Error(zero) << endl;
 
         if (verbose) {
             cout << "\nL2 norm of phi2: " << phi2->ComputeL2Error(zero) << endl;
@@ -2037,16 +2043,16 @@ public:
                 water_dofs.Append(dofs);
             }
         }
-        { // 因为是DG, 所以不可能有重复的dof
-//            protein_dofs.Sort();
-//            protein_dofs.Unique();
-//            water_dofs.Sort();
-//            water_dofs.Unique();
-//            for (int i=0; i<interface_ess_tdof_list.Size(); i++) // 去掉protein和water中的interface上的dofs
-//            {
-//                protein_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
-//                water_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
-//            }
+        { // 因为是DG, 所以不可能有重复的dof, 可以把下面的内容注释掉
+            protein_dofs.Sort();
+            protein_dofs.Unique();
+            water_dofs.Sort();
+            water_dofs.Unique();
+            for (int i=0; i<interface_ess_tdof_list.Size(); i++) // 去掉protein和water中的interface上的dofs
+            {
+                protein_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
+                water_dofs.DeleteFirst(interface_ess_tdof_list[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
+            }
         }
 
         *phi3 = 0.0;
