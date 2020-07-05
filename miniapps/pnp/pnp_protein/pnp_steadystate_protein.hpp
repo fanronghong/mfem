@@ -56,7 +56,7 @@ const char* options_src = "./pnp_protein_petsc_opts";
 bool self_debug         = false;
 bool verbose            = false;
 bool visualize          = false;
-bool local_conservation = false;
+bool local_conservation = true;
 double sigma            = -1.0; // symmetric parameter for DG
 double kappa            = 200; // penalty parameter for DG
 
