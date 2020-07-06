@@ -1478,6 +1478,7 @@ public:
         Solve_Harmonic();
 
         cout << "\n------> Gummel, CG" << p_order << ", protein, parallel"
+             << ", petsc option file: " << options_src
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << '\n' << endl;
         int iter = 1;
         while (iter < Gummel_max_iters)
@@ -2137,6 +2138,7 @@ public:
         Solve_Harmonic();
 
         cout << "\n------> Gummel, DG" << p_order << ", protein, parallel"
+             << ", petsc option file: " << options_src
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << '\n' << endl;
         int iter = 1;
         while (iter < Gummel_max_iters)
@@ -3096,7 +3098,8 @@ protected:
 
 public:
     PNP_Newton_CG_Operator_par(ParFiniteElementSpace *fsp_, ParGridFunction* phi1_, ParGridFunction* phi2_)
-    : fsp(fsp_), phi1(phi1_), phi2(phi2_) {
+    : fsp(fsp_), phi1(phi1_), phi2(phi2_)
+    {
         MPI_Comm_size(fsp->GetComm(), &num_procs);
         MPI_Comm_rank(fsp->GetComm(), &myid);
 
@@ -3176,14 +3179,14 @@ public:
             for (int i = 0; i < fsp->GetTrueVSize(); ++i)
                 all_dofs[i] = i;
 
-            PetscInt *indices;
+            PetscInt *indices; // only include water dofs and interface dofs
             PetscInt size = PetscInt(need_dofs.Size());
             PetscMalloc1(size, &indices);
             for (int i = 0; i < need_dofs.Size(); ++i) indices[i] = need_dofs[i];
             ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
             PetscFree(indices);
 
-            PetscInt *long_indices;
+            PetscInt *long_indices; // include all dofs
             PetscInt long_size = PetscInt(all_dofs.Size());
             PetscMalloc1(long_size, &long_indices);
             for (int i = 0; i < all_dofs.Size(); ++i) long_indices[i] = all_dofs[i];
@@ -3224,10 +3227,8 @@ public:
         g->Assemble();
 
         a11 = new ParBilinearForm(fsp);
-        // epsilon_s (grad(dphi3), grad(psi3))_{\Omega_s}
-        a11->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water_mark));
-        // epsilon_m (grad(dphi3), grad(psi3))_{\Omega_m}
-        a11->AddDomainIntegrator(new DiffusionIntegrator(epsilon_protein_mark));
+        // epsilon (grad(dphi3), grad(psi3))_{\Omega}
+        a11->AddDomainIntegrator(new DiffusionIntegrator(Epsilon));
         a11->Assemble();
         a11->Finalize();
         a11->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3555,14 +3556,9 @@ public:
         block_trueoffsets[3] = need_dofs.Size();
         block_trueoffsets.PartialSum();
 
-        // MakeTRef(), SetTrueVector(), SetFromTrueVector() 三者要配套使用ffffffffff
-        u_k = new BlockVector(block_trueoffsets); //必须满足essential边界条件
         int sc = h1_space->GetTrueVSize();
         Vector x_(sc * 3);
         x_ = 0.0;
-        for (int i=0; i<sc; ++i)               x_[i]                   = u_k->GetBlock(0)[i];
-        for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]]   = u_k->GetBlock(1)[i];
-        for (int i=0; i<need_dofs.Size(); ++i) x_[2*sc + need_dofs[i]] = u_k->GetBlock(2)[i];
         phi3_k.MakeTRef(h1_space, x_, 0);
         c1_k  .MakeTRef(h1_space, x_, sc);
         c2_k  .MakeTRef(h1_space, x_, 2*sc);
@@ -3578,12 +3574,19 @@ public:
         phi3_k.SetTrueVector();
         c1_k.SetTrueVector();
         c2_k.SetTrueVector();
-        cout << "After set bdc, L2 norm of phi3: " << phi3_k.ComputeL2Error(zero) << endl;
-        cout << "After set bdc, L2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
-        cout << "After set bdc, L2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
+        phi3_k.SetFromTrueVector();
+        c1_k.SetFromTrueVector();
+        c2_k.SetFromTrueVector();
+
+        u_k = new BlockVector(block_trueoffsets); //必须满足essential边界条件
+        for (int i=0; i<sc; ++i)               u_k->GetBlock(0)[i] = x_[i];
+        for (int i=0; i<need_dofs.Size(); ++i) u_k->GetBlock(1)[i] = x_[sc + need_dofs[i]];
+        for (int i=0; i<need_dofs.Size(); ++i) u_k->GetBlock(2)[i] = x_[2*sc + need_dofs[i]];
 
         phi1 = new ParGridFunction(h1_space);
         phi1->ProjectCoefficient(G_coeff);
+        phi1->SetTrueVector();
+        phi1->SetFromTrueVector();
         cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
 
         phi2 = new ParGridFunction(h1_space);
@@ -3669,10 +3672,9 @@ public:
     void Solve()
     {
         cout << "\nNewton, CG" << p_order << ", protein, parallel"
-             << ", preconditioner: " << prec_type
+             << ", preconditioner: " << prec_type << ", petsc option file: " << options_src
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 
-        u_k = new BlockVector(block_trueoffsets);
         Vector x_; // convert u_k to x_
         int sc = h1_space->GetTrueVSize();
         x_.SetSize(sc * 3);
@@ -3689,9 +3691,9 @@ public:
         phi3_k.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
-        cout << "L2 norm of phi3(before newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
-        cout << "L2 norm of   c1(before newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
-        cout << "L2 norm of   c2(before newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
+        cout << "After set bdc, L2 norm of phi3: " << phi3_k.ComputeL2Error(zero) << endl;
+        cout << "After set bdc, L2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
+        cout << "After set bdc, L2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
 
         Vector zero_vec;
 //        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
@@ -4479,6 +4481,7 @@ public:
     {
         cout.precision(14);
         cout << "\nNewton, DG" << p_order << ", protein, parallel"
+             << ", prec: " << prec_type << ", petsc option file: " << options_src
              << ", sigma: " << sigma << ", kappa: " << kappa
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 
