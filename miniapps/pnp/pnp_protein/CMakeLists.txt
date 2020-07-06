@@ -37,6 +37,10 @@ configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_protein/gummel_ilu
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_protein/gummel_ilu
                COPYONLY)
 
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_protein/gummel_lu
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_protein/gummel_lu
+               COPYONLY)
+
 configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_protein/newton_shell
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_protein/newton_shell
                COPYONLY)

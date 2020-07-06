@@ -21,16 +21,16 @@ int main(int argc, char **argv)
 
     OptionsParser args(argc, argv);
     args.AddOption(&mesh_file, "-m", "--mesh", "Choose a mesh");
-    args.AddOption(&refine_times, "-r", "--refine", "Refine mesh times");
+    args.AddOption(&refine_times, "-r", "--refine", "Refine mesh times", true);
     args.AddOption(&pqr_file, "-pqr", "--pqr", "Select a PQR file");
     args.AddOption(&p_order, "-p", "--p_order", "Polynomial order of basis function.");
-    args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method: choose: cg, dg");
-    args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method, choose: newton, gummel");
+    args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method: choose: cg, dg", true);
+    args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method, choose: newton, gummel", true);
     args.AddOption(&self_debug, "-debug", "--self_debug", "-nodebug", "--no_self_debug", "Run many asserts to debug");
     args.AddOption(&verbose, "-ver", "--verbose", "-nover", "--noverbose", "Verbose for more outputs");
     args.AddOption(&visualize, "-v", "--vis", "-nov", "--novis", "Visualize outputs");
     args.AddOption(&prec_type, "-prec", "--prec_type", "Preconditioner type for Newton disretization, choose: block, uzawa, simple");
-    args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
+    args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file", true);
     args.Parse();
     if (!args.Good())
     {

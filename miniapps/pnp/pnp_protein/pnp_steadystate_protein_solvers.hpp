@@ -2107,6 +2107,10 @@ public:
             c2->SetTrueVector();
             c2_n->ProjectGridFunction(c2_D_h1);
             c2_n->SetTrueVector();
+
+            cout << "After set bdc, L2 norm of phi3: " << phi3_n->ComputeL2Error(zero) << endl;
+            cout << "After set bdc, L2 norm of   c1: " << c1_n->ComputeL2Error(zero) << endl;
+            cout << "After set bdc, L2 norm of   c2: " << c2_n->ComputeL2Error(zero) << endl;
         }
 
         dc = new VisItDataCollection("data collection", mesh);
@@ -3574,9 +3578,9 @@ public:
         phi3_k.SetTrueVector();
         c1_k.SetTrueVector();
         c2_k.SetTrueVector();
-        cout << "L2 norm of phi3(before before newton->Mult()): " << phi3_k.ComputeL2Error(zero) << endl;
-        cout << "L2 norm of   c1(before before newton->Mult()): " <<   c1_k.ComputeL2Error(zero) << endl;
-        cout << "L2 norm of   c2(before before newton->Mult()): " <<   c2_k.ComputeL2Error(zero) << endl;
+        cout << "After set bdc, L2 norm of phi3: " << phi3_k.ComputeL2Error(zero) << endl;
+        cout << "After set bdc, L2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
+        cout << "After set bdc, L2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
 
         phi1 = new ParGridFunction(h1_space);
         phi1->ProjectCoefficient(G_coeff);
@@ -4335,6 +4339,10 @@ public:
 
             c2_k.ProjectGridFunction(c2_D_h1);
             c2_k.SetTrueVector();
+
+            cout << "After set bdc, L2 norm of phi3: " << phi3_k.ComputeL2Error(zero) << endl;
+            cout << "After set bdc, L2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
+            cout << "After set bdc, L2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
         }
 
         for (int i=0; i<h1_space->GetNE(); ++i)
