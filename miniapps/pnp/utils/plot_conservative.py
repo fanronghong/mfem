@@ -35,9 +35,11 @@ def PlotConservative(filename=None):
 
 if __name__ == '__main__':
     file = [
-        "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_box/c1_local_conservation_CG_Gummel_box.txt",
-        "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_box/c1_local_conservation_DG_Gummel_box.txt",
+        # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_box/c1_local_conservation_CG_Gummel_box.txt",
+        # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_box/c1_local_conservation_DG_Gummel_box.txt",
         # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_box/phi_local_conservation_DG_Gummel_box.txt",
         # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_box/phi_local_conservation_CG_Gummel_box.txt"
-        ]
+        "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c1_local_conservation.txt",
+        "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c2_local_conservation.txt"
+    ]
     PlotConservative(file)

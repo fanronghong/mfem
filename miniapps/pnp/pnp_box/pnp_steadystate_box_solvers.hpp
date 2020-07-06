@@ -1460,9 +1460,9 @@ public:
         c1_n  = new ParGridFunction(fsp); *c1_n  = 0.0;
         c2_n  = new ParGridFunction(fsp); *c2_n  = 0.0;
 
-        phi = new ParGridFunction(fsp); *phi   = 0.0; // Gummel 迭代下一步解
-        c1  = new ParGridFunction(fsp); *c1    = 0.0;
-        c2  = new ParGridFunction(fsp); *c2    = 0.0;
+        phi = new ParGridFunction(fsp); *phi = 0.0; // Gummel 迭代下一步解
+        c1  = new ParGridFunction(fsp); *c1  = 0.0;
+        c2  = new ParGridFunction(fsp); *c2  = 0.0;
 
         int bdr_size = fsp->GetMesh()->bdr_attributes.Max();
         Neumann_attr  .SetSize(bdr_size);

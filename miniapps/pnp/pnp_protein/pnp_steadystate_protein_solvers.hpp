@@ -1440,6 +1440,9 @@ public:
         phi3->SetTrueVector();
         c1  ->SetTrueVector();
         c2  ->SetTrueVector();
+        phi3->SetFromTrueVector();
+        c1  ->SetFromTrueVector();
+        c2  ->SetFromTrueVector();
         phi3_n->ProjectBdrCoefficient(phi_D_top_coeff, top_bdr);
         c1_n  ->ProjectBdrCoefficient( c1_D_top_coeff, top_bdr);
         c2_n  ->ProjectBdrCoefficient( c2_D_top_coeff, top_bdr);
@@ -1449,6 +1452,9 @@ public:
         phi3_n->SetTrueVector();
         c1_n  ->SetTrueVector();
         c2_n  ->SetTrueVector();
+        phi3_n->SetFromTrueVector();
+        c1_n  ->SetFromTrueVector();
+        c2_n  ->SetFromTrueVector();
         cout << "After set bdc, L2 norm of phi3: " << phi3_n->ComputeL2Error(zero) << endl;
         cout << "After set bdc, L2 norm of   c1: " << c1_n->ComputeL2Error(zero) << endl;
         cout << "After set bdc, L2 norm of   c2: " << c2_n->ComputeL2Error(zero) << endl;
@@ -1576,6 +1582,8 @@ private:
     void Solve_Singular()
     {
         phi1->ProjectCoefficient(G_coeff); // phi1求解完成, 直接算比较慢, 也可以从文件读取
+        phi1->SetTrueVector();
+        phi1->SetFromTrueVector();
         cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
 
         if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
@@ -1696,7 +1704,7 @@ private:
         lf->AddDomainIntegrator(new DomainLFIntegrator(lf1));
         // (alpha2 alpha3 z2 c2^k, psi3)_{\Omega_s}
         lf->AddDomainIntegrator(new DomainLFIntegrator(lf2));
-        // - epsilon_m <grad(phi1 + phi2).n, psi3>_{\Gamma}, interface integrator, see below another way to define interface integrate
+        // - epsilon_m <grad(phi1 + phi2).n, psi3>_{\Gamma}, interface integrator
         lf->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator(&neg_epsilon_protein, &grad_phi1_plus_grad_phi2, mesh, protein_marker, water_marker));
         // omit 0 Neumann bdc on \Gamma_N and \Gamma_M
         lf->Assemble();
@@ -1756,7 +1764,6 @@ private:
         blf->SetOperatorType(Operator::PETSC_MATAIJ);
         blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
 
-        A->EliminateRows(protein_dofs, 1.0);
         if (self_debug) {
             for (int i = 0; i < protein_dofs.Size(); ++i) {
                 assert(abs((*b)(protein_dofs[i])) < 1E-10);
@@ -1807,6 +1814,8 @@ private:
         }
         else
         {
+            A->EliminateRows(protein_dofs, 1.0);
+
             PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
             chrono.Clear();
             chrono.Start();
@@ -1864,7 +1873,6 @@ private:
         blf->SetOperatorType(Operator::PETSC_MATAIJ);
         blf->FormLinearSystem(ess_tdof_list, *c2, *lf, *A, *x, *b);
 
-        A->EliminateRows(protein_dofs, 1.0);
         if (self_debug) {
             for (int i = 0; i < protein_dofs.Size(); ++i) {
                 assert(abs((*b)(protein_dofs[i])) < 1E-10);
@@ -1915,6 +1923,8 @@ private:
         }
         else
         {
+            A->EliminateRows(protein_dofs, 1.0);
+
             PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
 
             chrono.Clear();
