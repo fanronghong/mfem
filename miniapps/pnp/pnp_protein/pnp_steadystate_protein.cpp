@@ -16,12 +16,12 @@ int main(int argc, char **argv)
 {
     int num_procs, myid;
     MPI_Init(&argc, &argv);
-    MFEMInitializePetsc(NULL, NULL, options_src, NULL);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
     OptionsParser args(argc, argv);
     args.AddOption(&mesh_file, "-m", "--mesh", "Choose a mesh");
+    args.AddOption(&refine_times, "-r", "--refine", "Refine mesh times");
     args.AddOption(&pqr_file, "-pqr", "--pqr", "Select a PQR file");
     args.AddOption(&p_order, "-p", "--p_order", "Polynomial order of basis function.");
     args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method: choose: cg, dg");
@@ -30,6 +30,7 @@ int main(int argc, char **argv)
     args.AddOption(&verbose, "-ver", "--verbose", "-nover", "--noverbose", "Verbose for more outputs");
     args.AddOption(&visualize, "-v", "--vis", "-nov", "--novis", "Visualize outputs");
     args.AddOption(&prec_type, "-prec", "--prec_type", "Preconditioner type for Newton disretization, choose: block, uzawa, simple");
+    args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.Parse();
     if (!args.Good())
     {
@@ -40,6 +41,8 @@ int main(int argc, char **argv)
         MPI_Finalize();
         return 1;
     }
+
+    MFEMInitializePetsc(NULL, NULL, options_src, NULL);
 
     if (self_debug)
     {

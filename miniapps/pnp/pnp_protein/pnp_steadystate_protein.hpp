@@ -60,7 +60,8 @@ bool local_conservation = true;
 double sigma            = -1.0; // symmetric parameter for DG
 double kappa            = 200; // penalty parameter for DG
 
-const int refine_times  = 0;
+int refine_times  = 0;
+
 bool save_right_solution       = true;
 const char* phi1_txt           = "./phi1_1MAG_2.txt";
 const char* phi3_Gummel_CG_txt = "./phi3_Gummel_CG.txt";
