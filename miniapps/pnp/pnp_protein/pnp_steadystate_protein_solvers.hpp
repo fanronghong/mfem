@@ -6,6 +6,7 @@
 #define _PNP_GUMMEL_SOLVER_HPP_
 
 #include <fstream>
+#include <string>
 #include "petsc.h"
 #include "mfem.hpp"
 #include "../utils/GradConvection_Integrator.hpp"
@@ -1564,9 +1565,16 @@ public:
             ComputeLocalConservation(D_K_, *c1, v_K_coeff, *phi3, error1);
             ComputeLocalConservation(D_Cl_, *c2, v_Cl_coeff, *phi3, error2);
 
-            ofstream file("./phi3_local_conservation_CG_Gummel_protein.txt"),
-                     file1("./c1_local_conservation_CG_Gummel_protein.txt"),
-                     file2("./c2_local_conservation_CG_Gummel_protein.txt");
+            string mesh_temp(mesh_file);
+            mesh_temp.erase(mesh_temp.find(".msh"), 4);
+            mesh_temp.erase(mesh_temp.find("./"), 2);
+            string title = "./phi3_conserv_ref" + to_string(refine_times) + "_"
+                            + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
+            string title1 = "./c1_conserv_ref" + to_string(refine_times) + "_"
+                           + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
+            string title2 = "./c2_conserv_ref" + to_string(refine_times) + "_"
+                           + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
+            ofstream file(title), file1(title1), file2(title2);
             if (file.is_open() && file1.is_open() && file2.is_open())
             {
                 error.Print(file, 1);
@@ -2209,9 +2217,16 @@ public:
             ComputeLocalConservation(D_K_, *c1, v_K_coeff, *phi3, error1);
             ComputeLocalConservation(D_Cl_, *c2, v_Cl_coeff, *phi3, error2);
 
-            ofstream file("./phi3_local_conservation_DG_Gummel_protein.txt"),
-                    file1("./c1_local_conservation_DG_Gummel_protein.txt"),
-                    file2("./c2_local_conservation_DG_Gummel_protein.txt");
+            string mesh_temp(mesh_file);
+            mesh_temp.erase(mesh_temp.find(".msh"), 4);
+            mesh_temp.erase(mesh_temp.find("./"), 2);
+            string title = "./phi3_conserv_ref" + to_string(refine_times) + "_"
+                           + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
+            string title1 = "./c1_conserv_ref" + to_string(refine_times) + "_"
+                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
+            string title2 = "./c2_conserv_ref" + to_string(refine_times) + "_"
+                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
+            ofstream file(title), file1(title1), file2(title2);
             if (file.is_open() && file1.is_open() && file2.is_open())
             {
                 error.Print(file, 1);
@@ -2229,6 +2244,7 @@ private:
     {
         phi1->ProjectCoefficient(G_coeff); // phi1求解完成, 直接算比较慢, 也可以从文件读取
         phi1->SetTrueVector();
+        phi1->SetFromTrueVector();
 
         cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
     }
@@ -2243,9 +2259,15 @@ private:
         {
             ParGridFunction* phi1_ = new ParGridFunction(h1_fes);
             phi1_->ProjectCoefficient(G_coeff);
+            phi1_->SetTrueVector();
+            phi1_->SetFromTrueVector();
+
             cout << "L2 norm of phi1_: " << phi1_->ComputeL2Error(zero) << endl;
 
             phi1->ProjectGridFunction(*phi1_);
+            phi1->SetTrueVector();
+            phi1->SetFromTrueVector();
+
             cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
         }
 
@@ -3754,9 +3776,16 @@ public:
             ComputeLocalConservation(D_K_, c1_k, v_K_coeff, phi3_k, error1);
             ComputeLocalConservation(D_Cl_, c2_k, v_Cl_coeff, phi3_k, error2);
 
-            ofstream file("./phi3_local_conservation_CG_Newton_protein.txt"),
-                    file1("./c1_local_conservation_CG_Newton_protein.txt"),
-                    file2("./c2_local_conservation_CG_Newton_protein.txt");
+            string mesh_temp(mesh_file);
+            mesh_temp.erase(mesh_temp.find(".msh"), 4);
+            mesh_temp.erase(mesh_temp.find("./"), 2);
+            string title = "./phi3_conserv_ref" + to_string(refine_times) + "_"
+                           + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
+            string title1 = "./c1_conserv_ref" + to_string(refine_times) + "_"
+                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
+            string title2 = "./c2_conserv_ref" + to_string(refine_times) + "_"
+                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
+            ofstream file(title), file1(title1), file2(title2);
             if (file.is_open() && file1.is_open() && file2.is_open())
             {
                 error.Print(file, 1);
@@ -4520,33 +4549,20 @@ public:
         if (local_conservation)
         {
             Vector error, error1, error2;
-            ComputeLocalConservation(epsilon_water, phi3_k, error);
-            ComputeLocalConservation(D_K_, c1_k, v_K_coeff, phi3_k, error1);
-            ComputeLocalConservation(D_Cl_, c2_k, v_Cl_coeff, phi3_k, error2);
-
-            ofstream file("./phi_local_conservation_DG_Gummel_box.txt"),
-                    file1("./c1_local_conservation_DG_Gummel_box.txt"),
-                    file2("./c2_local_conservation_DG_Gummel_box.txt");
-            if (file.is_open() && file1.is_open() && file2.is_open())
-            {
-                error.Print(file, 1);
-                error1.Print(file1, 1);
-                error2.Print(file2, 1);
-            } else {
-                MFEM_ABORT("local conservation quantities not save!");
-            }
-        }
-
-        if (local_conservation)
-        {
-            Vector error, error1, error2;
             ComputeLocalConservation(Epsilon, phi3_k, error);
             ComputeLocalConservation(D_K_, c1_k, v_K_coeff, phi3_k, error1);
             ComputeLocalConservation(D_Cl_, c2_k, v_Cl_coeff, phi3_k, error2);
 
-            ofstream file("./phi3_local_conservation_DG_Newton_protein.txt"),
-                    file1("./c1_local_conservation_DG_Newton_protein.txt"),
-                    file2("./c2_local_conservation_DG_Newton_protein.txt");
+            string mesh_temp(mesh_file);
+            mesh_temp.erase(mesh_temp.find(".msh"), 4);
+            mesh_temp.erase(mesh_temp.find("./"), 2);
+            string title = "./phi3_conserv_ref" + to_string(refine_times) + "_"
+                           + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
+            string title1 = "./c1_conserv_ref" + to_string(refine_times) + "_"
+                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
+            string title2 = "./c2_conserv_ref" + to_string(refine_times) + "_"
+                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
+            ofstream file(title), file1(title1), file2(title2);
             if (file.is_open() && file1.is_open() && file2.is_open())
             {
                 error.Print(file, 1);

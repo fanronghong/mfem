@@ -24,7 +24,7 @@ def PlotConservative(filename=None):
         zeros = range(len(data))
         ax = plt.subplot(subfig_tag + i)
         plt.title(filename[i])
-        ax.scatter(zeros, data)
+        ax.scatter(zeros, data, s=1)
         # plt.plot(data, linestyle=":")
         plt.hlines(0, 0, len(data), colors="red")
 
@@ -39,7 +39,13 @@ if __name__ == '__main__':
         # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_box/c1_local_conservation_DG_Gummel_box.txt",
         # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_box/phi_local_conservation_DG_Gummel_box.txt",
         # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_box/phi_local_conservation_CG_Gummel_box.txt"
-        "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c1_local_conservation.txt",
-        "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c2_local_conservation.txt"
+        # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c1_local_conservation.txt",
+        # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c2_local_conservation.txt"
+        # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c1_local_conservation_DG_Gummel_protein.txt",
+        "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c2_local_conservation_DG_Gummel_protein.txt",
+        # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c1_local_conservation_CG_Gummel_protein.txt",
+        "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c2_local_conservation_CG_Gummel_protein.txt",
+        # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c1_local_conservation_CG_Newton_protein.txt",
+        # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c2_local_conservation_CG_Newton_protein.txt",
     ]
     PlotConservative(file)

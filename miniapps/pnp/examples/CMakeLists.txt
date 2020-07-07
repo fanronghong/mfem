@@ -6,6 +6,10 @@ add_mfem_miniapp(example
         MAIN example.cpp
         LIBRARIES mfem)
 
+add_mfem_miniapp(demo
+        MAIN demo.cpp
+        LIBRARIES mfem)
+
 configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/examples/adv_diff_petsc.opts
         ${PROJECT_BINARY_DIR}/miniapps/pnp/examples/adv_diff_petsc.opts
         COPYONLY)
