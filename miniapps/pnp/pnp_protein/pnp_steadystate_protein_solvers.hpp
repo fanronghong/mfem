@@ -2254,22 +2254,6 @@ private:
     {
         h1_fec = new H1_FECollection(p_order, mesh->Dimension());
         h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
-        ParGridFunction* phi2_ = new ParGridFunction(h1_fes);
-
-        {
-            ParGridFunction* phi1_ = new ParGridFunction(h1_fes);
-            phi1_->ProjectCoefficient(G_coeff);
-            phi1_->SetTrueVector();
-            phi1_->SetFromTrueVector();
-
-            cout << "L2 norm of phi1_: " << phi1_->ComputeL2Error(zero) << endl;
-
-            phi1->ProjectGridFunction(*phi1_);
-            phi1->SetTrueVector();
-            phi1->SetFromTrueVector();
-
-            cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
-        }
 
         phi3_e = new ParGridFunction(h1_fes);
         c1_e   = new ParGridFunction(h1_fes);
@@ -2341,6 +2325,7 @@ private:
         lf.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_gradG_coeff), Gamma_m);
         lf.Assemble();
 
+        ParGridFunction* phi2_ = new ParGridFunction(h1_fes);
         phi2_->ProjectCoefficient(G_coeff);
         phi2_->Neg(); // 在interface(\Gamma)上是Dirichlet边界: -phi1
 
@@ -4421,13 +4406,10 @@ public:
             water_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
         }
 
-        ParGridFunction* phi1_ = new ParGridFunction(h1_space);
-        phi1_->ProjectCoefficient(G_coeff);
-        phi1_->SetTrueVector();
-
         phi1 = new ParGridFunction(dg_space);
-        phi1->ProjectGridFunction(*phi1_);
+        phi1->ProjectCoefficient(G_coeff);
         phi1->SetTrueVector();
+        phi1->SetFromTrueVector();
         cout << "L2 norm of phi1: " << phi1->ComputeL2Error(zero) << endl;
 
         ParGridFunction* phi2_ = new ParGridFunction(h1_space);
