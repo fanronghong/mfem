@@ -19,12 +19,6 @@ configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_protein/BPTI.pqr
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_protein/BPTI.pqr
                COPYONLY)
 
-
-add_mfem_miniapp(pnp_steadystate_protein
-        MAIN pnp_steadystate_protein.cpp
-        LIBRARIES mfem)
-
-
 configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_protein/pnp_protein_petsc_opts
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_protein/pnp_protein_petsc_opts
                COPYONLY)
@@ -53,3 +47,20 @@ configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_protein/bsub.protein
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_protein/bsub.protein
                COPYONLY)
 
+
+#add_definitions(-DTESTT=${MESH})
+#if(${MESH} STREQUAL "_1MAG_2_test_case")
+#    add_definitions(-D_1MAG_2_test_case)
+#elseif(${MESH} STREQUAL "_1MAG_2")
+#    add_definitions(-D_1MAG_2)
+#elseif(${MESH} STREQUAL "_1bl8_tu")
+#    add_definitions(-D_1bl8_tu)
+#else()
+#    add_definitions()
+#endif()
+#message("===> use mesh: ${MESH}")
+
+
+add_mfem_miniapp(pnp_steadystate_protein
+        MAIN pnp_steadystate_protein.cpp
+        LIBRARIES mfem)

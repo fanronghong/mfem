@@ -9,14 +9,28 @@
 using namespace std;
 using namespace mfem;
 
-//#define SELF_VERBOSE //输出许多中间过程
+
+int p_order             = 1; //有限元基函数的多项式次数
+const char* Linearize   = "gummel"; // newton, gummel
+const char* Discretize  = "dg"; // cg, dg
+const char* prec_type   = "uzawa"; // preconditioner for Newton discretization: block, uzawa, simple
+const char* options_src = "./pnp_protein_petsc_opts";
+int refine_times        = 0;
+bool verbose            = false;
+bool self_debug         = false;
+bool visualize          = false;
+bool local_conservation = true;
+double sigma            = -1.0; // symmetric parameter for DG
+double kappa            = 200; // penalty parameter for DG
+
 
 /* 只能定义如下集中参数
  * _1MAG_2_test_case: only do tests to verify the code, forbid to change any parameters
  * _1MAG_2:
  * _1bl8_tu:
  * */
-#define _1MAG_2
+#define _1bl8_tu
+
 
 #if defined(_1MAG_2_test_case)
 #define SELF_DEBUG // only do tests for below parameters
@@ -44,29 +58,9 @@ double c1_other    = 0.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区
 double c2_top      = 0.2 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
 double c2_bottom   = 0.2 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
 double c2_other    = 0.0 * alpha3; // 国际单位mol/L, Cl-阳离子在计算区域的 其他边界是 Neumann
-
 #elif defined(_1MAG_2)
 const char* mesh_file   = "./1MAG_2.msh"; // 带有蛋白的网格,与PQR文件必须匹配
 const char* pqr_file    = "./1MAG.pqr"; // PQR文件,与网格文件必须匹配
-int p_order             = 1; //有限元基函数的多项式次数
-const char* Linearize   = "gummel"; // newton, gummel
-const char* Discretize  = "dg"; // cg, dg
-const char* prec_type   = "uzawa"; // preconditioner for Newton discretization: block, uzawa, simple
-const char* options_src = "./pnp_protein_petsc_opts";
-bool self_debug         = false;
-bool verbose            = false;
-bool visualize          = false;
-bool local_conservation = true;
-double sigma            = -1.0; // symmetric parameter for DG
-double kappa            = 200; // penalty parameter for DG
-
-int refine_times  = 0;
-
-bool save_right_solution       = true;
-const char* phi1_txt           = "./phi1_1MAG_2.txt";
-const char* phi3_Gummel_CG_txt = "./phi3_Gummel_CG.txt";
-const char* c1_Gummel_CG_txt   = "./c1_Gummel_CG.txt";
-const char* c2_Gummel_CG_txt   = "./c2_Gummel_CG.txt";
 
 const int protein_marker   = 1; // 这些marker信息可以从Gmsh中可视化得到
 const int water_marker     = 2;
@@ -141,16 +135,15 @@ ConstantCoefficient c1_D_bottom_coeff(c1_bottom);
 ConstantCoefficient c2_D_top_coeff(c2_top);
 ConstantCoefficient c2_D_bottom_coeff(c2_bottom);
 #elif defined(_1bl8_tu)
-const char* options_src = "./petsc_opts";
-const char* mesh_file = "../data/1bl8_tu.msh"; // 带有蛋白的网格,与PQR文件必须匹配
-const char* pqr_file = "../data/1bl8.pqr"; // PQR文件,与网格文件必须匹配
-const char* phi1_txt = "./1bl8_phi1.txt";
+const char* mesh_file = "./1bl8_tu.msh"; // 带有蛋白的网格,与PQR文件必须匹配
+const char* pqr_file = "./1bl8.pqr"; // PQR文件,与网格文件必须匹配
+
 const int protein_marker = 1;
 const int water_marker = 2;
 const int interface_marker = 9;
 const int top_marker = 8;
 const int bottom_marker = 7;
-const int p_order = 1; //有限元基函数的多项式次数
+const int Gamma_m_marker   = 5;
 
 double phi_top     = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 上边界是 Dirichlet, 乘以alpha1进行无量纲化
 double phi_bottom  = 1.0 * alpha1; // 国际单位V, 电势在计算区域的 下边界是 Dirichlet
@@ -163,6 +156,60 @@ double c1_other    = 0.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区
 double c2_top      = 0.1 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
 double c2_bottom   = 0.9 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
 double c2_other    = 0.0 * alpha3; // 国际单位mol/L, Cl-阳离子在计算区域的 其他边界是 Neumann
+
+double phi_D_func(const Vector& x)
+{
+    if (abs(x[2] - 50.0) < 1E-10) return phi_top;
+    else if (abs(x[2] + 60.0) < 1E-10) return phi_bottom;
+    else return 0.0;
+}
+double c1_D_func(const Vector& x)
+{
+    if (abs(x[2] - 50.0) < 1E-10) return c1_top;
+    else if (abs(x[2] + 60.0) < 1E-10) return c1_bottom;
+    else return 0.0;
+}
+double c2_D_func(const Vector& x)
+{
+    if (abs(x[2] - 50.0) < 1E-10) return c2_top;
+    else if (abs(x[2] + 60.0) < 1E-10) return c2_bottom;
+    else return 0.0;
+}
+double phi_D_top(const Vector& x)
+{
+    return phi_top;
+}
+double phi_D_bottom(const Vector& x)
+{
+    return phi_bottom;
+}
+double c1_D_top(const Vector& x)
+{
+    return c1_top;
+}
+double c1_D_bottom(const Vector& x)
+{
+    return c1_bottom;
+}
+double c2_D_top(const Vector& x)
+{
+    return c2_top;
+}
+double c2_D_bottom(const Vector& x)
+{
+    return c2_bottom;
+}
+
+FunctionCoefficient phi_D_coeff(phi_D_func);
+FunctionCoefficient c1_D_coeff (c1_D_func);
+FunctionCoefficient c2_D_coeff (c2_D_func);
+
+ConstantCoefficient phi_D_top_coeff(phi_top);
+ConstantCoefficient phi_D_bottom_coeff(phi_bottom);
+ConstantCoefficient c1_D_top_coeff(c1_top);
+ConstantCoefficient c1_D_bottom_coeff(c1_bottom);
+ConstantCoefficient c2_D_top_coeff(c2_top);
+ConstantCoefficient c2_D_bottom_coeff(c2_bottom);
 #endif
 
 
