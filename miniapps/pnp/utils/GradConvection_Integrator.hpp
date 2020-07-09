@@ -15,22 +15,25 @@ using namespace std;
 // Q (u grad(w), grad(v)), given w(类型为GridFunction), u是trial, v是test
 // or Q (u adv, grad(v)), adv is VectorCoefficient (advection velocity)
 // the stiffness matrix of GradConvectionIntegrator is just the transpose of ConvectionIntegrator (ref: Test_gradConvectionIntegrator2)
-vector<double> local_peclet; // for more info
 class GradConvectionIntegrator: public BilinearFormIntegrator
 {
 protected:
     GradientGridFunctionCoefficient* grad_w;
     VectorCoefficient* adv;
     bool param = false;
-    Coefficient* Q;
+    Coefficient *Q, *diff;
 
     DenseMatrix dshape, dshapedxt;
     Vector gradw, shape, vec1;
 
 public:
-    GradConvectionIntegrator(GridFunction& w_, Coefficient* Q_): Q(Q_)
+    Array<double> local_peclet; // for more info
+
+public:
+    GradConvectionIntegrator(GridFunction& w_, Coefficient* Q_, Coefficient* diff_=NULL): Q(Q_), diff(diff_)
     { grad_w = new GradientGridFunctionCoefficient(&w_); }
-    GradConvectionIntegrator(VectorCoefficient* adv_, Coefficient* Q_): Q(Q_), adv(adv_) { param = true; }
+    GradConvectionIntegrator(VectorCoefficient* adv_, Coefficient* Q_, Coefficient* diff_=NULL)
+        : Q(Q_), adv(adv_), diff(diff_) { param = true; }
     ~GradConvectionIntegrator() { delete grad_w; }
 
     virtual void AssembleElementMatrix(const FiniteElement& el,
@@ -80,7 +83,7 @@ public:
         }
 
         double mean_peclet = accumulate(elem_peclet.begin(), elem_peclet.end(), 0.0) / elem_peclet.size();
-        local_peclet.push_back(mean_peclet);
+        local_peclet.Append(mean_peclet);
     }
 };
 

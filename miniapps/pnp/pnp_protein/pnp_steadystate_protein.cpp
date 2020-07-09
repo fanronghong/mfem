@@ -20,9 +20,7 @@ int main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
     OptionsParser args(argc, argv);
-    args.AddOption(&mesh_file, "-m", "--mesh", "Choose a mesh");
     args.AddOption(&refine_times, "-r", "--refine", "Refine mesh times", true);
-    args.AddOption(&pqr_file, "-pqr", "--pqr", "Select a PQR file");
     args.AddOption(&p_order, "-p", "--p_order", "Polynomial order of basis function.");
     args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method: choose: cg, dg", true);
     args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method, choose: newton, gummel", true);

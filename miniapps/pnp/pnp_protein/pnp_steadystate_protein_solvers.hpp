@@ -18,6 +18,7 @@ using namespace std;
 using namespace mfem;
 
 class PNP_Newton_CG_Operator_par;
+class PNP_Newton_DG_Operator_par;
 
 
 class PNP_Gummel_CG_Solver_par
@@ -43,6 +44,7 @@ private:
 
     StopWatch chrono;
     int num_procs, myid;
+    Array<Array<double>> Peclet;
 
 public:
     PNP_Gummel_CG_Solver_par(Mesh* mesh_) : mesh(mesh_)
@@ -247,11 +249,11 @@ public:
             string mesh_temp(mesh_file);
             mesh_temp.erase(mesh_temp.find(".msh"), 4);
             mesh_temp.erase(mesh_temp.find("./"), 2);
-            string title = "./phi3_conserv_ref" + to_string(refine_times) + "_"
+            string title = "./Conserv/phi3_conserv_ref" + to_string(refine_times) + "_"
                             + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
-            string title1 = "./c1_conserv_ref" + to_string(refine_times) + "_"
+            string title1 = "./Conserv/c1_conserv_ref" + to_string(refine_times) + "_"
                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
-            string title2 = "./c2_conserv_ref" + to_string(refine_times) + "_"
+            string title2 = "./Conserv/c2_conserv_ref" + to_string(refine_times) + "_"
                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
             ofstream file(title), file1(title1), file2(title2);
             if (file.is_open() && file1.is_open() && file2.is_open())
@@ -261,6 +263,31 @@ public:
                 error2.Print(file2, 1);
             } else {
                 MFEM_ABORT("local conservation quantities not save!");
+            }
+        }
+
+        if (show_peclet)
+        {
+            string mesh_temp(mesh_file);
+            mesh_temp.erase(mesh_temp.find(".msh"), 4);
+            mesh_temp.erase(mesh_temp.find("./"), 2);
+            string title1 = "./Peclet/c1_Peclet_ref" + to_string(refine_times)
+                            + "_" + string(Discretize) + "_" + mesh_temp + "_" + string(Linearize);
+            string title2 = "./Peclet/c2_Peclet_ref" + to_string(refine_times)
+                            + "_" + string(Discretize) + "_" + mesh_temp + "_" + string(Linearize);
+            for (int i=0; i<Peclet.Size(); ++i)
+            {
+                ofstream file1(title1 + to_string(i)), file2(title2 + to_string(i));
+                if (file1.is_open() && file2.is_open())
+                {
+                    Peclet[i].Print(file1, 1);
+                    Peclet[i+1].Print(file2, 1);
+                    i++;
+                }
+                else
+                {
+                    MFEM_ABORT("Peclet quantities not save!");
+                }
             }
         }
     }
@@ -438,9 +465,12 @@ private:
         // D1 (grad(c1), grad(v1))_{\Omega_s}
         blf->AddDomainIntegrator(new DiffusionIntegrator(D1_water));
         // D1 z1 (c1 grad(phi3^k), grad(v1))_{\Omega_s}
-        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_n, &D1_prod_z1_water));
+        GradConvectionIntegrator* integ = new GradConvectionIntegrator(*phi3_n, &D1_prod_z1_water);
+        blf->AddDomainIntegrator(integ);
         blf->Assemble(0);
         blf->Finalize(0);
+
+        Peclet.Append(integ->local_peclet);
 
         ParLinearForm *lf(new ParLinearForm(h1_space));
         // omit zero Neumann bdc
@@ -547,9 +577,12 @@ private:
         // D2 (grad(c2), grad(v2))_{\Omega_s}
         blf->AddDomainIntegrator(new DiffusionIntegrator(D2_water));
         // D2 z2 (c2 grad(phi3^k), grad(v2))_{\Omega_s}
-        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_n, &D2_prod_z2_water));
+        GradConvectionIntegrator* integ = new GradConvectionIntegrator(*phi3_n, &D2_prod_z2_water);
+        blf->AddDomainIntegrator(integ);
         blf->Assemble(0);
         blf->Finalize(0);
+
+        Peclet.Append(integ->local_peclet);
 
         ParLinearForm *lf(new ParLinearForm(h1_space));
         // omit zero Neumann bdc
@@ -899,11 +932,11 @@ public:
             string mesh_temp(mesh_file);
             mesh_temp.erase(mesh_temp.find(".msh"), 4);
             mesh_temp.erase(mesh_temp.find("./"), 2);
-            string title = "./phi3_conserv_ref" + to_string(refine_times) + "_"
+            string title = "./Conserv/phi3_conserv_ref" + to_string(refine_times) + "_"
                            + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
-            string title1 = "./c1_conserv_ref" + to_string(refine_times) + "_"
+            string title1 = "./Conserv/c1_conserv_ref" + to_string(refine_times) + "_"
                             + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
-            string title2 = "./c2_conserv_ref" + to_string(refine_times) + "_"
+            string title2 = "./Conserv/c2_conserv_ref" + to_string(refine_times) + "_"
                             + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
             ofstream file(title), file1(title1), file2(title2);
             if (file.is_open() && file1.is_open() && file2.is_open())
@@ -2430,11 +2463,11 @@ public:
             string mesh_temp(mesh_file);
             mesh_temp.erase(mesh_temp.find(".msh"), 4);
             mesh_temp.erase(mesh_temp.find("./"), 2);
-            string title = "./phi3_conserv_ref" + to_string(refine_times) + "_"
+            string title = "./Conserv/phi3_conserv_ref" + to_string(refine_times) + "_"
                            + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
-            string title1 = "./c1_conserv_ref" + to_string(refine_times) + "_"
+            string title1 = "./Conserv/c1_conserv_ref" + to_string(refine_times) + "_"
                             + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
-            string title2 = "./c2_conserv_ref" + to_string(refine_times) + "_"
+            string title2 = "./Conserv/c2_conserv_ref" + to_string(refine_times) + "_"
                             + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
             ofstream file(title), file1(title1), file2(title2);
             if (file.is_open() && file1.is_open() && file2.is_open())
@@ -3204,11 +3237,11 @@ public:
             string mesh_temp(mesh_file);
             mesh_temp.erase(mesh_temp.find(".msh"), 4);
             mesh_temp.erase(mesh_temp.find("./"), 2);
-            string title = "./phi3_conserv_ref" + to_string(refine_times) + "_"
+            string title = "./Conserv/phi3_conserv_ref" + to_string(refine_times) + "_"
                            + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
-            string title1 = "./c1_conserv_ref" + to_string(refine_times) + "_"
+            string title1 = "./Conserv/c1_conserv_ref" + to_string(refine_times) + "_"
                             + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
-            string title2 = "./c2_conserv_ref" + to_string(refine_times) + "_"
+            string title2 = "./Conserv/c2_conserv_ref" + to_string(refine_times) + "_"
                             + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
             ofstream file(title), file1(title1), file2(title2);
             if (file.is_open() && file1.is_open() && file2.is_open())
