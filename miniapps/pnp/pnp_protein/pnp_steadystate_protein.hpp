@@ -12,7 +12,7 @@ using namespace mfem;
 
 int p_order             = 1; //有限元基函数的多项式次数
 const char* Linearize   = "gummel"; // newton, gummel
-const char* Discretize  = "dg"; // cg, dg
+const char* Discretize  = "cg"; // cg, dg
 const char* prec_type   = "uzawa"; // preconditioner for Newton discretization: block, uzawa, simple
 const char* options_src = "./pnp_protein_petsc_opts";
 int refine_times        = 0;

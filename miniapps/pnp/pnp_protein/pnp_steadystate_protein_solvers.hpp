@@ -44,7 +44,8 @@ private:
 
     StopWatch chrono;
     int num_procs, myid;
-    Array<Array<double>> Peclet;
+    Array< Array<double> > Peclet;
+    int iter = 1;
 
 public:
     PNP_Gummel_CG_Solver_par(Mesh* mesh_) : mesh(mesh_)
@@ -177,7 +178,6 @@ public:
         cout << "\n------> Gummel, CG" << p_order << ", protein, parallel"
              << ", petsc option file: " << options_src
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << '\n' << endl;
-        int iter = 1;
         while (iter < Gummel_max_iters)
         {
             Solve_Poisson();
@@ -266,30 +266,6 @@ public:
             }
         }
 
-        if (show_peclet)
-        {
-            string mesh_temp(mesh_file);
-            mesh_temp.erase(mesh_temp.find(".msh"), 4);
-            mesh_temp.erase(mesh_temp.find("./"), 2);
-            string title1 = "./Peclet/c1_Peclet_ref" + to_string(refine_times)
-                            + "_" + string(Discretize) + "_" + mesh_temp + "_" + string(Linearize);
-            string title2 = "./Peclet/c2_Peclet_ref" + to_string(refine_times)
-                            + "_" + string(Discretize) + "_" + mesh_temp + "_" + string(Linearize);
-            for (int i=0; i<Peclet.Size(); ++i)
-            {
-                ofstream file1(title1 + to_string(i)), file2(title2 + to_string(i));
-                if (file1.is_open() && file2.is_open())
-                {
-                    Peclet[i].Print(file1, 1);
-                    Peclet[i+1].Print(file2, 1);
-                    i++;
-                }
-                else
-                {
-                    MFEM_ABORT("Peclet quantities not save!");
-                }
-            }
-        }
     }
 
 private:
@@ -470,7 +446,19 @@ private:
         blf->Assemble(0);
         blf->Finalize(0);
 
-        Peclet.Append(integ->local_peclet);
+        if (show_peclet)
+        {
+            string mesh_temp(mesh_file);
+            mesh_temp.erase(mesh_temp.find(".msh"), 4);
+            mesh_temp.erase(mesh_temp.find("./"), 2);
+            string title  = "./Peclet/c1_Peclet_ref" + to_string(refine_times)
+                            + "_" + string(Discretize) + "_" + mesh_temp + "_" + string(Linearize);
+
+            ofstream file(title + to_string(iter));
+            if (file.is_open()) integ->local_peclet.Print(file, 1);
+            else MFEM_ABORT("Peclet quantities not save!");
+        }
+        delete integ;
 
         ParLinearForm *lf(new ParLinearForm(h1_space));
         // omit zero Neumann bdc
@@ -582,7 +570,19 @@ private:
         blf->Assemble(0);
         blf->Finalize(0);
 
-        Peclet.Append(integ->local_peclet);
+        if (show_peclet)
+        {
+            string mesh_temp(mesh_file);
+            mesh_temp.erase(mesh_temp.find(".msh"), 4);
+            mesh_temp.erase(mesh_temp.find("./"), 2);
+            string title  = "./Peclet/c2_Peclet_ref" + to_string(refine_times)
+                            + "_" + string(Discretize) + "_" + mesh_temp + "_" + string(Linearize);
+
+            ofstream file(title + to_string(iter));
+            if (file.is_open()) integ->local_peclet.Print(file, 1);
+            else MFEM_ABORT("Peclet quantities not save!");
+        }
+        delete integ;
 
         ParLinearForm *lf(new ParLinearForm(h1_space));
         // omit zero Neumann bdc

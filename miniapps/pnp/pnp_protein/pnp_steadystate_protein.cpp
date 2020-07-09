@@ -20,15 +20,15 @@ int main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
     OptionsParser args(argc, argv);
-    args.AddOption(&refine_times, "-r", "--refine", "Refine mesh times", true);
+    args.AddOption(&refine_times, "-r", "--refine", "Refine mesh times");
     args.AddOption(&p_order, "-p", "--p_order", "Polynomial order of basis function.");
-    args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method: choose: cg, dg", true);
-    args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method, choose: newton, gummel", true);
+    args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method: choose: cg, dg");
+    args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method, choose: newton, gummel");
     args.AddOption(&self_debug, "-debug", "--self_debug", "-nodebug", "--no_self_debug", "Run many asserts to debug");
     args.AddOption(&verbose, "-ver", "--verbose", "-nover", "--noverbose", "Verbose for more outputs");
     args.AddOption(&visualize, "-v", "--vis", "-nov", "--novis", "Visualize outputs");
     args.AddOption(&prec_type, "-prec", "--prec_type", "Preconditioner type for Newton disretization, choose: block, uzawa, simple");
-    args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file", true);
+    args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.Parse();
     if (!args.Good())
     {
