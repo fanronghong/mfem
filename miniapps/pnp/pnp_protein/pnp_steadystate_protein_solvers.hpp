@@ -250,16 +250,13 @@ public:
             string mesh_temp(mesh_file);
             mesh_temp.erase(mesh_temp.find(".msh"), 4);
             mesh_temp.erase(mesh_temp.find("./"), 2);
-            string title = "phi3_conserv_ref" + to_string(refine_times) + "_"
-                            + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
-            string title1 = "c1_conserv_ref" + to_string(refine_times) + "_"
-                           + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
-            string title2 = "c2_conserv_ref" + to_string(refine_times) + "_"
-                           + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
-            ofstream file(title), file1(title1), file2(title2);
-            if (file.is_open() && file1.is_open() && file2.is_open())
+            string name = "_ref" + to_string(refine_times) + "_" + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
+            string title1 = "c1_conserv" + name;
+            string title2 = "c2_conserv" + name;
+
+            ofstream file1(title1), file2(title2);
+            if (file1.is_open() && file2.is_open())
             {
-                error.Print(file, 1);
                 error1.Print(file1, 1);
                 error2.Print(file2, 1);
             } else {
@@ -936,16 +933,13 @@ public:
             string mesh_temp(mesh_file);
             mesh_temp.erase(mesh_temp.find(".msh"), 4);
             mesh_temp.erase(mesh_temp.find("./"), 2);
-            string title = "phi3_conserv_ref" + to_string(refine_times) + "_"
-                           + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
-            string title1 = "c1_conserv_ref" + to_string(refine_times) + "_"
-                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
-            string title2 = "c2_conserv_ref" + to_string(refine_times) + "_"
-                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
-            ofstream file(title), file1(title1), file2(title2);
-            if (file.is_open() && file1.is_open() && file2.is_open())
+            string name = "_ref" + to_string(refine_times) + "_" + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
+            string title1 = "c1_conserv" + name;
+            string title2 = "c2_conserv" + name;
+
+            ofstream file1(title1), file2(title2);
+            if (file1.is_open() && file2.is_open())
             {
-                error.Print(file, 1);
                 error1.Print(file1, 1);
                 error2.Print(file2, 1);
             } else {
@@ -2467,16 +2461,13 @@ public:
             string mesh_temp(mesh_file);
             mesh_temp.erase(mesh_temp.find(".msh"), 4);
             mesh_temp.erase(mesh_temp.find("./"), 2);
-            string title = "phi3_conserv_ref" + to_string(refine_times) + "_"
-                           + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
-            string title1 = "c1_conserv_ref" + to_string(refine_times) + "_"
-                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
-            string title2 = "c2_conserv_ref" + to_string(refine_times) + "_"
-                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
-            ofstream file(title), file1(title1), file2(title2);
-            if (file.is_open() && file1.is_open() && file2.is_open())
+            string name = "_ref" + to_string(refine_times) + "_" + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
+            string title1 = "c1_conserv" + name;
+            string title2 = "c2_conserv" + name;
+
+            ofstream file1(title1), file2(title2);
+            if (file1.is_open() && file2.is_open())
             {
-                error.Print(file, 1);
                 error1.Print(file1, 1);
                 error2.Print(file2, 1);
             } else {
@@ -3241,16 +3232,13 @@ public:
             string mesh_temp(mesh_file);
             mesh_temp.erase(mesh_temp.find(".msh"), 4);
             mesh_temp.erase(mesh_temp.find("./"), 2);
-            string title = "phi3_conserv_ref" + to_string(refine_times) + "_"
-                           + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
-            string title1 = "c1_conserv_ref" + to_string(refine_times) + "_"
-                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
-            string title2 = "c2_conserv_ref" + to_string(refine_times) + "_"
-                            + string(Linearize) + "_" + string(Discretize) + "_" + mesh_temp;
-            ofstream file(title), file1(title1), file2(title2);
-            if (file.is_open() && file1.is_open() && file2.is_open())
+            string name = "_ref" + to_string(refine_times) + "_" + string(Linearize) + "_"  + string(Discretize) + "_"  + mesh_temp;
+            string title1 = "c1_conserv" + name;
+            string title2 = "c2_conserv" + name;
+
+            ofstream file1(title1), file2(title2);
+            if (file1.is_open() && file2.is_open())
             {
-                error.Print(file, 1);
                 error1.Print(file1, 1);
                 error2.Print(file2, 1);
             } else {
