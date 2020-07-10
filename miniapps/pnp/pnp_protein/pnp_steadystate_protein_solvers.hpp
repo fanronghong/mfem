@@ -7,6 +7,7 @@
 
 #include <fstream>
 #include <string>
+#include <vector>
 #include "petsc.h"
 #include "mfem.hpp"
 #include "../utils/GradConvection_Integrator.hpp"
@@ -44,8 +45,7 @@ private:
 
     StopWatch chrono;
     int num_procs, myid;
-    Array< Array<double> > Peclet;
-    int iter = 1;
+    std::vector< Array<double> > Peclet;
 
 public:
     PNP_Gummel_CG_Solver_par(Mesh* mesh_) : mesh(mesh_)
@@ -178,6 +178,7 @@ public:
         cout << "\n------> Gummel, CG" << p_order << ", protein, parallel"
              << ", petsc option file: " << options_src
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << '\n' << endl;
+        int iter = 1;
         while (iter < Gummel_max_iters)
         {
             Solve_Poisson();
@@ -266,6 +267,34 @@ public:
             }
         }
 
+        if (show_peclet)
+        {
+            string mesh_temp(mesh_file);
+            mesh_temp.erase(mesh_temp.find(".msh"), 4);
+            mesh_temp.erase(mesh_temp.find("./"), 2);
+
+            string name = "_ref" + to_string(refine_times) + "_" + mesh_temp + "_" + string(Discretize) + "_" + string(Linearize);
+            string title1  = "./Peclet/c1_Peclet" + name;
+            string title2  = "./Peclet/c2_Peclet" + name;
+
+            for (int i=0; i<Peclet.size(); ++i)
+            {
+                string temp1 = title1 + to_string(i);
+                cout << title1 << endl;
+                cout << temp1 << endl;
+                ofstream file1(title1 + to_string(i)), file2(title2 + to_string(i));
+                if (file1.is_open() && file2.is_open())
+                {
+                    Peclet[i].Print(file1, 1);
+                    Peclet[i+1].Print(file2, 1);
+                    i++;
+                }
+                else MFEM_ABORT("Peclet quantities not save!");
+
+                file1.close();
+                file2.close();
+            }
+        }
     }
 
 private:
@@ -446,18 +475,7 @@ private:
         blf->Assemble(0);
         blf->Finalize(0);
 
-        if (show_peclet)
-        {
-            string mesh_temp(mesh_file);
-            mesh_temp.erase(mesh_temp.find(".msh"), 4);
-            mesh_temp.erase(mesh_temp.find("./"), 2);
-            string title  = "./Peclet/c1_Peclet_ref" + to_string(refine_times)
-                            + "_" + string(Discretize) + "_" + mesh_temp + "_" + string(Linearize);
-
-            ofstream file(title + to_string(iter));
-            if (file.is_open()) integ->local_peclet.Print(file, 1);
-            else MFEM_ABORT("Peclet quantities not save!");
-        }
+        Peclet.push_back(integ->local_peclet);
         delete integ;
 
         ParLinearForm *lf(new ParLinearForm(h1_space));
@@ -570,18 +588,7 @@ private:
         blf->Assemble(0);
         blf->Finalize(0);
 
-        if (show_peclet)
-        {
-            string mesh_temp(mesh_file);
-            mesh_temp.erase(mesh_temp.find(".msh"), 4);
-            mesh_temp.erase(mesh_temp.find("./"), 2);
-            string title  = "./Peclet/c2_Peclet_ref" + to_string(refine_times)
-                            + "_" + string(Discretize) + "_" + mesh_temp + "_" + string(Linearize);
-
-            ofstream file(title + to_string(iter));
-            if (file.is_open()) integ->local_peclet.Print(file, 1);
-            else MFEM_ABORT("Peclet quantities not save!");
-        }
+        Peclet.push_back(integ->local_peclet);
         delete integ;
 
         ParLinearForm *lf(new ParLinearForm(h1_space));
