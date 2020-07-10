@@ -274,14 +274,11 @@ public:
             mesh_temp.erase(mesh_temp.find("./"), 2);
 
             string name = "_ref" + to_string(refine_times) + "_" + mesh_temp + "_" + string(Discretize) + "_" + string(Linearize);
-            string title1  = "./Peclet/c1_Peclet" + name;
-            string title2  = "./Peclet/c2_Peclet" + name;
+            string title1  = "c1_Peclet" + name;
+            string title2  = "c2_Peclet" + name;
 
             for (int i=0; i<Peclet.size(); ++i)
             {
-                string temp1 = title1 + to_string(i);
-                cout << title1 << endl;
-                cout << temp1 << endl;
                 ofstream file1(title1 + to_string(i)), file2(title2 + to_string(i));
                 if (file1.is_open() && file2.is_open())
                 {
