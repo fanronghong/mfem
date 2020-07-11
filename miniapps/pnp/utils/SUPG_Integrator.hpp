@@ -102,7 +102,10 @@ class SUPG_BilinearFormIntegrator: public BilinearFormIntegrator
 {
 private:
     Mesh& mesh;
-    MatrixCoefficient& diff;
+    MatrixCoefficient* diff;
+    Coefficient* Diff;
+    bool mark;
+
     VectorCoefficient& adv;
     Coefficient& div_adv;
     Coefficient &q1, &q2;
@@ -111,9 +114,12 @@ private:
     DenseMatrix dshape, dshapedxt, adv_ir;
 
 public:
-    SUPG_BilinearFormIntegrator(MatrixCoefficient& diff_, Coefficient& q1_, VectorCoefficient& adv_,
+    SUPG_BilinearFormIntegrator(MatrixCoefficient* diff_, Coefficient& q1_, VectorCoefficient& adv_,
                                 Coefficient& q2_, Coefficient& div_adv_, Mesh& mesh_)
-                    : diff(diff_), q1(q1_), adv(adv_), q2(q2_), div_adv(div_adv_), mesh(mesh_) {}
+                    : diff(diff_), q1(q1_), adv(adv_), q2(q2_), div_adv(div_adv_), mesh(mesh_) { mark = false; }
+    SUPG_BilinearFormIntegrator(Coefficient* diff_, Coefficient& q1_, VectorCoefficient& adv_,
+                                Coefficient& q2_, Coefficient& div_adv_, Mesh& mesh_)
+            : Diff(diff_), q1(q1_), adv(adv_), q2(q2_), div_adv(div_adv_), mesh(mesh_) { mark=true; }
 
     virtual void AssembleElementMatrix(const FiniteElement& el, ElementTransformation& Trans, DenseMatrix& elmat)
     {
@@ -152,20 +158,23 @@ public:
             adv_ir.GetColumnReference(i, adv_vec);  //得到矩阵的第i列,即对流速度在第i个积分点处的取值
 
             double tau_K; // stability parameter fff. several kinds of tau_K
-            { // compute stability parameter tau_K
-                DenseMatrix diff_mat(dim);
-                diff.Eval(diff_mat, Trans, ip);
-                double alpha = diff_mat.MaxMaxNorm(); // 这里的范数肯定有其他选择ffff
+            {
+                double alpha = 0;
+                if (!mark) {
+                    DenseMatrix diff_mat(dim);
+                    diff->Eval(diff_mat, Trans, ip);
+                    alpha = diff_mat.MaxMaxNorm(); // 这里的范数肯定有其他选择ffff
+                } else {
+                    alpha = Diff->Eval(Trans, ip);
+                }
 
                 double beta = adv_vec.Normlinf(); // 这里的范数肯定有其他选择ffff
-
                 double Peclet = beta * h_K / (2 * alpha);  // Peclet number
-//                cout << "Peclet number: " << Peclet << endl;
 
                 if (Peclet > 1) {
                     tau_K = h_K / (2 * beta);
                 } else {
-                    tau_K = h_K*h_K / (12 * alpha);
+                    tau_K = h_K * h_K / (12 * alpha);
                 }
             }
 
@@ -173,8 +182,6 @@ public:
             el.CalcDShape(ip, dshape); //每个shape function的各个偏导数放在同一行fffff
 
             Mult(dshape, Trans.AdjugateJacobian(), dshapedxt); // (adj J) \cdot \hat{\nabla} \hat{v}. dshape * Trans.AdjugateJacobian() -> dshapedxt
-
-//            adv_vec.Print(cout << "tau_K: " << tau_K << ", adv_vec: ");
 
             dshapedxt.Mult(adv_vec, vec1); // first term
             add(w1, vec1, w2, shape, vec2);

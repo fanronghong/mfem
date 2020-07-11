@@ -30,7 +30,7 @@ double bernoulli_EAFE_ModifyStiffnessMatrix(const double z)
  * Diff is used to compute diffusion coefficient at a point
  * Adv is used to compute advection coefficient at a point
  */
-void EAFE_Modify(const Mesh& mesh, SparseMatrix& A,
+void EAFE_Modify(Mesh& mesh, SparseMatrix& A,
         void (*Diff)(const Vector&, DenseMatrix&),
         void (*Adv)(const Vector&, Vector&))
 {
@@ -120,6 +120,99 @@ void EAFE_Modify(const Mesh& mesh, SparseMatrix& A,
     }
 }
 
+void EAFE_Modify(Mesh& mesh, SparseMatrix& A, Coefficient& Diff, VectorCoefficient& Adv)
+{
+    int* I = A.GetI(); //CSR矩阵的row offsets
+    int* J = A.GetJ(); //CSR矩阵的column indices
+    double* data = A.GetData(); //CSR矩阵的non-zero values
+
+    int nrow = A.Size(); //矩阵的Height. A就是要进行EAFE修改的刚度矩阵
+    int nv = mesh.GetNV();
+    int dim = mesh.Dimension();
+    assert(dim == 2 || dim == 3);
+
+    Vector diag0(nrow);
+    diag0 = 0.0;
+
+    Vector adv(dim), mid(dim), tangential(dim);
+    double xi, yi, zi, xj, yj, zj, alpha, beta;
+
+    Vector coors(nv*dim);
+    mesh.GetVertices(coors);
+
+    for (int i=0; i<nrow; ++i)
+    {
+        xi = coors[i]; // 第i个vertex的坐标向量: 矩阵有nrow行, 那么就有nrow个vertices.
+        yi = coors[nv+i];
+        if (dim == 3) zi = coors[2*nv+i];
+
+        //对CSR矩阵的第i行非0元素循环, jk是第i行非0元素在non-zero vals的索引,同时这个索引对应到J中就是非0元素的column index
+        for (int jk=I[i]; jk<I[i+1]; jk++) //jk就是稀疏矩阵第i行的所有非零元素在向量J或者data中的索引
+        {
+            int j = J[jk]; //对应非0元素的column index
+            if(i != j) // 非对角元素
+            {
+                xj = coors[j]; // 第j个vertex的坐标向量
+                yj = coors[nv+j];
+                if (dim == 3) zj = coors[2*nv+j];
+
+                // compute the advection field at the middle of the edge and then the bernoulli function
+                //在vertices的所有坐标值组成的向量是xy, xy中索引为i,j的两个顶点是相连的?因为只有相连才会在总刚度矩阵里面形成非零的单刚
+                tangential[0] = xi - xj; //切向量
+                tangential[1] = yi - yj;
+                if (dim == 3) tangential[2] = zi - zj;
+
+                mid[0] = (xi + xj) * 0.5; // 中点
+                mid[1] = (yi + yj) * 0.5;
+                if (dim == 3) mid[2] = (zi + zj) * 0.5;
+
+                DenseMatrix physical_point(dim, 1); // only 1 integrate point
+                for (int l=0; l<dim; ++l) physical_point(l, 0) = mid[l];
+
+                Array<int> elem_ids;
+                Array<IntegrationPoint> ips;
+                mesh.FindPoints(physical_point, elem_ids, ips);
+
+                ElementTransformation* tran;
+                mesh.GetElementTransformation(elem_ids[0]); // only 1 integration point
+                tran->SetIntPoint(&(ips[0]));
+
+                Adv.Eval(adv, *tran, ips[0]); //计算中点处的对流速度(记为adv)
+                //对流速度与切向量的内积.参考[1]:(3.24)式中的 \beta \cdot \tau_E
+                beta = adv[0]*tangential[0] + adv[1]*tangential[1];
+                if (dim == 3) beta += adv[2]*tangential[2];
+
+                // diffusion coefficient for the flux J = a(x)\nabla u + \beta u;
+                alpha = Diff.Eval(*tran, ips[0]);
+
+                /* alpha = a(xmid) \approx harmonic_average = |e|/(int_e 1/a); should be computed by quadrature in general for 1/a(x).
+                 * a_{ij} = B(beta.t_e / harmonic_average) * harmonic_average * omega_e;
+                 *	  for (i,j):    B(beta.t_e / harmonic_average);
+                 *	  for (j,i):    B(-beta.t_e / harmonic_average), the minus comes from is because t_e=i-j;
+                 */
+                double temp = data[jk]; // for the 2nd way
+                data[jk] *= alpha * bernoulli_EAFE_ModifyStiffnessMatrix(beta/alpha); //用EAFE修改当前这个非0元素, data是CSR矩阵的non-zero values.bte里面包含了正负号
+
+                // First way: 主对角元素为非对角元素和的相反数
+//                diag0[i] -= data[jk]; // the diagonal is equal to the negative column sum;
+
+                // Second way: 和第一种方式的唯一区别就是主对角元素不是等于非对角元素的和的相反数. 严格来讲第二种方式才是对的(按照Xu的论文)
+                diag0[i] += -1.0 * temp * alpha * bernoulli_EAFE_ModifyStiffnessMatrix(-1.0 * beta/alpha); //
+            }
+        }
+    }
+
+    // 主对角线上的元素: 两种修改方式对应的处理主对角元素的代码完全相同
+    for (int i=0; i<nrow; i++)
+    {
+        for (int jk = I[i]; jk<I[i+1]; jk++)
+        {
+            //I[i]就是第CSR矩阵的第i行(从0开始)的第一个非0元素在non-zero vals这个向量的索引, 下面的J[jk]就是这个非0元素的列指标
+            if(i == J[jk]) //行列指标相同,则A[jk]就是对角线上的元素
+                data[jk] = diag0[i];
+        }
+    }
+}
 
 
 namespace _EAFE_ModifyStiffnessMatrix

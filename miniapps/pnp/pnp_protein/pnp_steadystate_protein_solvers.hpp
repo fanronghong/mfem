@@ -15,6 +15,8 @@
 #include "../utils/petsc_utils.hpp"
 #include "../utils/DGSelfTraceIntegrator.hpp"
 #include "../utils/LocalConservation.hpp"
+#include "../utils/EAFE_ModifyStiffnessMatrix.hpp"
+#include "../utils/SUPG_Integrator.hpp"
 using namespace std;
 using namespace mfem;
 
@@ -190,10 +192,16 @@ public:
             double tol = diff.Norml2() / phi3->Norml2(); // 相对误差
             (*phi3_n) = (*phi3);
 
-            Solve_NP1();
+            if (strcmp(AdvecStable, "none") == 0)      Solve_NP1();
+            else if (strcmp(AdvecStable, "eafe") == 0) Solve_NP1_EAFE();
+            else if (strcmp(AdvecStable, "supg") == 0) Solve_NP1_SUPG();
+            else MFEM_ABORT("Not support stabilization.");
             (*c1_n) = (*c1);
 
-            Solve_NP2();
+            if (strcmp(AdvecStable, "none") == 0)      Solve_NP2();
+            else if (strcmp(AdvecStable, "eafe") == 0) Solve_NP2_EAFE();
+            else if (strcmp(AdvecStable, "supg") == 0) Solve_NP2_SUPG();
+            else MFEM_ABORT("Not support stabilization.");
             (*c2_n) = (*c2);
 
             if (verbose) {
@@ -567,6 +575,231 @@ private:
 
         delete lf, blf, A, x, b;
     }
+    void Solve_NP1_EAFE()
+    {
+        ParBilinearForm *blf(new ParBilinearForm(h1_space));
+        ProductCoefficient D1_water(D_K_, mark_water_coeff);
+        ProductCoefficient D1_prod_z1_water(D_K_prod_v_K, mark_water_coeff);
+        // D1 (grad(c1), grad(v1))_{\Omega_s}
+        blf->AddDomainIntegrator(new DiffusionIntegrator(D1_water));
+        // D1 z1 (c1 grad(phi3^k), grad(v1))_{\Omega_s}
+        GradConvectionIntegrator* integ = new GradConvectionIntegrator(*phi3_n, &D1_prod_z1_water);
+        blf->AddDomainIntegrator(integ);
+        blf->Assemble(0);
+        blf->Finalize(0);
+
+        Peclet.push_back(integ->local_peclet);
+        delete integ;
+
+        ParLinearForm *lf(new ParLinearForm(h1_space));
+        // omit zero Neumann bdc
+        *lf = 0.0;
+
+        GradientGridFunctionCoefficient grad_phi3_n(phi3_n);
+        ScalarVectorProductCoefficient adv(D1_prod_z1_water, grad_phi3_n); // advection, diffusion=D1
+        SparseMatrix& _A = blf->SpMat();
+        EAFE_Modify(*mesh, _A, D1_water, adv);
+        blf->EliminateVDofs(ess_tdof_list, *c1, *lf);
+
+        PetscParMatrix *A = new PetscParMatrix(&_A, Operator::PETSC_MATAIJ);
+        PetscParVector *x = new PetscParVector(h1_space);
+        PetscParVector *b = new PetscParVector(h1_space);
+
+        if (1)
+        {
+            Array<int> need_dofs;
+            need_dofs.Append(water_dofs);
+            need_dofs.Append(interface_ess_tdof_list);
+            need_dofs.Sort();
+
+            Mat mat = Mat(*A); // form linear system: A x = b
+            Vec vec = Vec(*b), sol = Vec(*x);
+            PetscInt size = PetscInt(need_dofs.Size());
+
+            PetscInt* indices;
+            PetscMalloc1(size, &indices);
+            for (int i=0; i<size; ++i) indices[i] = need_dofs[i];
+
+            IS is;
+            ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
+            PetscFree(indices);
+
+            // extract subsystem subA * subx = subb
+            Mat subA;
+            Vec subx, subb;
+            MatCreateSubMatrix(*A, is, is, MAT_INITIAL_MATRIX, &subA);
+            VecGetSubVector(vec, is, &subb); // VecGetSubVector, VecRestoreSubVector
+            VecGetSubVector(sol, is, &subx);
+
+            KSP ksp;
+            KSPCreate(MPI_COMM_WORLD, &ksp);
+            KSPSetOptionsPrefix(ksp, "np1_");
+            KSPSetOperators(ksp, subA, subA);
+            KSPSetFromOptions(ksp);
+            KSPSolve(ksp, subb, subx);
+
+            VecRestoreSubVector(vec, is, &subb);
+            VecRestoreSubVector(sol, is, &subx);
+
+            MatDestroy(&mat);
+            VecDestroy(&vec);
+            VecDestroy(&sol);
+            ISDestroy(&is);
+            KSPDestroy(&ksp);
+        }
+        else
+        {
+            A->EliminateRows(protein_dofs, 1.0);
+
+            PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
+            chrono.Clear();
+            chrono.Start();
+            solver->Mult(*b, *x);
+            chrono.Stop();
+
+            if (verbose) {
+                cout << "            L2 norm of c1: " << c1->ComputeL2Error(zero) << endl;
+                if (solver->GetConverged() == 1 && myid == 0)
+                    cout << "np1  solver: successfully converged by iterating " << solver->GetNumIterations()
+                         << " times, taking " << chrono.RealTime() << " s." << endl;
+                else if (solver->GetConverged() != 1)
+                    cerr << "np1  solver: failed to converged" << endl;
+            }
+
+            delete solver;
+        }
+
+        blf->RecoverFEMSolution(*x, *lf, *c1);
+
+        if (self_debug) {
+            for (int i=0; i<protein_dofs.Size(); ++i) {
+                assert(abs((*c1)[protein_dofs[i]]) < 1E-10);
+            }
+        }
+
+        (*c1_n) *= relax_c1;
+        (*c1)   *= 1-relax_c1;
+        (*c1)   += (*c1_n); // 利用松弛方法更新c1
+        (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
+
+        delete lf, blf, A, x, b;
+    }
+    void Solve_NP1_SUPG()
+    {
+        GradientGridFunctionCoefficient grad_phi3_n(phi3_n);
+        ScalarVectorProductCoefficient adv(D1_prod_z1_water, grad_phi3_n); // advection, diffusion=D1
+
+        ParBilinearForm *blf(new ParBilinearForm(h1_space));
+        ProductCoefficient D1_water(D_K_, mark_water_coeff);
+        ProductCoefficient D1_prod_z1_water(D_K_prod_v_K, mark_water_coeff);
+        // D1 (grad(c1), grad(v1))_{\Omega_s}
+        blf->AddDomainIntegrator(new DiffusionIntegrator(D1_water));
+        // D1 z1 (c1 grad(phi3^k), grad(v1))_{\Omega_s}
+        GradConvectionIntegrator* integ = new GradConvectionIntegrator(*phi3_n, &D1_prod_z1_water);
+        blf->AddDomainIntegrator(integ);
+        // tau_k (adv . grad(c1), adv . grad(v1))
+        blf->AddDomainIntegrator(new SUPG_BilinearFormIntegrator(&D1_water, one, adv, zero, zero, *mesh));
+        blf->Assemble(0);
+        blf->Finalize(0);
+
+        Peclet.push_back(integ->local_peclet);
+        delete integ;
+
+        ParLinearForm *lf(new ParLinearForm(h1_space));
+        // omit zero Neumann bdc
+        *lf = 0.0;
+
+        PetscParMatrix *A = new PetscParMatrix();
+        PetscParVector *x = new PetscParVector(h1_space);
+        PetscParVector *b = new PetscParVector(h1_space);
+        blf->SetOperatorType(Operator::PETSC_MATAIJ);
+        blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
+
+        if (self_debug) {
+            for (int i = 0; i < protein_dofs.Size(); ++i) {
+                assert(abs((*b)(protein_dofs[i])) < 1E-10);
+            }
+        }
+
+        if (1)
+        {
+            Array<int> need_dofs;
+            need_dofs.Append(water_dofs);
+            need_dofs.Append(interface_ess_tdof_list);
+            need_dofs.Sort();
+
+            Mat mat = Mat(*A); // form linear system: A x = b
+            Vec vec = Vec(*b), sol = Vec(*x);
+            PetscInt size = PetscInt(need_dofs.Size());
+
+            PetscInt* indices;
+            PetscMalloc1(size, &indices);
+            for (int i=0; i<size; ++i) indices[i] = need_dofs[i];
+
+            IS is;
+            ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
+            PetscFree(indices);
+
+            // extract subsystem subA * subx = subb
+            Mat subA;
+            Vec subx, subb;
+            MatCreateSubMatrix(*A, is, is, MAT_INITIAL_MATRIX, &subA);
+            VecGetSubVector(vec, is, &subb); // VecGetSubVector, VecRestoreSubVector
+            VecGetSubVector(sol, is, &subx);
+
+            KSP ksp;
+            KSPCreate(MPI_COMM_WORLD, &ksp);
+            KSPSetOptionsPrefix(ksp, "np1_");
+            KSPSetOperators(ksp, subA, subA);
+            KSPSetFromOptions(ksp);
+            KSPSolve(ksp, subb, subx);
+
+            VecRestoreSubVector(vec, is, &subb);
+            VecRestoreSubVector(sol, is, &subx);
+
+            MatDestroy(&mat);
+            VecDestroy(&vec);
+            VecDestroy(&sol);
+            ISDestroy(&is);
+            KSPDestroy(&ksp);
+        }
+        else
+        {
+            A->EliminateRows(protein_dofs, 1.0);
+
+            PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
+            chrono.Clear();
+            chrono.Start();
+            solver->Mult(*b, *x);
+            chrono.Stop();
+
+            if (verbose) {
+                cout << "            L2 norm of c1: " << c1->ComputeL2Error(zero) << endl;
+                if (solver->GetConverged() == 1 && myid == 0)
+                    cout << "np1  solver: successfully converged by iterating " << solver->GetNumIterations()
+                         << " times, taking " << chrono.RealTime() << " s." << endl;
+                else if (solver->GetConverged() != 1)
+                    cerr << "np1  solver: failed to converged" << endl;
+            }
+
+            delete solver;
+        }
+
+        blf->RecoverFEMSolution(*x, *lf, *c1);
+
+        if (self_debug) {
+            for (int i=0; i<protein_dofs.Size(); ++i) {
+                assert(abs((*c1)[protein_dofs[i]]) < 1E-10);
+            }
+        }
+
+        (*c1_n) *= relax_c1;
+        (*c1)   *= 1-relax_c1;
+        (*c1)   += (*c1_n); // 利用松弛方法更新c1
+        (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
+
+        delete lf, blf, A, x, b;
+    }
 
     // 5.求解耦合的方程NP2方程
     void Solve_NP2()
@@ -579,6 +812,233 @@ private:
         // D2 z2 (c2 grad(phi3^k), grad(v2))_{\Omega_s}
         GradConvectionIntegrator* integ = new GradConvectionIntegrator(*phi3_n, &D2_prod_z2_water);
         blf->AddDomainIntegrator(integ);
+        blf->Assemble(0);
+        blf->Finalize(0);
+
+        Peclet.push_back(integ->local_peclet);
+        delete integ;
+
+        ParLinearForm *lf(new ParLinearForm(h1_space));
+        // omit zero Neumann bdc
+        *lf = 0.0;
+
+        PetscParMatrix *A = new PetscParMatrix();
+        PetscParVector *x = new PetscParVector(h1_space);
+        PetscParVector *b = new PetscParVector(h1_space);
+        blf->SetOperatorType(Operator::PETSC_MATAIJ);
+        blf->FormLinearSystem(ess_tdof_list, *c2, *lf, *A, *x, *b);
+
+        if (self_debug) {
+            for (int i = 0; i < protein_dofs.Size(); ++i) {
+                assert(abs((*b)(protein_dofs[i])) < 1E-10);
+            }
+        }
+
+        if (1)
+        {
+            Array<int> need_dofs;
+            need_dofs.Append(water_dofs);
+            need_dofs.Append(interface_ess_tdof_list);
+            need_dofs.Sort();
+
+            Mat mat = Mat(*A); // form linear system: A * x = b
+            Vec vec = Vec(*b), sol = Vec(*x);
+            PetscInt size = PetscInt(need_dofs.Size());
+
+            PetscInt* indices;
+            PetscMalloc1(size, &indices);
+            for (int i=0; i<size; ++i) indices[i] = need_dofs[i];
+
+            IS is;
+            ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
+            PetscFree(indices);
+
+            // extract subsystem subA * subx = subb
+            Mat subA;
+            Vec subx, subb;
+            MatCreateSubMatrix(*A, is, is, MAT_INITIAL_MATRIX, &subA);
+            VecGetSubVector(vec, is, &subb); // VecGetSubVector, VecRestoreSubVector
+            VecGetSubVector(sol, is, &subx);
+
+            KSP ksp;
+            KSPCreate(MPI_COMM_WORLD, &ksp);
+            KSPSetOptionsPrefix(ksp, "np2_");
+            KSPSetOperators(ksp, subA, subA);
+            KSPSetFromOptions(ksp);
+            KSPSolve(ksp, subb, subx);
+
+            VecRestoreSubVector(vec, is, &subb);
+            VecRestoreSubVector(sol, is, &subx);
+
+            MatDestroy(&mat);
+            VecDestroy(&vec);
+            VecDestroy(&sol);
+            ISDestroy(&is);
+            KSPDestroy(&ksp);
+        }
+        else
+        {
+            A->EliminateRows(protein_dofs, 1.0);
+
+            PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
+
+            chrono.Clear();
+            chrono.Start();
+            solver->Mult(*b, *x);
+            chrono.Stop();
+
+            if (verbose) {
+                cout << "            L2 norm of c2: " << c2->ComputeL2Error(zero) << endl;
+                if (solver->GetConverged() == 1 && myid == 0)
+                    cout << "np2  solver: successfully converged by iterating " << solver->GetNumIterations()
+                         << " times, taking " << chrono.RealTime() << " s." << endl;
+                else if (solver->GetConverged() != 1)
+                    cerr << "np2  solver: failed to converged" << endl;
+            }
+
+            delete solver;
+        }
+
+        blf->RecoverFEMSolution(*x, *lf, *c2);
+
+        if (self_debug) {
+            for (int i=0; i<protein_dofs.Size(); ++i) {
+                assert(abs((*c2)[protein_dofs[i]]) < 1E-10);
+            }
+        }
+
+        (*c2_n) *= relax_c2;
+        (*c2)   *= 1-relax_c2;
+        (*c2)   += (*c2_n); // 利用松弛方法更新c2
+        (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
+
+        delete lf, blf, A, x, b;
+    }
+    void Solve_NP2_EAFE()
+    {
+        ParBilinearForm *blf(new ParBilinearForm(h1_space));
+        ProductCoefficient D2_water(D_Cl_, mark_water_coeff);
+        ProductCoefficient D2_prod_z2_water(D_Cl_prod_v_Cl, mark_water_coeff);
+        // D2 (grad(c2), grad(v2))_{\Omega_s}
+        blf->AddDomainIntegrator(new DiffusionIntegrator(D2_water));
+        // D2 z2 (c2 grad(phi3^k), grad(v2))_{\Omega_s}
+        GradConvectionIntegrator* integ = new GradConvectionIntegrator(*phi3_n, &D2_prod_z2_water);
+        blf->AddDomainIntegrator(integ);
+        blf->Assemble(0);
+        blf->Finalize(0);
+
+        Peclet.push_back(integ->local_peclet);
+        delete integ;
+
+        ParLinearForm *lf(new ParLinearForm(h1_space));
+        // omit zero Neumann bdc
+        *lf = 0.0;
+
+        GradientGridFunctionCoefficient grad_phi3_n(phi3_n);
+        ScalarVectorProductCoefficient adv(D2_prod_z2_water, grad_phi3_n); // advection, diffusion=D1
+        SparseMatrix& _A = blf->SpMat();
+        EAFE_Modify(*mesh, _A, D2_water, adv);
+        blf->EliminateVDofs(ess_tdof_list, *c2, *lf);
+
+        PetscParMatrix *A = new PetscParMatrix(&_A, Operator::PETSC_MATAIJ);
+        PetscParVector *x = new PetscParVector(h1_space);
+        PetscParVector *b = new PetscParVector(h1_space);
+
+        if (1)
+        {
+            Array<int> need_dofs;
+            need_dofs.Append(water_dofs);
+            need_dofs.Append(interface_ess_tdof_list);
+            need_dofs.Sort();
+
+            Mat mat = Mat(*A); // form linear system: A * x = b
+            Vec vec = Vec(*b), sol = Vec(*x);
+            PetscInt size = PetscInt(need_dofs.Size());
+
+            PetscInt* indices;
+            PetscMalloc1(size, &indices);
+            for (int i=0; i<size; ++i) indices[i] = need_dofs[i];
+
+            IS is;
+            ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
+            PetscFree(indices);
+
+            // extract subsystem subA * subx = subb
+            Mat subA;
+            Vec subx, subb;
+            MatCreateSubMatrix(*A, is, is, MAT_INITIAL_MATRIX, &subA);
+            VecGetSubVector(vec, is, &subb); // VecGetSubVector, VecRestoreSubVector
+            VecGetSubVector(sol, is, &subx);
+
+            KSP ksp;
+            KSPCreate(MPI_COMM_WORLD, &ksp);
+            KSPSetOptionsPrefix(ksp, "np2_");
+            KSPSetOperators(ksp, subA, subA);
+            KSPSetFromOptions(ksp);
+            KSPSolve(ksp, subb, subx);
+
+            VecRestoreSubVector(vec, is, &subb);
+            VecRestoreSubVector(sol, is, &subx);
+
+            MatDestroy(&mat);
+            VecDestroy(&vec);
+            VecDestroy(&sol);
+            ISDestroy(&is);
+            KSPDestroy(&ksp);
+        }
+        else
+        {
+            A->EliminateRows(protein_dofs, 1.0);
+
+            PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
+
+            chrono.Clear();
+            chrono.Start();
+            solver->Mult(*b, *x);
+            chrono.Stop();
+
+            if (verbose) {
+                cout << "            L2 norm of c2: " << c2->ComputeL2Error(zero) << endl;
+                if (solver->GetConverged() == 1 && myid == 0)
+                    cout << "np2  solver: successfully converged by iterating " << solver->GetNumIterations()
+                         << " times, taking " << chrono.RealTime() << " s." << endl;
+                else if (solver->GetConverged() != 1)
+                    cerr << "np2  solver: failed to converged" << endl;
+            }
+
+            delete solver;
+        }
+
+        blf->RecoverFEMSolution(*x, *lf, *c2);
+
+        if (self_debug) {
+            for (int i=0; i<protein_dofs.Size(); ++i) {
+                assert(abs((*c2)[protein_dofs[i]]) < 1E-10);
+            }
+        }
+
+        (*c2_n) *= relax_c2;
+        (*c2)   *= 1-relax_c2;
+        (*c2)   += (*c2_n); // 利用松弛方法更新c2
+        (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
+
+        delete lf, blf, A, x, b;
+    }
+    void Solve_NP2_SUPG()
+    {
+        GradientGridFunctionCoefficient grad_phi3_n(phi3_n);
+        ScalarVectorProductCoefficient adv(D2_prod_z2_water, grad_phi3_n); // advection, diffusion=D2
+
+        ParBilinearForm *blf(new ParBilinearForm(h1_space));
+        ProductCoefficient D2_water(D_Cl_, mark_water_coeff);
+        ProductCoefficient D2_prod_z2_water(D_Cl_prod_v_Cl, mark_water_coeff);
+        // D2 (grad(c2), grad(v2))_{\Omega_s}
+        blf->AddDomainIntegrator(new DiffusionIntegrator(D2_water));
+        // D2 z2 (c2 grad(phi3^k), grad(v2))_{\Omega_s}
+        GradConvectionIntegrator* integ = new GradConvectionIntegrator(*phi3_n, &D2_prod_z2_water);
+        blf->AddDomainIntegrator(integ);
+        // tau_k (adv . grad(c2), adv . grad(v2))
+        blf->AddDomainIntegrator(new SUPG_BilinearFormIntegrator(&D2_water, one, adv, zero, zero, *mesh));
         blf->Assemble(0);
         blf->Finalize(0);
 
