@@ -362,7 +362,7 @@ void Test2_bilinear()
     BilinearForm supg(&h1_space);
     ConstantCoefficient div_adv(0.0);
     ConstantCoefficient zero(0.0);
-    supg.AddDomainIntegrator(new SUPG_BilinearFormIntegrator(diff, one, adv, zero, div_adv, mesh));
+    supg.AddDomainIntegrator(new SUPG_BilinearFormIntegrator(&diff, one, adv, zero, div_adv, mesh));
     supg.Assemble();
     supg.Finalize();
 
