@@ -177,7 +177,7 @@ public:
         Solve_Singular();
         Solve_Harmonic();
 
-        cout << "\n------> Gummel, CG" << p_order << ", protein, parallel"
+        cout << "\n------> Gummel, CG" << p_order << ", Stabilization: " << AdvecStable << ". protein, parallel"
              << ", petsc option file: " << options_src
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << '\n' << endl;
         int iter = 1;
