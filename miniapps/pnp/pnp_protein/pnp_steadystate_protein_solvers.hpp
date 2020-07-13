@@ -1,7 +1,3 @@
-//
-// Created by fan on 2020/3/20.
-//
-
 #ifndef _PNP_GUMMEL_SOLVER_HPP_
 #define _PNP_GUMMEL_SOLVER_HPP_
 
@@ -695,15 +691,11 @@ private:
         // D1 (grad(c1), grad(v1))_{\Omega_s}
         blf->AddDomainIntegrator(new DiffusionIntegrator(D1_water));
         // D1 z1 (c1 grad(phi3^k), grad(v1))_{\Omega_s}
-        GradConvectionIntegrator* integ = new GradConvectionIntegrator(*phi3_n, &D1_prod_z1_water);
-        blf->AddDomainIntegrator(integ);
+        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_n, &D1_prod_z1_water));
         // tau_k (adv . grad(c1), adv . grad(v1))
         blf->AddDomainIntegrator(new SUPG_BilinearFormIntegrator(&D1_water, one, adv, zero, zero, *mesh));
         blf->Assemble(0);
         blf->Finalize(0);
-
-        Peclet.push_back(integ->local_peclet);
-        delete integ;
 
         ParLinearForm *lf(new ParLinearForm(h1_space));
         // omit zero Neumann bdc
@@ -1035,15 +1027,11 @@ private:
         // D2 (grad(c2), grad(v2))_{\Omega_s}
         blf->AddDomainIntegrator(new DiffusionIntegrator(D2_water));
         // D2 z2 (c2 grad(phi3^k), grad(v2))_{\Omega_s}
-        GradConvectionIntegrator* integ = new GradConvectionIntegrator(*phi3_n, &D2_prod_z2_water);
-        blf->AddDomainIntegrator(integ);
+        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi3_n, &D2_prod_z2_water));
         // tau_k (adv . grad(c2), adv . grad(v2))
         blf->AddDomainIntegrator(new SUPG_BilinearFormIntegrator(&D2_water, one, adv, zero, zero, *mesh));
         blf->Assemble(0);
         blf->Finalize(0);
-
-        Peclet.push_back(integ->local_peclet);
-        delete integ;
 
         ParLinearForm *lf(new ParLinearForm(h1_space));
         // omit zero Neumann bdc

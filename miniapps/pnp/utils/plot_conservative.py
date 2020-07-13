@@ -34,13 +34,15 @@ def PlotConservative(filename=None, title=None):
 
 if __name__ == '__main__':
     file = [
-        # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c1_conserv_ref0_gummel_cg_1MAG_2",
-        # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c1_conserv_ref0_gummel_dg_1MAG_2",
-        # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c2_conserv_ref0_gummel_cg_1MAG_2",
-        # "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c2_conserv_ref0_gummel_dg_1MAG_2",
+        # "/home/fan/phdthesis_data/c1_conserv_ref0_gummel_cg_1MAG_2",
+        # "/home/fan/phdthesis_data/c1_conserv_ref0_gummel_dg_1MAG_2",
+        # "/home/fan/phdthesis_data/c2_conserv_ref0_gummel_cg_1MAG_2",
+        # "/home/fan/phdthesis_data/c2_conserv_ref0_gummel_dg_1MAG_2",
 
-        "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c1_conserv_ref0_gummel_cg_1bl8_tu",
-        "/home/fan/mfem/build_pnp/miniapps/pnp/pnp_protein/c2_conserv_ref0_gummel_cg_1bl8_tu",
+        # "/home/fan/phdthesis_data/c1_conserv_ref0_gummel_cg_1bl8_tu",
+        # "/home/fan/phdthesis_data/c1_conserv_ref0_gummel_dg_1bl8_tu",
+        "/home/fan/phdthesis_data/c2_conserv_ref0_gummel_cg_1bl8_tu",
+        "/home/fan/phdthesis_data/c2_conserv_ref0_gummel_dg_1bl8_tu",
     ]
     
     title = [
