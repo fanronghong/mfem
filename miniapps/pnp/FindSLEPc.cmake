@@ -29,7 +29,7 @@ if(EXISTS "${SLEPC_DIR}/include" AND
         EXISTS "${SLEPC_DIR}/${PETSC_ARCH}/include")
     set(SLEPC_INC "${SLEPC_DIR}/include" "${SLEPC_DIR}/${PETSC_ARCH}/include")
 else()
-    message(SEND_ERROR "SLEPc includes not found")
+    message("SLEPc includes not found")
 endif()
 
 ## Library ##
@@ -41,7 +41,7 @@ elseif(EXISTS "${SLEPC_DIR}/${PETSC_ARCH}/lib/libslepc.a")
 elseif(EXISTS "${SLEPC_DIR}/${PETSC_ARCH}/lib/libslepc.dylib")
     set(SLEPC_LIB "${SLEPC_DIR}/${PETSC_ARCH}/lib/libslepc.dylib")
 else()
-    message(SEND_ERROR "SLEPc library not found")
+    message("SLEPc library not found")
 endif()
 
 ## CMake check and done ##

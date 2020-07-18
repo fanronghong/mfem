@@ -1,5 +1,5 @@
 
-FIND_PACKAGE(PythonLibs 3.5 REQUIRED)
+FIND_PACKAGE(PythonLibs 3.5 OPTIONAL_COMPONENTS)
 if (PythonLibs_FOUND)
     include_directories(${PYTHON_INCLUDE_DIRS})
     link_libraries(${PYTHON_LIBRARIES})
@@ -11,7 +11,7 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR})
 message("===> CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
 
-FIND_PACKAGE(SLEPc 3.12 REQUIRED)
+FIND_PACKAGE(SLEPc)
 if (SLEPC_FOUND)
     include_directories(${SLEPC_INC})
     link_libraries(${SLEPC_LIB})

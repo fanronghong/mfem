@@ -955,7 +955,7 @@ private:
         BilinearForm *blf(new BilinearForm(fsp));
         blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
         blf->AddDomainIntegrator(new GradConvectionIntegrator(phi_n_, &D_K_prod_v_K));
-        blf->AddDomainIntegrator(new SUPG_BilinearFormIntegrator(D_K_mat_coeff, one, adv_K, one, zero, mesh));
+        blf->AddDomainIntegrator(new SUPG_BilinearFormIntegrator(&D_K_mat_coeff, one, adv_K, one, zero, mesh));
         blf->Assemble(0);
         blf->Finalize(0);
 
@@ -1009,7 +1009,7 @@ private:
         BilinearForm *blf(new BilinearForm(fsp));
         blf->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
         blf->AddDomainIntegrator(new GradConvectionIntegrator(phi_n_, &D_Cl_prod_v_Cl));
-        blf->AddDomainIntegrator(new SUPG_BilinearFormIntegrator(D_Cl_mat_coeff, one, adv_Cl, one, zero, mesh));
+        blf->AddDomainIntegrator(new SUPG_BilinearFormIntegrator(&D_Cl_mat_coeff, one, adv_Cl, one, zero, mesh));
         blf->Assemble(0);
         blf->Finalize(0);
 
