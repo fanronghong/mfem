@@ -1653,6 +1653,8 @@ public:
         map<string, double>::iterator it2;
         for (it2=out2.begin(); it2!=out2.end(); ++it2)
             cout << (*it2).first << ": " << (*it2).second << endl;
+
+        cout << "approximate mesh scale h: " << pow(fsp->GetTrueVSize(), -1.0/3) << endl;
     }
 
 private:
@@ -2086,6 +2088,8 @@ public:
         map<string, double>::iterator it2;
         for (it2=out2.begin(); it2!=out2.end(); ++it2)
             cout << (*it2).first << ": " << (*it2).second << endl;
+
+        cout << "approximate mesh scale h: " << pow(fsp->GetTrueVSize(), -1.0/3) << endl;
     }
 
 private:
@@ -2924,6 +2928,8 @@ public:
         map<string, double>::iterator it2;
         for (it2=out2.begin(); it2!=out2.end(); ++it2)
             cout << (*it2).first << ": " << (*it2).second << endl;
+
+        cout << "approximate mesh scale h: " << pow(h1_space->GetTrueVSize(), -1.0/3) << endl;
     }
 };
 
@@ -3549,6 +3555,8 @@ public:
         map<string, double>::iterator it2;
         for (it2=out2.begin(); it2!=out2.end(); ++it2)
             cout << (*it2).first << ": " << (*it2).second << endl;
+
+        cout << "approximate mesh scale h: " << pow(dg_space->GetTrueVSize(), -1.0/3) << endl;
     }
 };
 
