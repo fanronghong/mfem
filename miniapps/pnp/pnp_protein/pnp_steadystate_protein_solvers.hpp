@@ -584,7 +584,6 @@ private:
         blf->Assemble(0);
         blf->Finalize(0);
 
-        Peclet.push_back(integ->local_peclet);
         delete integ;
 
         ParLinearForm *lf(new ParLinearForm(h1_space));
@@ -919,7 +918,6 @@ private:
         blf->Assemble(0);
         blf->Finalize(0);
 
-        Peclet.push_back(integ->local_peclet);
         delete integ;
 
         ParLinearForm *lf(new ParLinearForm(h1_space));

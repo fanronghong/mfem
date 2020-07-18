@@ -120,7 +120,9 @@ void EAFE_Modify(Mesh& mesh, SparseMatrix& A,
     }
 }
 
-void EAFE_Modify(Mesh& mesh, SparseMatrix& A, Coefficient& Diff, VectorCoefficient& Adv)
+void EAFE_Modify(Mesh& mesh, SparseMatrix& A,
+        Coefficient& Diff,
+        VectorCoefficient& Adv)
 {
     int* I = A.GetI(); //CSR矩阵的row offsets
     int* J = A.GetJ(); //CSR矩阵的column indices
@@ -166,16 +168,36 @@ void EAFE_Modify(Mesh& mesh, SparseMatrix& A, Coefficient& Diff, VectorCoefficie
                 mid[1] = (yi + yj) * 0.5;
                 if (dim == 3) mid[2] = (zi + zj) * 0.5;
 
-                DenseMatrix physical_point(dim, 1); // only 1 integrate point
-                for (int l=0; l<dim; ++l) physical_point(l, 0) = mid[l];
-
-                Array<int> elem_ids;
-                Array<IntegrationPoint> ips;
-                mesh.FindPoints(physical_point, elem_ids, ips);
-
                 ElementTransformation* tran;
-                mesh.GetElementTransformation(elem_ids[0]); // only 1 integration point
-                tran->SetIntPoint(&(ips[0]));
+                Array<IntegrationPoint> ips;
+                Array<int> elem_ids;
+                {
+                    if (0) {
+                        DenseMatrix physical_point(dim, 1); // only 1 integrate point
+                        for (int l = 0; l < dim; ++l) physical_point(l, 0) = mid[l];
+
+                        mesh.FindPoints(physical_point, elem_ids, ips);
+                        elem_ids.Print(cout << "elem_ids: ");
+                        ips.Print(cout << "ips: ");
+
+                        tran = mesh.GetElementTransformation(elem_ids[0]); // only 1 integration point
+                        tran->SetIntPoint(&(ips[0]));
+                    }
+                    else {
+                        for (int m=0; m<mesh.GetNE(); ++m) {
+                            tran = mesh.GetElementTransformation(m);
+                            ips.SetSize(1);
+                            elem_ids.SetSize(1);
+
+                            InverseElementTransformation invtran(tran);
+                            int ret = invtran.Transform(mid, ips[0]);
+                            if (ret == 0) {
+                                elem_ids[0] = m;
+                                break;
+                            }
+                        }
+                    }
+                }
 
                 Adv.Eval(adv, *tran, ips[0]); //计算中点处的对流速度(记为adv)
                 //对流速度与切向量的内积.参考[1]:(3.24)式中的 \beta \cdot \tau_E
