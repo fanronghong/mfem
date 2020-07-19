@@ -23,6 +23,7 @@ int main(int argc, char *argv[])
     args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method.");
     args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method.");
     args.AddOption(&ComputeConvergenceRate, "-rate", "--computerate", "-norate", "--nocomputerate", "Compute convergence rate by using analytic solutions");
+    args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.Parse();
     if (!args.Good())
     {

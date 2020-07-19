@@ -10,6 +10,24 @@ configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/4_4_4_translate.msh
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/4_4_4_translate.msh
                COPYONLY)
 
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/gummel_amg
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/gummel_amg
+               COPYONLY)
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/gummel_ilu
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/gummel_ilu
+               COPYONLY)
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/gummel_lu
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/gummel_lu
+               COPYONLY)
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/newton_shell
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/newton_shell
+               COPYONLY)
+
+
 add_mfem_miniapp(pnp_steadystate_box
         MAIN pnp_steadystate_box.cpp
         LIBRARIES mfem)

@@ -1,0 +1,35 @@
+# ------> Gummel Params
+-phi_ksp_type cg
+-phi_pc_type ilu
+-phi_ksp_max_it 10000
+-phi_ksp_rtol 1e-10
+-phi_ksp_atol 1e-20
+-phi_ksp_divtol 1e+5
+#-phi_ksp_monitor_true_residual
+-phi_ksp_converged_reason
+#-phi_ksp_view
+
+-np1_ksp_type gmres
+-np1_pc_type ilu
+-np1_ksp_max_it 10000
+-np1_ksp_rtol 1e-10
+-np1_ksp_atol 1e-20
+-np1_ksp_divtol 1e+5
+#-np1_ksp_monitor_true_residual
+-np1_ksp_converged_reason
+#-np1_ksp_view
+
+-np2_ksp_type gmres
+-np2_pc_type ilu
+-np2_ksp_max_it 10000
+-np2_ksp_rtol 1e-10
+-np2_ksp_atol 1e-20
+-np2_ksp_divtol 1e+5
+#-np2_ksp_monitor_true_residual
+-np2_ksp_converged_reason
+#-np2_ksp_view
+
+
+# ------> Petsc Other Params
+#-options_view
+-options_left 0
