@@ -2402,24 +2402,13 @@ public:
             VecGetSubVector(*Y, index_set[i], &blocky);
 
             KSPSolve(kspblock[i], blockx, blocky);
-#ifdef CLOSE
-            {
-            PetscScalar normx, normy;
-                VecNorm(blockx, NORM_2, &normx);
-               VecNorm(blocky, NORM_2, &normy);
-               cout << "norm x: " << normx
-                    << ", norm y: " << normy << endl;
-            }
-#endif
+
             VecRestoreSubVector(*X, index_set[i], &blockx);
             VecRestoreSubVector(*Y, index_set[i], &blocky);
         }
 
         X->ResetArray();
         Y->ResetArray();
-//        cout << "in BlockPreconditionerSolver::Mult(), l2 norm y after: " << y.Norml2() << endl;
-//        MFEM_ABORT("in BlockPreconditionerSolver::Mult()");
-//        cout << "in BlockPreconditioner::Mult()" << endl;
     }
 };
 class PreconditionerFactory: public PetscPreconditionerFactory
