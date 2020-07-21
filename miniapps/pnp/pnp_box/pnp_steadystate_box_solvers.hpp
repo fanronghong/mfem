@@ -2798,6 +2798,13 @@ public:
         block_trueoffsets[3] = h1_space->GetTrueVSize();
         block_trueoffsets.PartialSum();
 
+        int bdr_size = pmesh->bdr_attributes.Max();
+        Array<int> Dirichlet_attr;
+        {
+            Dirichlet_attr.SetSize(bdr_size);
+            Dirichlet_attr = 1;
+        }
+
         // MakeTRef(), SetTrueVector(), SetFromTrueVector() 三者要配套使用ffffffffff
         u_k = new BlockVector(block_trueoffsets); //必须满足essential边界条件
         phi .MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
@@ -2811,9 +2818,9 @@ public:
         c1_k.ProjectCoefficient(c1_D_coeff);
         c2_k.ProjectCoefficient(c2_D_coeff);
 #else
-        phi .ProjectCoefficient(phi_exact);
-        c1_k.ProjectCoefficient(c1_exact);
-        c2_k.ProjectCoefficient(c2_exact);
+        phi .ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
+        c1_k.ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
+        c2_k.ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
 #endif
         phi.SetTrueVector();
         phi.SetFromTrueVector();
@@ -3389,6 +3396,8 @@ class PNP_DG_Newton_box_Solver_par
 private:
     Mesh* mesh;
     ParMesh* pmesh;
+    H1_FECollection* h1_fec;
+    ParFiniteElementSpace* h1_space;
     DG_FECollection* dg_fec;
     ParFiniteElementSpace* dg_space;
     PNP_DG_Newton_Operator_par* op;
@@ -3414,8 +3423,8 @@ public:
         int mesh_dim = mesh->Dimension(); //网格的维数:1D,2D,3D
         pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
 
-        FiniteElementCollection* h1_fec = new H1_FECollection(p_order, mesh_dim);
-        ParFiniteElementSpace* h1_space = new ParFiniteElementSpace(pmesh, h1_fec);
+        h1_fec = new H1_FECollection(p_order, mesh_dim);
+        h1_space = new ParFiniteElementSpace(pmesh, h1_fec);
 
         dg_fec = new DG_FECollection(p_order, mesh_dim);
         dg_space = new ParFiniteElementSpace(pmesh, dg_fec);
