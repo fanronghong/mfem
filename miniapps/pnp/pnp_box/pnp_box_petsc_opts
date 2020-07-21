@@ -60,11 +60,6 @@
 -sub_block1_ksp_atol 1e-10
 -sub_block1_ksp_divtol 1e5
 -sub_block1_ksp_max_it 1000
-#-sub_block1_ksp_monitor
-#-sub_block1_ksp_monitor_short
-#-sub_block1_ksp_monitor_true_residual
-#-sub_block1_ksp_converged_reason
-#-sub_block1_ksp_view
 
 -sub_block2_ksp_type gmres
 #-sub_block2_pc_type ilu
@@ -73,11 +68,6 @@
 -sub_block2_ksp_atol 1e-10
 -sub_block2_ksp_divtol 1e5
 -sub_block2_ksp_max_it 1000
-#-sub_block2_ksp_monitor
-#-sub_block2_ksp_monitor_short
-#-sub_block2_ksp_monitor_true_residual
-#-sub_block2_ksp_converged_reason
-#-sub_block2_ksp_view
 
 -sub_block3_ksp_type gmres
 #-sub_block3_pc_type ilu
@@ -86,11 +76,6 @@
 -sub_block3_ksp_atol 1e-10
 -sub_block3_ksp_divtol 1e5
 -sub_block3_ksp_max_it 1000
-#-sub_block3_ksp_monitor
-#-sub_block3_ksp_monitor_short
-#-sub_block3_ksp_monitor_true_residual
-#-sub_block3_ksp_converged_reason
-#-sub_block3_ksp_view
 
 
 # ------> Petsc Other Params
