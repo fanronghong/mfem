@@ -2357,61 +2357,6 @@ public:
         PetscInt M, N;
         ierr = MatNestGetSubMats(Jacobian, &N, &M, &sub); PCHKERRQ(sub[0][0], ierr); // get block matrices
         ierr = MatNestGetISs(Jacobian, index_set, NULL); PCHKERRQ(index_set, ierr); // get the index sets of the blocks
-//        cout << "M: " << M << ", N: " << N << endl;
-//        MatView(sub[0][0], PETSC_VIEWER_STDOUT_WORLD);
-//        MatView(sub[1][1], PETSC_VIEWER_STDOUT_WORLD);
-//        MatView(sub[2][2], PETSC_VIEWER_STDOUT_WORLD);
-//        ISView(index_set[0],PETSC_VIEWER_STDOUT_WORLD);
-//        ISView(index_set[1],PETSC_VIEWER_STDOUT_WORLD);
-//        ISView(index_set[2],PETSC_VIEWER_STDOUT_WORLD);
-//        Write_Mat_Matlab_txt("A11_.m", sub[0][0]);
-//        Write_Mat_Matlab_txt("A22_.m", sub[1][1]);
-//        Write_Mat_Matlab_txt("A33_.m", sub[2][2]);
-#ifdef CLOSE
-        {
-            PetscScalar haha[height/3];
-            PetscInt    id[height/3];
-            for (int i=0; i<height/3; ++i) {
-                haha[i] = i%10;
-                id[i] = i;
-            }
-            Vec x,y;
-            MatCreateVecs(sub[0][0], &x, &y);
-            VecSetValues(x, height/3, id, haha, INSERT_VALUES);
-            VecAssemblyBegin(x);
-            VecAssemblyEnd(x);
-
-            PetscScalar norm;
-
-            MatMult(sub[0][0], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A11_haha: " << norm << endl;
-
-            MatMult(sub[0][1], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A12_haha: " << norm << endl;
-
-            MatMult(sub[0][2], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A13_haha: " << norm << endl;
-
-            MatMult(sub[1][0], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A21_haha: " << norm << endl;
-
-            MatMult(sub[1][1], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A22_haha: " << norm << endl;
-
-            MatMult(sub[2][0], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A31_haha: " << norm << endl;
-
-            MatMult(sub[2][2], x, y);
-            VecNorm(y, NORM_2, &norm);
-            cout << "A33_haha: " << norm << endl;
-        }
-#endif
 
         for (int i=0; i<3; ++i)
         {
@@ -3470,8 +3415,6 @@ public:
             c1_k.ProjectGridFunction(c1_D_h1);
             c2_k.ProjectGridFunction(c2_D_h1);
         }
-
-
 #endif
         phi .SetTrueVector();
         c1_k.SetTrueVector();
@@ -3510,6 +3453,7 @@ public:
         chrono.Start();
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
         chrono.Stop();
+
         linearize_iter = newton_solver->GetNumIterations();
         total_time = chrono.RealTime();
         ndofs = u_k->Size();
