@@ -3324,19 +3324,19 @@ public:
         phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
         c1_k.MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
         c2_k.MakeTRef(dg_space, *u_k, block_trueoffsets[2]);
-        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
-        phi .SetFromTrueVector();
-        c1_k.SetFromTrueVector();
-        c2_k.SetFromTrueVector();
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
         phi = 0.0;
         c1_k = 0.0;
         c2_k = 0.0;
-        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
         phi .SetTrueVector();
         c1_k.SetTrueVector();
         c2_k.SetTrueVector();
-
-        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+        phi .SetFromTrueVector();
+        c1_k.SetFromTrueVector();
+        c2_k.SetFromTrueVector();
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
 #ifdef PhysicalModel
         phi .ProjectCoefficient(phi_D_coeff);
         c1_k.ProjectCoefficient(c1_D_coeff);
@@ -3348,6 +3348,9 @@ public:
 //        c2_k.ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
         {
             ParGridFunction phi_D_h1(h1_space), c1_D_h1(h1_space), c2_D_h1(h1_space);
+            phi_D_h1 = 0.0; // 不能去掉，因为下面只是对boundary做投影，其他地方没有赋初值
+            c1_D_h1  = 0.0;
+            c2_D_h1  = 0.0;
             phi_D_h1.ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
             c1_D_h1 .ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
             c2_D_h1 .ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
@@ -3355,7 +3358,10 @@ public:
             phi .ProjectGridFunction(phi_D_h1);
             c1_k.ProjectGridFunction(c1_D_h1);
             c2_k.ProjectGridFunction(c2_D_h1);
-            cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+//            cout << "l2 norm of phiD: " << phi_D_h1.Norml2() << endl;
+//            cout << "l2 norm of c1D : " << c1_D_h1.Norml2() << endl;
+//            cout << "l2 norm of c2D : " << c2_D_h1.Norml2() << endl;
+//            cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
         }
 #endif
         phi .SetTrueVector();
@@ -3364,7 +3370,7 @@ public:
         phi .SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
-        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
 
         op = new PNP_DG_Newton_Operator_par(dg_space);
 
