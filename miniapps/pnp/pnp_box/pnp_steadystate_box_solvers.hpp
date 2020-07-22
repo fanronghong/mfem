@@ -3053,9 +3053,6 @@ public:
         GridFunctionCoefficient phi_coeff(phi), c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
         rhs_k->Update(y.GetData(), block_trueoffsets); // update residual
-        Vector y1(y.GetData() +   0, sc);
-        Vector y2(y.GetData() +  sc, sc);
-        Vector y3(y.GetData() +2*sc, sc);
 
         delete f;
         f = new ParLinearForm(fsp);
@@ -3168,7 +3165,6 @@ public:
 #endif
         f2->Assemble();
         (*f2) -= (*g2);
-
 //        cout << "in Mult(), l2 norm of Residual: " << rhs_k->Norml2() << endl;
     }
 
@@ -3267,61 +3263,7 @@ public:
         jac_k->SetBlock(1, 1, &A22);
         jac_k->SetBlock(2, 0, &A31);
         jac_k->SetBlock(2, 2, &A33);
-#ifdef CLOSE
-        { // for test
-            cout << "after Assemble() in GetGradient() in par:\n";
-            Vector temp(height/3), haha(height/3);
-            for (int i=0; i<height/3; ++i) {
-                haha[i] = i%10;
-            }
 
-            ofstream temp_file;
-
-            temp_file.open("./A11_mult_phi_par");
-            A11.Mult(haha, temp);
-            cout << "A11_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A12_mult_phi_par");
-            A12.Mult(haha, temp);
-            cout << "A12_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A13_mult_phi_par");
-            A13.Mult(haha, temp);
-            cout << "A13_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A21_mult_phi_par");
-            A21.Mult(haha, temp);
-            cout << "A21_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A22_mult_phi_par");
-            A22.Mult(haha, temp);
-            cout << "A22_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A31_mult_phi_par");
-            A31.Mult(haha, temp);
-            cout << "A31_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A33_mult_phi_par");
-            A33.Mult(haha, temp);
-            cout << "A33_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-//            MFEM_ABORT("save mesh done in par");
-        }
-#endif
         return *jac_k;
     }
 };
@@ -3382,9 +3324,19 @@ public:
         phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
         c1_k.MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
         c2_k.MakeTRef(dg_space, *u_k, block_trueoffsets[2]);
+        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+        phi .SetFromTrueVector();
+        c1_k.SetFromTrueVector();
+        c2_k.SetFromTrueVector();
         phi = 0.0;
         c1_k = 0.0;
         c2_k = 0.0;
+        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+        phi .SetTrueVector();
+        c1_k.SetTrueVector();
+        c2_k.SetTrueVector();
+
+        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
 #ifdef PhysicalModel
         phi .ProjectCoefficient(phi_D_coeff);
         c1_k.ProjectCoefficient(c1_D_coeff);
@@ -3403,6 +3355,7 @@ public:
             phi .ProjectGridFunction(phi_D_h1);
             c1_k.ProjectGridFunction(c1_D_h1);
             c2_k.ProjectGridFunction(c2_D_h1);
+            cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
         }
 #endif
         phi .SetTrueVector();
@@ -3411,6 +3364,7 @@ public:
         phi .SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
+        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
 
         op = new PNP_DG_Newton_Operator_par(dg_space);
 
@@ -3439,7 +3393,9 @@ public:
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 
         Vector zero_vec;
+        zero_vec = 0.0;
         chrono.Start();
+        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
         chrono.Stop();
 

@@ -43,8 +43,7 @@ int main(int argc, char *argv[])
         for (int i=0; i<refine_times+1; ++i)
         {
             Mesh mesh(mesh_file);
-            for (int j=0; j<i; ++j)
-                mesh.UniformRefinement();
+            for (int j=0; j<i; ++j) mesh.UniformRefinement();
 
             refine_times = i; // for cout right verbose outputs
             if (strcmp(Linearize, "gummel") == 0 && strcmp(Discretize, "cg") == 0)
