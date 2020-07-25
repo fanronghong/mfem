@@ -1657,6 +1657,43 @@ public:
         cout << "approximate mesh scale h: " << pow(fsp->GetTrueVSize(), -1.0/3) << endl;
     }
 
+    void Solve(Vector& vec, Array<int>& offsets, int numGummel=0)
+    {
+        cout << "\nObtain nonlinear iteration initial value, Gummel, CG" << p_order << ", box, parallel"
+             << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
+        int iter = 1;
+        while (iter < numGummel)
+        {
+            Solve_Poisson();
+
+            Vector diff(fsp->GetNDofs());
+            diff = 0.0; // 必须初始化,否则下面的计算结果不对fff
+            diff += (*phi);
+            diff -= (*phi_n); // 不能把上述2步合并成1步: diff = (*phi) - (*phi_n)fff
+            double tol = diff.Norml2() / phi->Norml2(); // 相对误差
+            (*phi_n) = (*phi);
+
+            Solve_NP1();
+            (*c1_n) = (*c1);
+
+            Solve_NP2();
+            (*c2_n) = (*c2);
+
+            cout << "===> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
+            if (tol < Gummel_rel_tol)
+            {
+                cout << "------> Gummel iteration converge: " << iter << " times." << endl;
+                break;
+            }
+            if (tol < Gummel_rel_tol) break;
+            iter++;
+        }
+
+        phi_n->MakeRef(fsp, vec, offsets[0]);
+        c1_n ->MakeRef(fsp, vec, offsets[1]);
+        c2_n ->MakeRef(fsp, vec, offsets[2]);
+    }
+
 private:
     // 3.求解耦合的方程Poisson方程
     void Solve_Poisson()
@@ -2703,7 +2740,7 @@ protected:
     PetscPreconditionerFactory *jac_factory;
     PetscNonlinearSolver* newton_solver;
 
-    Array<int> block_trueoffsets;
+    Array<int> block_trueoffsets, Dirichlet_attr;
     BlockVector* u_k;
     ParGridFunction phi, c1_k, c2_k;
 
@@ -2733,42 +2770,10 @@ public:
         block_trueoffsets.PartialSum();
 
         int bdr_size = pmesh->bdr_attributes.Max();
-        Array<int> Dirichlet_attr;
         {
             Dirichlet_attr.SetSize(bdr_size);
             Dirichlet_attr = 1;
         }
-
-        // MakeTRef(), SetTrueVector(), SetFromTrueVector() 三者要配套使用ffffffffff
-        u_k = new BlockVector(block_trueoffsets); //必须满足essential边界条件
-        phi .MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
-        c1_k.MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
-        c2_k.MakeTRef(h1_space, *u_k, block_trueoffsets[2]);
-//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl; // 为了证实SetTrueVector(), SetFromTrueVector()的作用
-        phi = 0.0;
-        c1_k = 0.0;
-        c2_k = 0.0;
-//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
-#ifdef PhysicalModel
-        phi .ProjectCoefficient(phi_D_coeff);
-        c1_k.ProjectCoefficient(c1_D_coeff);
-        c2_k.ProjectCoefficient(c2_D_coeff);
-#else
-        phi .ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
-        c1_k.ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
-        c2_k.ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
-//        phi .ProjectCoefficient(phi_exact); // for test code
-//        c1_k.ProjectCoefficient(c1_exact );
-//        c2_k.ProjectCoefficient(c2_exact );
-#endif
-//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
-        phi.SetTrueVector(); // 必须要
-        c1_k.SetTrueVector();
-        c2_k.SetTrueVector();
-//        phi.SetFromTrueVector(); // 似乎可以不要
-//        c1_k.SetFromTrueVector();
-//        c2_k.SetFromTrueVector();
-//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
 
         op = new PNP_CG_Newton_Operator_par(h1_space);
 
@@ -2794,6 +2799,46 @@ public:
     {
         cout << "\nNewton, CG" << p_order << ", box, parallel"
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
+
+        // 给Newton迭代赋初值，必须满足essential边界条件
+        u_k = new BlockVector(block_trueoffsets);
+        if (zero_initial)
+        {
+            // MakeTRef(), SetTrueVector(), SetFromTrueVector() 三者要配套使用ffffffffff
+            phi .MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
+            c1_k.MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
+            c2_k.MakeTRef(h1_space, *u_k, block_trueoffsets[2]);
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl; // 为了证实SetTrueVector(), SetFromTrueVector()的作用
+            phi = 0.0;
+            c1_k = 0.0;
+            c2_k = 0.0;
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+#ifdef PhysicalModel
+            phi .ProjectCoefficient(phi_D_coeff);
+        c1_k.ProjectCoefficient(c1_D_coeff);
+        c2_k.ProjectCoefficient(c2_D_coeff);
+#else
+            phi .ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
+            c1_k.ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
+            c2_k.ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
+//        phi .ProjectCoefficient(phi_exact); // for test code
+//        c1_k.ProjectCoefficient(c1_exact );
+//        c2_k.ProjectCoefficient(c2_exact );
+#endif
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+            phi.SetTrueVector(); // 必须要
+            c1_k.SetTrueVector();
+            c2_k.SetTrueVector();
+//        phi.SetFromTrueVector(); // 似乎可以不要
+//        c1_k.SetFromTrueVector();
+//        c2_k.SetFromTrueVector();
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+        }
+        else
+        {
+            PNP_CG_Gummel_Solver_par initial_solver(*mesh);
+            initial_solver.Solve(*u_k, block_trueoffsets, 4);
+        }
 
         Vector zero_vec;
         chrono.Start();
@@ -3287,7 +3332,7 @@ private:
     PetscPreconditionerFactory *jac_factory;
     PetscNonlinearSolver* newton_solver;
 
-    Array<int> block_trueoffsets;
+    Array<int> block_trueoffsets, Dirichlet_attr;
     BlockVector* u_k;
     ParGridFunction phi, c1_k, c2_k;
 
@@ -3320,65 +3365,10 @@ public:
         block_trueoffsets.PartialSum();
 
         int bdr_size = pmesh->bdr_attributes.Max();
-        Array<int> Dirichlet_attr;
         {
             Dirichlet_attr.SetSize(bdr_size);
             Dirichlet_attr = 1;
         }
-
-        // MakeTRef(), SetTrueVector(), SetFromTrueVector() 三者要配套使用ffffffffff
-        u_k = new BlockVector(block_trueoffsets); // 必须满足essential边界条件
-        phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
-        c1_k.MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
-        c2_k.MakeTRef(dg_space, *u_k, block_trueoffsets[2]);
-//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl; // 输出 nan
-        phi = 0.0;
-        c1_k = 0.0;
-        c2_k = 0.0;
-//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl; // 输出 nan
-        phi .SetTrueVector();
-        c1_k.SetTrueVector();
-        c2_k.SetTrueVector();
-//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl; // 输出 0.0
-//        phi .SetFromTrueVector(); // 似乎可以不用
-//        c1_k.SetFromTrueVector();
-//        c2_k.SetFromTrueVector();
-//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl; // 输出 0.0
-#ifdef PhysicalModel
-        phi .ProjectCoefficient(phi_D_coeff);
-        c1_k.ProjectCoefficient(c1_D_coeff);
-        c2_k.ProjectCoefficient(c2_D_coeff);
-#else
-        // DG的GridFunction不能ProjectBdrCoefficient
-//        phi .ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
-//        c1_k.ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
-//        c2_k.ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
-        {
-            ParGridFunction phi_D_h1(h1_space), c1_D_h1(h1_space), c2_D_h1(h1_space);
-            phi_D_h1 = 0.0; // 不能去掉，因为下面只是对boundary做投影，其他地方没有赋初值
-            c1_D_h1  = 0.0;
-            c2_D_h1  = 0.0;
-            phi_D_h1.ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
-            c1_D_h1 .ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
-            c2_D_h1 .ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
-//            phi_D_h1.ProjectCoefficient(phi_exact); // for test code
-//            c1_D_h1 .ProjectCoefficient(c1_exact );
-//            c2_D_h1 .ProjectCoefficient(c2_exact );
-
-            phi .ProjectGridFunction(phi_D_h1);
-            c1_k.ProjectGridFunction(c1_D_h1);
-            c2_k.ProjectGridFunction(c2_D_h1);
-        }
-#endif
-//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
-        phi .SetTrueVector(); // 必须用
-        c1_k.SetTrueVector();
-        c2_k.SetTrueVector();
-//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
-//        phi .SetFromTrueVector(); // 似乎可以不用
-//        c1_k.SetFromTrueVector();
-//        c2_k.SetFromTrueVector();
-//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
 
         op = new PNP_DG_Newton_Operator_par(dg_space);
 
@@ -3405,6 +3395,63 @@ public:
         cout << "\nNewton, DG" << p_order << ", box, parallel"
              << ", sigma: " << sigma << ", kappa: " << kappa
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
+
+        // 给定Newton迭代的初值，并使之满足边界条件
+        u_k = new BlockVector(block_trueoffsets);
+        {
+            // MakeTRef(), SetTrueVector(), SetFromTrueVector() 三者要配套使用ffffffffff
+            phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
+            c1_k.MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
+            c2_k.MakeTRef(dg_space, *u_k, block_trueoffsets[2]);
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl; // 输出 nan
+            phi = 0.0;
+            c1_k = 0.0;
+            c2_k = 0.0;
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl; // 输出 nan
+            phi .SetTrueVector();
+            c1_k.SetTrueVector();
+            c2_k.SetTrueVector();
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl; // 输出 0.0
+//        phi .SetFromTrueVector(); // 似乎可以不用
+//        c1_k.SetFromTrueVector();
+//        c2_k.SetFromTrueVector();
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl; // 输出 0.0
+#ifdef PhysicalModel
+        phi .ProjectCoefficient(phi_D_coeff);
+        c1_k.ProjectCoefficient(c1_D_coeff);
+        c2_k.ProjectCoefficient(c2_D_coeff);
+#else
+            // DG的GridFunction不能ProjectBdrCoefficient
+//        phi .ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
+//        c1_k.ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
+//        c2_k.ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
+            {
+                ParGridFunction phi_D_h1(h1_space), c1_D_h1(h1_space), c2_D_h1(h1_space);
+                phi_D_h1 = 0.0; // 不能去掉，因为下面只是对boundary做投影，其他地方没有赋初值
+                c1_D_h1  = 0.0;
+                c2_D_h1  = 0.0;
+                phi_D_h1.ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
+                c1_D_h1 .ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
+                c2_D_h1 .ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
+//            phi_D_h1.ProjectCoefficient(phi_exact); // for test code
+//            c1_D_h1 .ProjectCoefficient(c1_exact );
+//            c2_D_h1 .ProjectCoefficient(c2_exact );
+
+                phi .ProjectGridFunction(phi_D_h1);
+                c1_k.ProjectGridFunction(c1_D_h1);
+                c2_k.ProjectGridFunction(c2_D_h1);
+            }
+#endif
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+            phi .SetTrueVector(); // 必须用
+            c1_k.SetTrueVector();
+            c2_k.SetTrueVector();
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+//        phi .SetFromTrueVector(); // 似乎可以不用
+//        c1_k.SetFromTrueVector();
+//        c2_k.SetFromTrueVector();
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+        }
 
         Vector zero_vec;
         zero_vec = 0.0;
