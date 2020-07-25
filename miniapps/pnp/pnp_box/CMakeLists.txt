@@ -27,6 +27,18 @@ configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/newton_shell
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/newton_shell
                COPYONLY)
 
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/newton_lu
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/newton_lu
+               COPYONLY)
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/newton_fgmres
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/newton_fgmres
+               COPYONLY)
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box/newton_lgmres
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box/newton_lgmres
+               COPYONLY)
+
 
 add_mfem_miniapp(pnp_steadystate_box
         MAIN pnp_steadystate_box.cpp
