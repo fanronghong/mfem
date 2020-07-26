@@ -1475,21 +1475,12 @@ public:
 //            Neumann_attr[right_attr - 1] = 1;
 
             Dirichlet_attr = 1;
-            Dirichlet_attr[top_attr    - 1] = 1;
-            Dirichlet_attr[bottom_attr - 1] = 1;
+//            Dirichlet_attr[top_attr    - 1] = 1;
+//            Dirichlet_attr[bottom_attr - 1] = 1;
         }
         fsp->GetEssentialTrueDofs(Dirichlet_attr, ess_tdof_list);
 
         // set Dirichlet boundary condition
-#if defined(PhysicalModel)
-        phi_n->ProjectCoefficient(phi_D_coeff);
-        c1_n ->ProjectCoefficient(c1_D_coeff);
-        c2_n ->ProjectCoefficient(c2_D_coeff);
-
-        phi->ProjectCoefficient(phi_D_coeff);
-        c1 ->ProjectCoefficient(c1_D_coeff);
-        c2 ->ProjectCoefficient(c2_D_coeff);
-#else
         phi_n->ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
         c1_n ->ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
         c2_n ->ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
@@ -1497,7 +1488,7 @@ public:
         phi->ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
         c1 ->ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
         c2 ->ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
-#endif
+
         phi_n->SetTrueVector();
         c1_n ->SetTrueVector();
         c2_n ->SetTrueVector();
@@ -1578,32 +1569,26 @@ public:
         out2["np2_avg_time"] = np2_avg_time;
 
         cout.precision(14);
-#ifndef PhysicalModel
-            double phiL2err = phi->ComputeL2Error(phi_exact);
-            double c1L2err = c1->ComputeL2Error(c1_exact);
-            double c2L2err = c2->ComputeL2Error(c2_exact);
+        double phiL2err = phi->ComputeL2Error(phi_exact);
+        double c1L2err = c1->ComputeL2Error(c1_exact);
+        double c2L2err = c2->ComputeL2Error(c2_exact);
 
-            cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
-                 << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
-                 << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+        cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
+             << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
+             << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
 
-            if (ComputeConvergenceRate)
-            {
-                phiL2errornorms_.Append(phiL2err);
-                c1L2errornorms_.Append(c1L2err);
-                c2L2errornorms_.Append(c2L2err);
+        if (ComputeConvergenceRate)
+        {
+            phiL2errornorms_.Append(phiL2err);
+            c1L2errornorms_.Append(c1L2err);
+            c2L2errornorms_.Append(c2L2err);
 
-                double totle_size = 0.0;
-                for (int i=0; i<mesh.GetNE(); i++)
-                    totle_size += mesh.GetElementSize(0, 1);
+            double totle_size = 0.0;
+            for (int i=0; i<mesh.GetNE(); i++)
+                totle_size += mesh.GetElementSize(0, 1);
 
-                meshsizes_.Append(totle_size / mesh.GetNE());
-            }
-#else
-        cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
-             << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
-             << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
-#endif
+            meshsizes_.Append(totle_size / mesh.GetNE());
+        }
 
         if (visualize)
         {
@@ -1723,11 +1708,9 @@ private:
         lf->AddDomainIntegrator(new DomainLFIntegrator(rhs1));
         // alpha2 alpha3 z2 (c2^k, psi)
         lf->AddDomainIntegrator(new DomainLFIntegrator(rhs2));
-#ifndef PhysicalModel // for Physical model, omit zero Neumann bdc: epsilon_s (phi_N, psi)
         // epsilon_s <grad(phi_e).n, psi>, phi_flux = -epsilon_s grad(phi_e)
         ScalarVectorProductCoefficient neg_J(neg, J);
         lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J), Neumann_attr);
-#endif
         lf->Assemble();
 
         PetscParMatrix *A = new PetscParMatrix();
@@ -1785,14 +1768,12 @@ private:
 
         ParLinearForm *lf = new ParLinearForm(fsp); //NP1方程的右端项
         *lf = 0.0;
-#ifndef PhysicalModel // for PhysicalModel, omit zero Neumann bdc: -alpha3 <c1_N, v1>
         // D1 <(grad(c1_e) + z1 c1_e grad(phi_e)) . n, v1>, c1_flux = J1 = -D1 (grad(c1_e) + z1 c1_e grad(phi_e))
         ScalarVectorProductCoefficient neg_J1(neg, J1);
         lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J1), Neumann_attr);
         // (f1, v1)
         lf->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
         lf->Assemble();
-#endif
 
         PetscParMatrix *A = new PetscParMatrix();
         PetscParVector *x = new PetscParVector(fsp);
@@ -1865,15 +1846,12 @@ private:
         blf->Finalize(0);
 
         ParLinearForm *lf = new ParLinearForm(fsp); //NP2方程的右端项
-        *lf = 0.0;
-#ifndef PhysicalModel // for PhysicalModel, omit zero Neumann bdc: - alpha3 (c2_N, v2)
         // D2 <(grad(c2_e) + z2 c2_e grad(phi_e)) . n, v2>, c2_flux = J2 = -D2 (grad(c2_e) + z2 c2_e grad(phi_e))
         ScalarVectorProductCoefficient neg_J2(neg, J2);
         lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J2), Neumann_attr);
         // (f2, v2)
         lf->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
         lf->Assemble();
-#endif
 
         PetscParMatrix *A = new PetscParMatrix();
         PetscParVector *x = new PetscParVector(fsp);
@@ -2055,7 +2033,6 @@ public:
         out2["np2_avg_time"] = np2_avg_time;
 
         cout.precision(14);
-#ifndef PhysicalModel
         double phiL2err = phi->ComputeL2Error(phi_exact);
         double c1L2err = c1->ComputeL2Error(c1_exact);
         double c2L2err = c2->ComputeL2Error(c2_exact);
@@ -2076,11 +2053,6 @@ public:
 
             meshsizes_.Append(totle_size / mesh.GetNE());
         }
-#else
-        cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << '\n'
-             << "L2 norm of c1 : " << c1->ComputeL2Error(zero) << '\n'
-             << "L2 norm of c2 : " << c2->ComputeL2Error(zero) << endl;
-#endif
 
         if (visualize)
         {
@@ -2158,18 +2130,12 @@ private:
         lf->AddDomainIntegrator(new DomainLFIntegrator(rhs1));
         // alpha2 alpha3 z2 (c2^k, psi)
         lf->AddDomainIntegrator(new DomainLFIntegrator(rhs2));
-#ifdef PhysicalModel
-        // ommit zero Neumann bdc
-        // sigma <phi_D, epsilon_s grad(psi).n> + kappa <{h^{-1} epsilon_s} [phi_D], [psi]>
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, epsilon_water, sigma, kappa), Dirichlet);
-#else
         ScalarVectorProductCoefficient neg_J(neg, J);
         // epsilon_s <grad(phi_e).n, psi>, phi_flux = -epsilon_s grad(phi_e)
         // fff BoundaryNormalLFIntegrator for DG is not OK?
         lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J), Neumann);
         // sigma <phi_e, (epsilon_s grad(psi)).n)> + kappa <{h^{-1} Q} phi_e, psi>
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, epsilon_water, sigma, kappa), Dirichlet); // 用真解构造Dirichlet边界条件
-#endif
         lf->Assemble();
 
         PetscParMatrix *A = new PetscParMatrix();
@@ -2231,7 +2197,6 @@ private:
         blf->Finalize(0);
 
         ParLinearForm *lf = new ParLinearForm(fsp); //NP1方程的右端项
-#ifndef PhysicalModel
         // D1 <(grad(c1_e) + z1 c1_e grad(phi_e)) . n, v1>, c1_flux = J1 = -D1 (grad(c1_e) + z1 c1_e grad(phi_e))
         ScalarVectorProductCoefficient neg_J1(neg, J1);
         lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J1), Neumann);
@@ -2241,13 +2206,6 @@ private:
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_exact, D_K_, sigma, kappa));
         // sigma D1 z1 <c1_e, v1 grad(phi^k).n>
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_exact, phi_n));
-#else
-        // zero Neumann bdc and below weak Dirichlet bdc
-        // sigma <c1_D, D1 grad(v1).n> + kappa <{h^{-1} D1} c1_D, v1>
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, kappa), Dirichlet);
-        // sigma D1 z1 <c1_D, v1 grad(phi^k).n>
-        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_D_coeff, phi_n), Dirichlet);
-#endif
         lf->Assemble();
 
         PetscParMatrix *A = new PetscParMatrix();
@@ -2315,7 +2273,6 @@ private:
         blf->Finalize(0);
 
         ParLinearForm *lf = new ParLinearForm(fsp); //NP2方程的右端项
-#ifndef PhysicalModel
         // D2 <(grad(c2_e) + z2 c2_e grad(phi_e)) . n, v2>, c2_flux = J2 = -D2 (grad(c2_e) + z2 c2_e grad(phi_e))
         ScalarVectorProductCoefficient neg_J2(neg, J2);
         lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J2), Neumann);
@@ -2325,13 +2282,6 @@ private:
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_exact, D_Cl_, sigma, kappa));
         // sigma D2 z2 <c2_e, v2 grad(phi^k).n>
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_exact, phi_n));
-#else
-        // zero Neumann bdc and below weak Dirichlet bdc
-        // sigma <c2_D, D2 grad(v2).n> + kappa <{h^{-1} D2} c2_D, v2>
-        lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_coeff, D_K_, sigma, kappa), Dirichlet);
-        // sigma D2 z2 <c2_D, v2 grad(phi^k).n>
-        lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_D_coeff, phi_n), Dirichlet);
-#endif
         lf->Assemble();
 
         PetscParMatrix *A = new PetscParMatrix();
@@ -2616,10 +2566,8 @@ public:
         f->AddDomainIntegrator(new DomainLFIntegrator(neg_term));
         // epsilon_s (grad(phi^k), grad(psi))
         f->AddDomainIntegrator(new GradConvectionIntegrator2(&epsilon_water, phi));
-#ifndef PhysicalModel // for Physical model, omit zero Neumann bdc: epsilon_s (phi_N, psi)
         // epsilon_s <grad(phi_e).n, psi>, phi_flux = J = -epsilon_s grad(phi_e)
         f->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(J), Neumann_attr_);
-#endif
         f->Assemble();
         f->SetSubVector(ess_tdof_list, 0.0);
 
@@ -2631,13 +2579,11 @@ public:
         f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D_K_, c1_k));
         // D1 z1 c1^k (grad(phi^k), grad(psi))
         f1->AddDomainIntegrator(new GradConvectionIntegrator2(&D1_prod_z1_prod_c1_k, phi));
-#ifndef PhysicalModel // for PhysicalModel, omit zero Neumann bdc: -alpha3 <c1_N, v1>
         // -D1 <(grad(c1_e) + z1 c1_e grad(phi_e)) . n, v1>, c1_flux = J1 = -D1 (grad(c1_e) + z1 c1_e grad(phi_e))
         f1->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(J1), Neumann_attr_);
         // -(f1, v1)
         ProductCoefficient neg_f1(neg, f1_analytic);
         f1->AddDomainIntegrator(new DomainLFIntegrator(neg_f1));
-#endif
         f1->Assemble();
         f1->SetSubVector(ess_tdof_list, 0.0);
 
@@ -2650,13 +2596,11 @@ public:
         f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D_Cl_, c2_k));
         // D2 z2 c2^k (grad(phi^k), grad(v2))
         f2->AddDomainIntegrator(new GradConvectionIntegrator2(&D2_prod_z2_prod_c2_k, phi));
-#ifndef PhysicalModel // for PhysicalModel, omit zero Neumann bdc: - alpha3 (c2_N, v2)
         // -D2 <(grad(c2_e) + z2 c2_e grad(phi_e)) . n, v2>, c2_flux = J2 = -D2 (grad(c2_e) + z2 c2_e grad(phi_e))
         f2->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(J2), Neumann_attr_);
         // -(f2, v2)
         ProductCoefficient neg_f2(neg, f2_analytic);
         f2->AddDomainIntegrator(new DomainLFIntegrator(neg_f2));
-#endif
         f2->Assemble();
         f2->SetSubVector(ess_tdof_list, 0.0);
 
@@ -2819,18 +2763,13 @@ public:
             c1_k = 0.0;
             c2_k = 0.0;
 //        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
-#ifdef PhysicalModel
-            phi .ProjectCoefficient(phi_D_coeff);
-        c1_k.ProjectCoefficient(c1_D_coeff);
-        c2_k.ProjectCoefficient(c2_D_coeff);
-#else
             phi .ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
             c1_k.ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
             c2_k.ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
 //        phi .ProjectCoefficient(phi_exact); // for test code
 //        c1_k.ProjectCoefficient(c1_exact );
 //        c2_k.ProjectCoefficient(c2_exact );
-#endif
+
 //        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
             phi.SetTrueVector(); // 必须要
             c1_k.SetTrueVector();
@@ -2888,7 +2827,6 @@ public:
         c2_k.SetFromTrueVector();
 
         cout.precision(14);
-#ifndef PhysicalModel
         double phiL2err = phi.ComputeL2Error(phi_exact);
         double c1L2err = c1_k.ComputeL2Error(c1_exact);
         double c2L2err = c2_k.ComputeL2Error(c2_exact);
@@ -2909,11 +2847,6 @@ public:
 
             meshsizes_.Append(totle_size / mesh->GetNE());
         }
-#else
-        cout << "L2 norm of phi: " << phi.ComputeL2Error(zero) << '\n'
-             << "L2 norm of c1 : " << c1_k.ComputeL2Error(zero) << '\n'
-             << "L2 norm of c2 : " << c2_k.ComputeL2Error(zero) << endl;
-#endif
 
         if (local_conservation)
         {
@@ -3014,15 +2947,6 @@ public:
         a33 = new ParBilinearForm(fsp);
 
         g = new ParLinearForm(fsp);
-#ifdef PhysicalModel
-        // including 0 Neumann boundary condition
-        // sigma <phi_D, (epsilon_s grad(psi)).n> + kappa <h^{-1} epsilon_s phi_D, psi>
-        g->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, epsilon_water, sigma, kappa), Dirichlet_attr);
-        // kappa * <h^{-1} [c1_D], [psi]>
-        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_D_coeff), Dirichlet_attr);
-        // kappa * <h^{-1} [c2_D], [psi]>
-        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_D_coeff), Dirichlet_attr);
-#else
         // epsilon_s <grad(phi_e).n, psi>, phi_flux = -epsilon_s grad(phi_e)
         ScalarVectorProductCoefficient neg_J(neg, J);
         g->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J), Neumann_attr);
@@ -3032,14 +2956,9 @@ public:
         g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_exact), Dirichlet_attr);
         // kappa * <h^{-1} [c2_D], [psi]>
         g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_exact), Dirichlet_attr);
-#endif
         g->Assemble();
 
         g1 = new ParLinearForm(fsp);
-#ifdef PhysicalModel
-        // sigma <c1_D, D1 grad(v1).n> + kappa <h^{-1} D1 c1_D, v1>
-        g1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_D_coeff, D_K_, sigma, kappa), Dirichlet_attr);
-#else
         // sigma <c1_D, D1 grad(v1).n> + kappa <h^{-1} D1 c1_D, v1>
         g1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c1_exact, D_K_, sigma, kappa), Dirichlet_attr);
         // D1 <(grad(c1_e) + z1 c1_e grad(phi_e)) . n, v1>, c1_flux = J1 = -D1 (grad(c1_e) + z1 c1_e grad(phi_e))
@@ -3047,14 +2966,9 @@ public:
         g1->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J1), Neumann_attr);
         // (f1, v1)
         g1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
-#endif
         g1->Assemble();
 
         g2 = new ParLinearForm(fsp);
-#ifdef PhysicalModel
-        // sigma <c2_D, D2 grad(v2).n> + kappa <h^{-1} D2 c2_D, v2>
-       g2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_D_coeff, D_Cl_, sigma, kappa), Dirichlet_attr);
-#else
         // sigma <c2_D, D2 grad(v2).n> + kappa <h^{-1} D2 c2_D, v2>
         g2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(c2_exact, D_Cl_, sigma, kappa), Dirichlet_attr);
         // D2 <(grad(c2_e) + z2 c2_e grad(phi_e)) . n, v2>, c2_flux = J2 = -D2 (grad(c2_e) + z2 c2_e grad(phi_e))
@@ -3062,7 +2976,6 @@ public:
         g2->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J2), Neumann_attr);
         // (f2, v2)
         g2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
-#endif
         g2->Assemble();
 
         a11 = new ParBilinearForm(fsp);
@@ -3149,13 +3062,8 @@ public:
         f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_k_coeff));
         f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_k_coeff), Dirichlet_attr_);
         // kappa <h^{-1} [c2^k], [psi]>
-#ifdef PhysicalModel
-        f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_D_coeff));
-        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_D_coeff), Dirichlet_attr_);
-#else
         f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_exact));
         f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_exact), Dirichlet_attr_);
-#endif
         f->Assemble();
         (*f) -= (*g);
 
@@ -3190,11 +3098,7 @@ public:
         f1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D1_prod_z1_prod_c1_k, &phi_coeff));
         f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D1_prod_z1_prod_c1_k, &phi_coeff), Dirichlet_attr_);
         // - sigma <phi_D, D1 z1 c1^k grad(v1).n> - kappa D1 z1 c1^k <h^{-1} phi_D, v1>
-#ifdef PhysicalModel
-        f1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D1_prod_z1_prod_c1_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
-#else
         f1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, D1_prod_z1_prod_c1_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
-#endif
         f1->Assemble();
         (*f1) -= (*g1);
 
@@ -3229,11 +3133,7 @@ public:
         f2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D2_prod_z2_prod_c2_k, &phi_coeff));
         f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_prod_D2_prod_z2_prod_c2_k, &phi_coeff), Dirichlet_attr_);
         // - sigma <phi_D, D2 z2 c2^k grad(v2).n> - kappa D2 z2 c2^k <h^{-1} phi_D, v2>
-#ifdef PhysicalModel
-        f2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D2_prod_z2_prod_c2_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
-#else
         f2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, D2_prod_z2_prod_c2_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
-#endif
         f2->Assemble();
         (*f2) -= (*g2);
 //        cout << "in Mult(), l2 norm of Residual: " << rhs_k->Norml2() << endl;
@@ -3435,11 +3335,6 @@ public:
 //        c1_k.SetFromTrueVector();
 //        c2_k.SetFromTrueVector();
 //        cout << "l2 norm of u_k: " << u_k->Norml2() << endl; // 输出 0.0
-#ifdef PhysicalModel
-        phi .ProjectCoefficient(phi_D_coeff);
-        c1_k.ProjectCoefficient(c1_D_coeff);
-        c2_k.ProjectCoefficient(c2_D_coeff);
-#else
             // DG的GridFunction不能ProjectBdrCoefficient
 //        phi .ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
 //        c1_k.ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
@@ -3460,7 +3355,7 @@ public:
                 c1_k.ProjectGridFunction(c1_D_h1);
                 c2_k.ProjectGridFunction(c2_D_h1);
             }
-#endif
+
 //        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
             phi .SetTrueVector(); // 必须用
             c1_k.SetTrueVector();
@@ -3503,7 +3398,6 @@ public:
         c2_k.SetFromTrueVector();
 
         cout.precision(14);
-#ifndef PhysicalModel
         double phiL2err = phi.ComputeL2Error(phi_exact);
         double c1L2err = c1_k.ComputeL2Error(c1_exact);
         double c2L2err = c2_k.ComputeL2Error(c2_exact);
@@ -3524,11 +3418,6 @@ public:
 
             meshsizes_.Append(totle_size / mesh->GetNE());
         }
-#else
-        cout << "L2 norm of phi: " << phi.ComputeL2Error(zero) << '\n'
-             << "L2 norm of c1 : " << c1_k.ComputeL2Error(zero) << '\n'
-             << "L2 norm of c2 : " << c2_k.ComputeL2Error(zero) << endl;
-#endif
 
         if (local_conservation)
         {
