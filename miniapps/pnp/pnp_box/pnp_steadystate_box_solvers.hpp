@@ -1469,13 +1469,12 @@ public:
         Dirichlet_attr.SetSize(bdr_size);
         {
             Neumann_attr = 0;
+//            Neumann_attr[front_attr - 1] = 1;
+//            Neumann_attr[back_attr  - 1] = 1;
+//            Neumann_attr[left_attr  - 1] = 1;
+//            Neumann_attr[right_attr - 1] = 1;
+
             Dirichlet_attr = 1;
-
-            Neumann_attr[front_attr - 1] = 1;
-            Neumann_attr[back_attr  - 1] = 1;
-            Neumann_attr[left_attr  - 1] = 1;
-            Neumann_attr[right_attr - 1] = 1;
-
             Dirichlet_attr[top_attr    - 1] = 1;
             Dirichlet_attr[bottom_attr - 1] = 1;
         }
@@ -1680,12 +1679,6 @@ public:
             (*c2_n) = (*c2);
 
             cout << "===> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
-            if (tol < Gummel_rel_tol)
-            {
-                cout << "------> Gummel iteration converge: " << iter << " times." << endl;
-                break;
-            }
-            if (tol < Gummel_rel_tol) break;
             iter++;
         }
 
