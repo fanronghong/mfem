@@ -1469,7 +1469,7 @@ public:
         Dirichlet_attr.SetSize(bdr_size);
         {
             Neumann_attr = 0;
-            Dirichlet_attr = 0;
+            Dirichlet_attr = 1;
 
             Neumann_attr[front_attr - 1] = 1;
             Neumann_attr[back_attr  - 1] = 1;
@@ -1657,12 +1657,12 @@ public:
         cout << "approximate mesh scale h: " << pow(fsp->GetTrueVSize(), -1.0/3) << endl;
     }
 
-    void Solve(Vector& vec, Array<int>& offsets, int numGummel=0)
+    void Solve(BlockVector& vec, Array<int>& offsets, int numGummel)
     {
-        cout << "\nObtain nonlinear iteration initial value, Gummel, CG" << p_order << ", box, parallel"
+        cout << "\n    Obtain nonlinear iteration initial value, Gummel, CG" << p_order << ", box, parallel"
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
         int iter = 1;
-        while (iter < numGummel)
+        while (iter < numGummel+1)
         {
             Solve_Poisson();
 
@@ -1689,9 +1689,21 @@ public:
             iter++;
         }
 
-        phi_n->MakeRef(fsp, vec, offsets[0]);
-        c1_n ->MakeRef(fsp, vec, offsets[1]);
-        c2_n ->MakeRef(fsp, vec, offsets[2]);
+        phi->SetTrueVector();
+        c1 ->SetTrueVector();
+        c2 ->SetTrueVector();
+
+        vec.GetBlock(0) = phi->GetTrueVector();
+        vec.GetBlock(1) = c1->GetTrueVector();
+        vec.GetBlock(2) = c2->GetTrueVector();
+
+        // 为了测试vec是否正确被赋值
+//        phi_n->MakeRef(fsp, vec, offsets[0]);
+//        c1_n ->MakeRef(fsp, vec, offsets[1]);
+//        c2_n ->MakeRef(fsp, vec, offsets[2]);
+//        phi_n->SetFromTrueVector();
+//        c1_n ->SetFromTrueVector();
+//        c2_n ->SetFromTrueVector();
     }
 
 private:
@@ -2578,6 +2590,7 @@ public:
     {
 //        cout << "\nin PNP_Newton_Operator::Mult(), l2 norm of x: " << x.Norml2() << endl;
 //        cout << "l2 norm of y: " << y.Norml2() << endl;
+
         int sc = height / 3;
         Vector& x_ = const_cast<Vector&>(x);
         Array<int>& Neumann_attr_ = const_cast<Array<int>&>(Neumann_attr);
@@ -2837,13 +2850,26 @@ public:
         else
         {
             PNP_CG_Gummel_Solver_par initial_solver(*mesh);
-            initial_solver.Solve(*u_k, block_trueoffsets, 4);
+            initial_solver.Solve(*u_k, block_trueoffsets, numGummel);
+
+            // 为了测试u_k是否正确被赋值
+//            phi .MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
+//            c1_k.MakeTRef(h1_space, *u_k, block_trueoffsets[1]);
+//            c2_k.MakeTRef(h1_space, *u_k, block_trueoffsets[2]);
+//            phi .SetFromTrueVector();
+//            c1_k.SetFromTrueVector();
+//            c2_k.SetFromTrueVector();
+//            cout << "l2 norm of phi: " <<  phi.Norml2() << endl;
+//            cout << "l2 norm of  c1: " << c1_k.Norml2() << endl;
+//            cout << "l2 norm of  c2: " << c2_k.Norml2() << endl;
         }
+        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
 
         Vector zero_vec;
         chrono.Start();
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
         chrono.Stop();
+        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
 
         linearize_iter = newton_solver->GetNumIterations();
         total_time = chrono.RealTime();

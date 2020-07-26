@@ -21,6 +21,7 @@ int main(int argc, char *argv[])
     args.AddOption(&refine_times, "-ref", "--refinetimes", "Refine the initial mesh times.");
     args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method.");
     args.AddOption(&zero_initial, "-zero", "--zero_initial", "-nonzero", "--nonzero_initial", "Choose zero or nonzero for nonlinear iteration initial value");
+    args.AddOption(&numGummel, "-numGummel", "--numGummel", "Number of Gummel iteration for nonlinear iteration initial value");
     args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method.");
     args.AddOption(&ComputeConvergenceRate, "-rate", "--computerate", "-norate", "--nocomputerate", "Compute convergence rate by using analytic solutions");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
