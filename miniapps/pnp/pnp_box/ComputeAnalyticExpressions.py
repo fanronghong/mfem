@@ -1,6 +1,6 @@
 #coding: utf-8
-
 import sympy
+
 
 # 模型的计算尺度: Angstrom, Nano, Micro
 SCALE = "Angstrom"
@@ -87,8 +87,15 @@ def SymbolCompute():
 
 
 if __name__ == '__main__':
-    phi_bulk = alpha1 * 1.0 # 1.0 V
-    c_bulk   = alpha3 * 1.0 # 1.0 mol/L
-    L        = 2            # 区域尺寸
+    phi_bulk = alpha1 * 1.0*10**(-7) # 1.0*10**(-7) V 变成无量纲的，取值这么小是为了是phi的真解由cos部分主导，而不是一个常数
+    c_bulk   = alpha3 * 1.0 # 1.0 mol/L 变成无量纲的
+    L        = 2            # 区域尺寸，本身无量纲
+
+    print("epsilon_s: {}".format(water_rel_permittivity))
+    print("alpha1: {}\nalpha2: {}\nalpha3: {}".format(alpha1, alpha2, alpha3))
+    print("phi bulk (dimensionless): {}".format(phi_bulk))
+    print("c   bulk (dimensionless): {}".format(c_bulk))
+
+    print("alpha2 * alpha3 * c_bulk * L^2 / (3 * epsilon_s * pi^2): {}".format(alpha2 * alpha3 * c_bulk * L*L / (3 * water_rel_permittivity * pi*pi)))
 
     SymbolCompute()

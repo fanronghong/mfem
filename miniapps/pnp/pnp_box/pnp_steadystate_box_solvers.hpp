@@ -1595,10 +1595,9 @@ public:
             (*phi) /= alpha1;
             (*c1)  /= alpha3;
             (*c2)  /= alpha3;
-            Visualize(*dc, "phi", "phi");
-            Visualize(*dc, "c1", "c1");
-            Visualize(*dc, "c2", "c2");
-            cout << "solution vector size on mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, " << c2->Size() << endl;
+            Visualize(*dc, "phi", "phi_n");
+            Visualize(*dc, "c1", "c1_n");
+            Visualize(*dc, "c2", "c2_n");
             ofstream results("phi_c1_c2_CG_Gummel.vtk");
             results.precision(14);
             int ref = 0;
@@ -1609,6 +1608,16 @@ public:
             (*phi) *= (alpha1);
             (*c1)  *= (alpha3);
             (*c2)  *= (alpha3);
+
+//            phi->ProjectCoefficient(phi_exact);
+//            c1 ->ProjectCoefficient(c1_exact);
+//            c2 ->ProjectCoefficient(c2_exact);
+//            phi->SetTrueVector();
+//            c1 ->SetTrueVector();
+//            c2 ->SetTrueVector();
+//            Visualize(*dc, "phi", "phi_e1");
+//            Visualize(*dc, "c1", "c1_e1");
+//            Visualize(*dc, "c2", "c2_e1");
         }
 
         if (local_conservation)
@@ -1641,12 +1650,13 @@ public:
         cout << "approximate mesh scale h: " << pow(fsp->GetTrueVSize(), -1.0/3) << endl;
     }
 
-    void Solve(BlockVector& vec, Array<int>& offsets, int numGummel)
+    void Solve(BlockVector& vec, Array<int>& offsets, double initTol)
     {
         cout << "\n    Obtain nonlinear iteration initial value, Gummel, CG" << p_order << ", box, parallel"
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
         int iter = 1;
-        while (iter < numGummel+1)
+        double tol = 1;
+        while (tol > initTol)
         {
             Solve_Poisson();
 
@@ -1654,7 +1664,7 @@ public:
             diff = 0.0; // 必须初始化,否则下面的计算结果不对fff
             diff += (*phi);
             diff -= (*phi_n); // 不能把上述2步合并成1步: diff = (*phi) - (*phi_n)fff
-            double tol = diff.Norml2() / phi->Norml2(); // 相对误差
+            tol = diff.Norml2() / phi->Norml2(); // 相对误差
             (*phi_n) = (*phi);
 
             Solve_NP1();
@@ -2782,7 +2792,7 @@ public:
         else
         {
             PNP_CG_Gummel_Solver_par initial_solver(*mesh);
-            initial_solver.Solve(*u_k, block_trueoffsets, numGummel);
+            initial_solver.Solve(*u_k, block_trueoffsets, initTol);
 
             // 为了测试u_k是否正确被赋值
 //            phi .MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
@@ -2865,6 +2875,31 @@ public:
             } else {
                 MFEM_ABORT("local conservation quantities not save!");
             }
+        }
+
+        if (visualize)
+        {
+            VisItDataCollection* dc = new VisItDataCollection("data collection", mesh);
+            dc->RegisterField("phi", &phi);
+            dc->RegisterField("c1",  &c1_k);
+            dc->RegisterField("c2",  &c2_k);
+
+            (phi) /= alpha1;
+            (c1_k)  /= alpha3;
+            (c2_k)  /= alpha3;
+            Visualize(*dc, "phi", "phi_Newton_CG");
+            Visualize(*dc, "c1", "c1_Newton_CG");
+            Visualize(*dc, "c2", "c2_Newton_CG");
+            ofstream results("phi_c1_c2_CG_Newton.vtk");
+            results.precision(14);
+            int ref = 0;
+            mesh->PrintVTK(results, ref);
+            phi.SaveVTK(results, "phi", ref);
+            c1_k.SaveVTK(results, "c1", ref);
+            c2_k.SaveVTK(results, "c2", ref);
+            (phi)  *= (alpha1);
+            (c1_k) *= (alpha3);
+            (c2_k) *= (alpha3);
         }
 
         map<string, Array<double>>::iterator it1;
