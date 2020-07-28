@@ -1595,10 +1595,10 @@ public:
             (*phi) /= alpha1;
             (*c1)  /= alpha3;
             (*c2)  /= alpha3;
-            Visualize(*dc, "phi", "phi_n");
-            Visualize(*dc, "c1", "c1_n");
-            Visualize(*dc, "c2", "c2_n");
-            ofstream results("phi_c1_c2_CG_Gummel.vtk");
+            Visualize(*dc, "phi", "phi_Gummel_CG");
+            Visualize(*dc, "c1", "c1_Gummel_CG");
+            Visualize(*dc, "c2", "c2_Gummel_CG");
+            ofstream results("phi_c1_c2_Gummel_CG.vtk");
             results.precision(14);
             int ref = 0;
             mesh.PrintVTK(results, ref);
@@ -2069,12 +2069,10 @@ public:
             (*phi) /= alpha1;
             (*c1) /= alpha3;
             (*c2) /= alpha3;
-            Visualize(*dc, "phi", "phi");
-            Visualize(*dc, "c1", "c1");
-            Visualize(*dc, "c2", "c2");
-            cout << "solution vector size on mesh: phi, " << phi->Size() << "; c1, " << c1->Size() << "; c2, "
-                 << c2->Size() << endl;
-            ofstream results("phi_c1_c2_DG_Gummel.vtk");
+            Visualize(*dc, "phi", "phi_Gummel_DG");
+            Visualize(*dc, "c1", "c1_Gummel_DG");
+            Visualize(*dc, "c2", "c2_Gummel_DG");
+            ofstream results("phi_c1_c2_Gummel_DG.vtk");
             results.precision(14);
             int ref = 0;
             mesh.PrintVTK(results, ref);
@@ -2114,6 +2112,64 @@ public:
             cout << (*it2).first << ": " << (*it2).second << endl;
 
         cout << "approximate mesh scale h: " << pow(fsp->GetTrueVSize(), -1.0/3) << endl;
+    }
+
+    void Solve(BlockVector& vec, Array<int>& offsets, double initTol)
+    {
+        cout << "\n    Obtain nonlinear iteration initial value, Gummel, DG" << p_order << ", box, parallel"
+             << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
+        int iter = 1;
+        double tol = 1;
+        while (tol > initTol)
+        {
+            Solve_Poisson();
+
+            Vector diff(fsp->GetNDofs());
+            diff = 0.0; // 必须初始化,否则下面的计算结果不对fff
+            diff += (*phi);
+            diff -= (*phi_n); // 不能把上述2步合并成1步: diff = (*phi) - (*phi_n)fff
+            tol = diff.Norml2() / phi->Norml2(); // 相对误差
+            (*phi_n) = (*phi);
+
+            Solve_NP1();
+            (*c1_n) = (*c1);
+
+            Solve_NP2();
+            (*c2_n) = (*c2);
+
+            cout << "===> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
+            iter++;
+        }
+
+//        cout << "l2 norm of phi: " << phi->Norml2() << endl;
+//        cout << "l2 norm of  c1: " << c1->Norml2() << endl;
+//        cout << "l2 norm of  c2: " << c2->Norml2() << endl;
+        phi->SetTrueVector();
+        c1 ->SetTrueVector();
+        c2 ->SetTrueVector();
+//        cout << "l2 norm of phi: " << phi->Norml2() << endl;
+//        cout << "l2 norm of  c1: " << c1->Norml2() << endl;
+//        cout << "l2 norm of  c2: " << c2->Norml2() << endl;
+
+//        cout << "l2 norm of vec: " << vec.Norml2() << endl;
+        vec.GetBlock(0) = phi->GetTrueVector();
+        vec.GetBlock(1) = c1->GetTrueVector();
+        vec.GetBlock(2) = c2->GetTrueVector();
+//        cout << "l2 norm of vec: " << vec.Norml2() << endl;
+
+        // 为了测试vec是否正确被赋值
+//        phi_n->MakeRef(fsp, vec, offsets[0]);
+//        c1_n ->MakeRef(fsp, vec, offsets[1]);
+//        c2_n ->MakeRef(fsp, vec, offsets[2]);
+//        phi_n->SetTrueVector();
+//        c1_n ->SetTrueVector();
+//        c2_n ->SetTrueVector();
+//        phi_n->SetFromTrueVector();
+//        c1_n ->SetFromTrueVector();
+//        c2_n ->SetFromTrueVector();
+//        cout << "l2 norm of phi: " <<  phi->Norml2() << endl;
+//        cout << "l2 norm of  c1: " << c1_n->Norml2() << endl;
+//        cout << "l2 norm of  c2: " << c2_n->Norml2() << endl;
     }
 
 private:
@@ -2890,7 +2946,7 @@ public:
             Visualize(*dc, "phi", "phi_Newton_CG");
             Visualize(*dc, "c1", "c1_Newton_CG");
             Visualize(*dc, "c2", "c2_Newton_CG");
-            ofstream results("phi_c1_c2_CG_Newton.vtk");
+            ofstream results("phi_c1_c2_Newton_CG.vtk");
             results.precision(14);
             int ref = 0;
             mesh->PrintVTK(results, ref);
@@ -3352,6 +3408,7 @@ public:
 
         // 给定Newton迭代的初值，并使之满足边界条件
         u_k = new BlockVector(block_trueoffsets);
+        if (zero_initial)
         {
             // MakeTRef(), SetTrueVector(), SetFromTrueVector() 三者要配套使用ffffffffff
             phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
@@ -3401,6 +3458,23 @@ public:
 //        c2_k.SetFromTrueVector();
 //        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
         }
+        else
+        {
+            PNP_DG_Gummel_Solver_par initial_solver(*mesh);
+            initial_solver.Solve(*u_k, block_trueoffsets, initTol);
+
+            // 为了测试u_k是否正确被赋值
+            phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
+            c1_k.MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
+            c2_k.MakeTRef(dg_space, *u_k, block_trueoffsets[2]);
+            phi .SetFromTrueVector();
+            c1_k.SetFromTrueVector();
+            c2_k.SetFromTrueVector();
+//            cout << "l2 norm of phi: " <<  phi.Norml2() << endl;
+//            cout << "l2 norm of  c1: " << c1_k.Norml2() << endl;
+//            cout << "l2 norm of  c2: " << c2_k.Norml2() << endl;
+        }
+        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
 
         Vector zero_vec;
         zero_vec = 0.0;
@@ -3472,6 +3546,31 @@ public:
             } else {
                 MFEM_ABORT("local conservation quantities not save!");
             }
+        }
+
+        if (visualize)
+        {
+            VisItDataCollection* dc = new VisItDataCollection("data collection", mesh);
+            dc->RegisterField("phi", &phi);
+            dc->RegisterField("c1",  &c1_k);
+            dc->RegisterField("c2",  &c2_k);
+
+            (phi)  /= alpha1;
+            (c1_k) /= alpha3;
+            (c2_k) /= alpha3;
+            Visualize(*dc, "phi", "phi_Newton_DG");
+            Visualize(*dc, "c1", "c1_Newton_DG");
+            Visualize(*dc, "c2", "c2_Newton_DG");
+            ofstream results("phi_c1_c2_Newton_DG.vtk");
+            results.precision(14);
+            int ref = 0;
+            mesh->PrintVTK(results, ref);
+            phi.SaveVTK(results, "phi", ref);
+            c1_k.SaveVTK(results, "c1", ref);
+            c2_k.SaveVTK(results, "c2", ref);
+            (phi)  *= (alpha1);
+            (c1_k) *= (alpha3);
+            (c2_k) *= (alpha3);
         }
 
         map<string, Array<double>>::iterator it1;
