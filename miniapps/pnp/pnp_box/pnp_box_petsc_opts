@@ -34,7 +34,7 @@
 -newton_snes_type newtonls
 -newton_snes_max_it 50
 -newton_snes_rtol 1e-8
--newton_snes_atol 1e-20
+-newton_snes_atol 1e-6
 -newton_snes_stol 1e-14
 -newton_snes_divergence_tolerance 1e5
 -newton_snes_linesearch_type bt # basic, bt

@@ -2832,18 +2832,34 @@ public:
             phi .ProjectBdrCoefficient(phi_exact, Dirichlet_attr);
             c1_k.ProjectBdrCoefficient(c1_exact, Dirichlet_attr);
             c2_k.ProjectBdrCoefficient(c2_exact, Dirichlet_attr);
-//        phi .ProjectCoefficient(phi_exact); // for test code
-//        c1_k.ProjectCoefficient(c1_exact );
-//        c2_k.ProjectCoefficient(c2_exact );
+//            phi .ProjectCoefficient(phi_exact); // 测试真解和边界条件是否正确赋值
+//            c1_k.ProjectCoefficient(c1_exact );
+//            c2_k.ProjectCoefficient(c2_exact );
 
 //        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
             phi.SetTrueVector(); // 必须要
             c1_k.SetTrueVector();
             c2_k.SetTrueVector();
-//        phi.SetFromTrueVector(); // 似乎可以不要
-//        c1_k.SetFromTrueVector();
-//        c2_k.SetFromTrueVector();
+//            phi.SetFromTrueVector(); // 似乎可以不要
+//            c1_k.SetFromTrueVector();
+//            c2_k.SetFromTrueVector();
 //        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+            {
+//                VisItDataCollection* dc = new VisItDataCollection("data collection", mesh);
+//                dc->RegisterField("phi", &phi);
+//                dc->RegisterField("c1",  &c1_k);
+//                dc->RegisterField("c2",  &c2_k);
+//
+//                (phi) /= alpha1;
+//                (c1_k)/= alpha3;
+//                (c2_k)/= alpha3;
+//                Visualize(*dc, "phi", "phi_Newton_CG");
+//                Visualize(*dc, "c1", "c1_Newton_CG");
+//                Visualize(*dc, "c2", "c2_Newton_CG");
+//                (phi)  *= (alpha1);
+//                (c1_k) *= (alpha3);
+//                (c2_k) *= (alpha3);
+            }
         }
         else
         {
@@ -3124,6 +3140,11 @@ public:
         phi ->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
+        {
+//            cout << "L2 error norm of |phi_h - phi_e|: " << phi->ComputeL2Error(phi_exact) << endl;
+//            cout << "L2 error norm of   |c1_h - c1_e|: " << c1_k->ComputeL2Error(c1_exact) << endl;
+//            cout << "L2 error norm of   |c2_h - c2_e|: " << c2_k->ComputeL2Error(c2_exact) << endl;
+        }
 
         GridFunctionCoefficient phi_coeff(phi), c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
@@ -3474,12 +3495,11 @@ public:
 //            cout << "l2 norm of  c1: " << c1_k.Norml2() << endl;
 //            cout << "l2 norm of  c2: " << c2_k.Norml2() << endl;
         }
-        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
+//        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
 
         Vector zero_vec;
         zero_vec = 0.0;
         chrono.Start();
-        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
         chrono.Stop();
 
