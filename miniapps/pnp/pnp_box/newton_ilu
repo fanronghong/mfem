@@ -1,6 +1,6 @@
 # ------> Gummel Params
 -phi_ksp_type cg
--phi_pc_type lu
+-phi_pc_type ilu
 -phi_ksp_max_it 10000
 -phi_ksp_rtol 1e-10
 -phi_ksp_atol 1e-20
@@ -10,7 +10,7 @@
 #-phi_ksp_view
 
 -np1_ksp_type gmres
--np1_pc_type lu
+-np1_pc_type ilu
 -np1_ksp_max_it 10000
 -np1_ksp_rtol 1e-10
 -np1_ksp_atol 1e-20
@@ -20,7 +20,7 @@
 #-np1_ksp_view
 
 -np2_ksp_type gmres
--np2_pc_type lu
+-np2_pc_type ilu
 -np2_ksp_max_it 10000
 -np2_ksp_rtol 1e-10
 -np2_ksp_atol 1e-20
@@ -43,7 +43,7 @@
 -newton_snes_converged_reason
 #-newton_snes_view
 #
--newton_ksp_type gmres
+-newton_ksp_type fgmres
 #-newton_pc_type ilu # jacobi, ilu, shell
 -newton_ksp_max_it 1000
 -newton_ksp_rtol 1E-10
@@ -55,8 +55,7 @@
 #-newton_ksp_view
 
 -sub_block1_ksp_type cg
--sub_block1_pc_type lu # jacobi, sor, ilu, icc, asm
-#-sub_block1_pc_type gamg -sub_block1_pc_gamg_type classical -sub_block1_pc_gamg_agg_nsmooths 1
+-sub_block1_pc_type ilu # jacobi, sor, ilu, icc, asm
 -sub_block1_ksp_rtol 1e-8
 -sub_block1_ksp_atol 1e-10
 -sub_block1_ksp_divtol 1e5
@@ -68,8 +67,7 @@
 #-sub_block1_ksp_view
 
 -sub_block2_ksp_type gmres
--sub_block2_pc_type lu
-#-sub_block2_pc_type gamg -sub_block2_pc_gamg_type classical -sub_block2_pc_gamg_agg_nsmooths 1
+-sub_block2_pc_type ilu
 -sub_block2_ksp_rtol 1e-8
 -sub_block2_ksp_atol 1e-10
 -sub_block2_ksp_divtol 1e5
@@ -81,8 +79,7 @@
 #-sub_block2_ksp_view
 
 -sub_block3_ksp_type gmres
--sub_block3_pc_type lu
-#-sub_block3_pc_type gamg -sub_block3_pc_gamg_type classical -sub_block3_pc_gamg_agg_nsmooths 1
+-sub_block3_pc_type ilu
 -sub_block3_ksp_rtol 1e-8
 -sub_block3_ksp_atol 1e-10
 -sub_block3_ksp_divtol 1e5
