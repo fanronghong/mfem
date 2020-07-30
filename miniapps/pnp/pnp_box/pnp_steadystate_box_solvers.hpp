@@ -1573,7 +1573,7 @@ public:
         double c1L2err = c1->ComputeL2Error(c1_exact);
         double c2L2err = c2->ComputeL2Error(c2_exact);
 
-        cout << "\nBox, " << Linearize << ", " << Discretize << p_order << ", refine " << refine_times << " for " << mesh_file << endl;
+        cout << "\n======>Box, " << Linearize << ", " << Discretize << p_order << ", refine " << refine_times << " for " << mesh_file << ", " << options_src << ", -rate: " << ComputeConvergenceRate << endl;
         cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
              << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
              << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
@@ -2048,7 +2048,7 @@ public:
         double c1L2err = c1->ComputeL2Error(c1_exact);
         double c2L2err = c2->ComputeL2Error(c2_exact);
 
-        cout << "\nBox, " << Linearize << ", " << Discretize << p_order << ", refine " << refine_times << " for " << mesh_file << endl;
+        cout << "\n======>Box, " << Linearize << ", " << Discretize << p_order << ", refine " << refine_times << " for " << mesh_file << ", " << options_src << ", -rate: " << ComputeConvergenceRate << endl;
         cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
              << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
              << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
@@ -2915,7 +2915,7 @@ public:
         double c1L2err = c1_k.ComputeL2Error(c1_exact);
         double c2L2err = c2_k.ComputeL2Error(c2_exact);
 
-        cout << "\nBox, " << Linearize << ", " << Discretize << p_order << ", refine " << refine_times << " for " << mesh_file << endl;
+        cout << "\n======>Box, " << Linearize << ", " << Discretize << p_order << ", refine " << refine_times << " for " << mesh_file << ", " << options_src << ", -rate: " << ComputeConvergenceRate << endl;
         cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
              << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
              << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
@@ -3534,7 +3534,7 @@ public:
         double c1L2err = c1_k.ComputeL2Error(c1_exact);
         double c2L2err = c2_k.ComputeL2Error(c2_exact);
 
-        cout << "\nBox, " << Linearize << ", " << Discretize << p_order << ", refine " << refine_times << " for " << mesh_file << endl;
+        cout << "\n======>Box, " << Linearize << ", " << Discretize << p_order << ", refine " << refine_times << " for " << mesh_file << ", " << options_src << ", -rate: " << ComputeConvergenceRate << endl;
         cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
              << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
              << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
