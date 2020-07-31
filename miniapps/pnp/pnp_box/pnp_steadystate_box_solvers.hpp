@@ -3500,11 +3500,44 @@ public:
         }
 //        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
 
+        {
+            VisItDataCollection* dc = new VisItDataCollection("data collection", mesh);
+            dc->RegisterField("phi", &phi);
+            dc->RegisterField("c1",  &c1_k);
+            dc->RegisterField("c2",  &c2_k);
+            (phi)  /= alpha1;
+            (c1_k) /= alpha3;
+            (c2_k) /= alpha3;
+            Visualize(*dc, "phi", "phi_Newton_DG_init");
+            Visualize(*dc, "c1", "c1_Newton_DG_init");
+            Visualize(*dc, "c2", "c2_Newton_DG_init");
+            (phi)  *= (alpha1);
+            (c1_k) *= (alpha3);
+            (c2_k) *= (alpha3);
+        }
+
         Vector zero_vec;
         zero_vec = 0.0;
         chrono.Start();
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
         chrono.Stop();
+
+        {
+            VisItDataCollection* dc = new VisItDataCollection("data collection", mesh);
+            dc->RegisterField("phi", &phi);
+            dc->RegisterField("c1",  &c1_k);
+            dc->RegisterField("c2",  &c2_k);
+            (phi)  /= alpha1;
+            (c1_k) /= alpha3;
+            (c2_k) /= alpha3;
+            Visualize(*dc, "phi", "phi_Newton_DG_final");
+            Visualize(*dc, "c1", "c1_Newton_DG_final");
+            Visualize(*dc, "c2", "c2_Newton_DG_final");
+            (phi)  *= (alpha1);
+            (c1_k) *= (alpha3);
+            (c2_k) *= (alpha3);
+            MFEM_ABORT("ffffffgggggggggg");
+        }
 
         linearize_iter = newton_solver->GetNumIterations();
         total_time = chrono.RealTime();

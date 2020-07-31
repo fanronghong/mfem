@@ -5,9 +5,6 @@
 -phi_ksp_rtol 1e-10
 -phi_ksp_atol 1e-20
 -phi_ksp_divtol 1e+5
-#-phi_ksp_monitor_true_residual
-#-phi_ksp_converged_reason
-#-phi_ksp_view
 
 -np1_ksp_type gmres
 -np1_pc_type ilu
@@ -15,9 +12,6 @@
 -np1_ksp_rtol 1e-10
 -np1_ksp_atol 1e-20
 -np1_ksp_divtol 1e+5
-#-np1_ksp_monitor_true_residual
-#-np1_ksp_converged_reason
-#-np1_ksp_view
 
 -np2_ksp_type gmres
 -np2_pc_type ilu
@@ -25,9 +19,6 @@
 -np2_ksp_rtol 1e-10
 -np2_ksp_atol 1e-20
 -np2_ksp_divtol 1e+5
-#-np2_ksp_monitor_true_residual
-#-np2_ksp_converged_reason
-#-np2_ksp_view
 
 
 # ------> Newton Params
@@ -60,11 +51,6 @@
 -sub_block1_ksp_atol 1e-10
 -sub_block1_ksp_divtol 1e5
 -sub_block1_ksp_max_it 1000
-#-sub_block1_ksp_monitor
-#-sub_block1_ksp_monitor_short
-#-sub_block1_ksp_monitor_true_residual
-#-sub_block1_ksp_converged_reason
-#-sub_block1_ksp_view
 
 -sub_block2_ksp_type gmres
 -sub_block2_pc_type ilu
@@ -72,11 +58,6 @@
 -sub_block2_ksp_atol 1e-10
 -sub_block2_ksp_divtol 1e5
 -sub_block2_ksp_max_it 1000
-#-sub_block2_ksp_monitor
-#-sub_block2_ksp_monitor_short
-#-sub_block2_ksp_monitor_true_residual
-#-sub_block2_ksp_converged_reason
-#-sub_block2_ksp_view
 
 -sub_block3_ksp_type gmres
 -sub_block3_pc_type ilu
@@ -84,11 +65,6 @@
 -sub_block3_ksp_atol 1e-10
 -sub_block3_ksp_divtol 1e5
 -sub_block3_ksp_max_it 1000
-#-sub_block3_ksp_monitor
-#-sub_block3_ksp_monitor_short
-#-sub_block3_ksp_monitor_true_residual
-#-sub_block3_ksp_converged_reason
-#-sub_block3_ksp_view
 
 
 # ------> Petsc Other Params

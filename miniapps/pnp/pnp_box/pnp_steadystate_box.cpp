@@ -1,7 +1,3 @@
-/*
- * 稳态的PNP方程，用Gummel迭代
- *
- * */
 #include <iostream>
 #include <fstream>
 #include "mfem.hpp"
