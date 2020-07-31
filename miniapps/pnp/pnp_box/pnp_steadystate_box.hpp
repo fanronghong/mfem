@@ -10,16 +10,17 @@ using namespace mfem;
 
 const char* mesh_file       = "./4_4_4_translate.msh";
 int p_order                 = 1; //有限元基函数的多项式次数
-int refine_times            = 4;
+int refine_times            = 0;
 const char* Linearize       = "gummel"; // newton, gummel
 bool zero_initial           = true; // 非线性迭代的初值是否为0
 double initTol              = 1e-3; // 为得到非线性迭代的初值所需Gummel迭代
 const char* Discretize      = "cg"; // cg, dg
-const char* options_src     = "./pnp_box_petsc_opts";
+const char* options_src     = "././pnp_box_petsc_opts";
 bool ComputeConvergenceRate = false; // 利用解析解计算误差阶
 bool local_conservation     = true;
 bool visualize              = true;
 const char* output          = NULL;
+int max_newton              = 20;
 
 const int bottom_attr       = 1;
 const int top_attr          = 6;

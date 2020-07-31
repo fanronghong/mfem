@@ -2799,6 +2799,7 @@ public:
 
         newton_solver = new PetscNonlinearSolver(h1_space->GetComm(), *op, "newton_");
         newton_solver->iterative_mode = true;
+        newton_solver->SetMaxIter(max_newton);
         newton_solver->SetPreconditionerFactory(jac_factory);
         snes = SNES(*newton_solver);
         PetscMalloc(num_its * sizeof(PetscInt), &its);
@@ -3143,11 +3144,26 @@ public:
         phi ->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
-        {
+
+//        {
 //            cout << "L2 error norm of |phi_h - phi_e|: " << phi->ComputeL2Error(phi_exact) << endl;
 //            cout << "L2 error norm of   |c1_h - c1_e|: " << c1_k->ComputeL2Error(c1_exact) << endl;
 //            cout << "L2 error norm of   |c2_h - c2_e|: " << c2_k->ComputeL2Error(c2_exact) << endl;
-        }
+//
+//            VisItDataCollection* dc = new VisItDataCollection("data collection", fsp->GetMesh());
+//            dc->RegisterField("phi", phi);
+//            dc->RegisterField("c1",  c1_k);
+//            dc->RegisterField("c2",  c2_k);
+//            (*phi)  /= alpha1;
+//            (*c1_k) /= alpha3;
+//            (*c2_k) /= alpha3;
+//            Visualize(*dc, "phi", "phi_Newton_DG_");
+//            Visualize(*dc, "c1", "c1_Newton_DG_");
+//            Visualize(*dc, "c2", "c2_Newton_DG_");
+//            (*phi)  *= (alpha1);
+//            (*c1_k) *= (alpha3);
+//            (*c2_k) *= (alpha3);
+//        }
 
         GridFunctionCoefficient phi_coeff(phi), c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
@@ -3410,6 +3426,7 @@ public:
 
         newton_solver = new PetscNonlinearSolver(dg_space->GetComm(), *op, "newton_");
         newton_solver->iterative_mode = true;
+        newton_solver->SetMaxIter(max_newton);
         newton_solver->SetPreconditionerFactory(jac_factory);
         snes = SNES(*newton_solver);
         PetscMalloc(num_its * sizeof(PetscInt), &its);
@@ -3501,19 +3518,26 @@ public:
 //        cout << "l2 norm of u_k: " << u_k->Norml2() << endl;
 
         {
-            VisItDataCollection* dc = new VisItDataCollection("data collection", mesh);
-            dc->RegisterField("phi", &phi);
-            dc->RegisterField("c1",  &c1_k);
-            dc->RegisterField("c2",  &c2_k);
-            (phi)  /= alpha1;
-            (c1_k) /= alpha3;
-            (c2_k) /= alpha3;
-            Visualize(*dc, "phi", "phi_Newton_DG_init");
-            Visualize(*dc, "c1", "c1_Newton_DG_init");
-            Visualize(*dc, "c2", "c2_Newton_DG_init");
-            (phi)  *= (alpha1);
-            (c1_k) *= (alpha3);
-            (c2_k) *= (alpha3);
+//            phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
+//            c1_k.MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
+//            c2_k.MakeTRef(dg_space, *u_k, block_trueoffsets[2]);
+//            phi .SetFromTrueVector();
+//            c1_k.SetFromTrueVector();
+//            c2_k.SetFromTrueVector();
+//
+//            VisItDataCollection* dc = new VisItDataCollection("data collection", mesh);
+//            dc->RegisterField("phi", &phi);
+//            dc->RegisterField("c1",  &c1_k);
+//            dc->RegisterField("c2",  &c2_k);
+//            (phi)  /= alpha1;
+//            (c1_k) /= alpha3;
+//            (c2_k) /= alpha3;
+//            Visualize(*dc, "phi", "phi_Newton_DG_init");
+//            Visualize(*dc, "c1", "c1_Newton_DG_init");
+//            Visualize(*dc, "c2", "c2_Newton_DG_init");
+//            (phi)  *= (alpha1);
+//            (c1_k) *= (alpha3);
+//            (c2_k) *= (alpha3);
         }
 
         Vector zero_vec;
@@ -3523,20 +3547,26 @@ public:
         chrono.Stop();
 
         {
-            VisItDataCollection* dc = new VisItDataCollection("data collection", mesh);
-            dc->RegisterField("phi", &phi);
-            dc->RegisterField("c1",  &c1_k);
-            dc->RegisterField("c2",  &c2_k);
-            (phi)  /= alpha1;
-            (c1_k) /= alpha3;
-            (c2_k) /= alpha3;
-            Visualize(*dc, "phi", "phi_Newton_DG_final");
-            Visualize(*dc, "c1", "c1_Newton_DG_final");
-            Visualize(*dc, "c2", "c2_Newton_DG_final");
-            (phi)  *= (alpha1);
-            (c1_k) *= (alpha3);
-            (c2_k) *= (alpha3);
-            MFEM_ABORT("ffffffgggggggggg");
+//            phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
+//            c1_k.MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
+//            c2_k.MakeTRef(dg_space, *u_k, block_trueoffsets[2]);
+//            phi .SetFromTrueVector();
+//            c1_k.SetFromTrueVector();
+//            c2_k.SetFromTrueVector();
+//
+//            VisItDataCollection* dc = new VisItDataCollection("data collection", mesh);
+//            dc->RegisterField("phi", &phi);
+//            dc->RegisterField("c1",  &c1_k);
+//            dc->RegisterField("c2",  &c2_k);
+//            (phi)  /= alpha1;
+//            (c1_k) /= alpha3;
+//            (c2_k) /= alpha3;
+//            Visualize(*dc, "phi", "phi_Newton_DG_final");
+//            Visualize(*dc, "c1", "c1_Newton_DG_final");
+//            Visualize(*dc, "c2", "c2_Newton_DG_final");
+//            (phi)  *= (alpha1);
+//            (c1_k) *= (alpha3);
+//            (c2_k) *= (alpha3);
         }
 
         linearize_iter = newton_solver->GetNumIterations();
