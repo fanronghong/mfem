@@ -17,8 +17,8 @@ double initTol              = 1e-3; // 为得到非线性迭代的初值所需Gu
 const char* Discretize      = "cg"; // cg, dg
 const char* options_src     = "././pnp_box_petsc_opts";
 bool ComputeConvergenceRate = false; // 利用解析解计算误差阶
-bool local_conservation     = true;
-bool visualize              = true;
+bool local_conservation     = false;
+bool visualize              = false;
 const char* output          = NULL;
 int max_newton              = 20;
 
