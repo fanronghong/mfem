@@ -45,16 +45,16 @@ int main(int argc, char *argv[])
 
     H1_FECollection* cg_fec = new H1_FECollection(1, dim);
     DG_FECollection* dg_fec = new DG_FECollection(1, dim);
-    ParFiniteElementSpace* cg = new ParFiniteElementSpace(pmesh, cg_fec, dim);
-    ParFiniteElementSpace* dg = new ParFiniteElementSpace(pmesh, dg_fec, dim);
+    ParFiniteElementSpace* cg = new ParFiniteElementSpace(pmesh, cg_fec);
+    ParFiniteElementSpace* dg = new ParFiniteElementSpace(pmesh, dg_fec);
 
     FunctionCoefficient sin_cos_coeff(sin_cos);
 
     ParGridFunction gf1(cg), gf2(dg);
 
     gf1 = 0.0;
-    gf1.ProjectCoefficient(sin_cos_coeff); // OK
-//    gf1.ProjectBdrCoefficient(sin_cos_coeff, Dirichlet); // Seg fault
+//    gf1.ProjectCoefficient(sin_cos_coeff); // OK
+    gf1.ProjectBdrCoefficient(sin_cos_coeff, Dirichlet); // Seg fault
 
     gf2 = 0.0;
     gf2.ProjectCoefficient(sin_cos_coeff); // OK
