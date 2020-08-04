@@ -17,13 +17,15 @@ const char* AdvecStable = "eafe"; // none, supg, eafe
 const char* prec_type   = "uzawa"; // preconditioner for Newton discretization: block, uzawa, simple
 const char* options_src = "./pnp_protein_petsc_opts";
 int refine_times        = 0;
-double sigma            = -1.0; // symmetric parameter for DG
-double kappa            = 200; // penalty parameter for DG
-bool verbose            = false;
+const char* output      = NULL;
 bool self_debug         = false;
 bool visualize          = false;
 bool local_conservation = true;
 bool show_peclet        = true;
+
+double sigma            = -1.0; // symmetric parameter for DG
+double kappa            = 200; // penalty parameter for DG
+bool verbose            = false;
 
 /* 只能定义如下集中参数
  * _1MAG_2_test_case: only do tests to verify the code, forbid to change any parameters
