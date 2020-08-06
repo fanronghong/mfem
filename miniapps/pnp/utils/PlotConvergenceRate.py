@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import math
 from matplotlib.pyplot import MultipleLocator
 import os
+from matplotlib.ticker import NullFormatter  # useful for `logit` scale
 
 def PlotConvergRate(p_order, mesh_sizes=None, errornorms1=None, errornorms2=None, errornorms3=None, log_tranform=True, xaxis="x", yaxis="y"):
     sizes = [float(size) for size in mesh_sizes.split()]
@@ -49,24 +50,163 @@ def PlotConvergRate(p_order, mesh_sizes=None, errornorms1=None, errornorms2=None
     plt.show()
 
 def demo():
-    x = [0.00001,0.001,0.01,0.1,0.5,1,5]
-    # create an index for each tick position
-    xi = list(range(len(x)))
-    y = [0.945,0.885,0.893,0.9,0.996,1.25,1.19]
-    plt.ylim(0.8,1.4)
-    # plot the index for the x-values
-    plt.plot(xi, y, marker='o', linestyle='--', color='r', label='Square')
-    plt.xlabel('x')
-    plt.ylabel('y')
-    # plt.xticks(xi, x)
-    plt.title('compare')
+    # 数据来源dddd5,dddd7,dddd9
+    dofs1 = [375, 2187, 14739, 107811] # CG
+    phi_L2err_p1_Gummel_CG = [1.709663142867e-06 ,5.331941427823e-07  ,1.417857507295e-07  ,3.6017364967346e-08]
+    phi_L2err_p2_Gummel_CG = [9.0677006036163e-08, 9.6411904332864e-09, 1.109203806505e-09 ,1.3505173221464e-10]
+    phi_L2err_p3_Gummel_CG = [7.1194678823885e-09, 4.0253823886387e-10, 2.3856537329199e-11, 1.4556205114757e-12]
+    c1_L2err_p1_Gummel_CG  = [7.3887406793338e-05, 2.0872575658785e-05, 5.3954068610653e-06, 1.360507562863e-06]
+    c1_L2err_p2_Gummel_CG  = [4.8228081439797e-06, 5.9971712999153e-07, 7.4754960106047e-08, 9.340389628465e-09]
+    c1_L2err_p3_Gummel_CG  = [4.8436574995652e-07, 2.7996570372119e-08, 1.6643325888192e-09, 1.0160209458625e-10]
+    c2_L2err_p1_Gummel_CG  = [7.3887625976381e-05, 2.0872659731248e-05, 5.3954305107203e-06, 1.3605136545165e-06]
+    c2_L2err_p2_Gummel_CG  = [4.8228132396781e-06, 5.9971734542429e-07, 7.4754967450763e-08, 9.3403897286654e-09]
+    c2_L2err_p3_Gummel_CG  = [4.8436581086501e-07, 2.7996570874086e-08, 1.6643325840855e-09, 1.016021018976e-10]
+
+    fig = plt.figure()
+    fig.canvas.set_window_title('Window Title')
+    # fig.suptitle('Gummel-CG Algorithm')
+
+    plt.subplot(131)
+    plt.plot(dofs1, phi_L2err_p1_Gummel_CG, ':s', label='p=1')
+    plt.plot(dofs1, phi_L2err_p2_Gummel_CG, ':o', label='p=2')
+    plt.plot(dofs1, phi_L2err_p3_Gummel_CG, ':*', label='p=3')
+    plt.xscale('symlog')
+    plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.xlabel("DOFs")
+    plt.ylabel("$||\phi_e - \phi_h||_{L^2}$")
     plt.legend()
+
+    plt.subplot(132)
+    plt.plot(dofs1, c1_L2err_p1_Gummel_CG, ':s', label='p=1')
+    plt.plot(dofs1, c1_L2err_p2_Gummel_CG, ':o', label='p=2')
+    plt.plot(dofs1, c1_L2err_p3_Gummel_CG, ':*', label='p=3')
+    plt.xscale('symlog')
+    plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.xlabel("DOFs")
+    plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$")
+    plt.legend()
+
+    plt.subplot(133)
+    plt.plot(dofs1, c2_L2err_p1_Gummel_CG, ':s', label='p=1')
+    plt.plot(dofs1, c2_L2err_p2_Gummel_CG, ':o', label='p=2')
+    plt.plot(dofs1, c2_L2err_p3_Gummel_CG, ':*', label='p=3')
+    plt.xscale('symlog')
+    plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.xlabel("DOFs")
+    plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$")
+    plt.legend()
+
     plt.show()
+
+    # ------------------------------------------------------------------------------------------------------------------
+
+    # 数据来源dddd6,dddd8,dddd10
+    dofs2 = [4607, 36864, 294912, 2359296] # DG
+    phi_L2err_p1_Gummel_DG = [1.1908213316503e-06, 3.8176261280444e-07, 1.0404646102519e-07, 2.6787429280004e-08]
+    phi_L2err_p2_Gummel_DG = [5.580632641125e-08 , 6.0640956661286e-09, 7.0743246617863e-10, 8.6736711096234e-11]
+    phi_L2err_p3_Gummel_DG = [4.6405897152029e-09, 2.9565306186731e-10, 1.8573609966271e-11, 1.1640495522987e-12]
+    c1_L2err_p1_Gummel_DG  = [4.9368227106152e-05, 1.4896002572748e-05, 3.985692356082e-06 , 1.0213733304598e-06]
+    c1_L2err_p2_Gummel_DG  = [3.1422496583221e-06, 3.865702123161e-07 , 4.8032839183601e-08, 6.0102797904016e-09]
+    c1_L2err_p3_Gummel_DG  = [3.1921634593105e-07, 2.0585565098525e-08, 1.2959191897289e-09, 8.1249149295828e-11]
+    c2_L2err_p1_Gummel_DG  = [4.9368410620442e-05, 1.4896070498027e-05, 3.9857115708548e-06, 1.0213783077032e-06]
+    c2_L2err_p2_Gummel_DG  = [3.1422521951085e-06, 3.8657027271244e-07, 4.8032834638581e-08, 6.010278539527e-09]
+    c2_L2err_p3_Gummel_DG  = [3.1921646668613e-07, 2.0585571858461e-08, 1.2959195459689e-09, 8.1249162907996e-11]
+
+    fig = plt.figure()
+    fig.canvas.set_window_title('Window Title')
+    # fig.suptitle('Gummel-DG Algorithm')
+
+    plt.subplot(131)
+    plt.plot(dofs1, phi_L2err_p1_Gummel_DG, ':s', label='p=1')
+    plt.plot(dofs1, phi_L2err_p2_Gummel_DG, ':o', label='p=2')
+    plt.plot(dofs1, phi_L2err_p3_Gummel_DG, ':*', label='p=3')
+    plt.xscale('symlog')
+    plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.xlabel("DOFs")
+    plt.ylabel("$||\phi_e - \phi_h||_{L^2}$")
+    plt.legend()
+
+    plt.subplot(132)
+    plt.plot(dofs1, c1_L2err_p1_Gummel_DG, ':s', label='p=1')
+    plt.plot(dofs1, c1_L2err_p2_Gummel_DG, ':o', label='p=2')
+    plt.plot(dofs1, c1_L2err_p3_Gummel_DG, ':*', label='p=3')
+    plt.xscale('symlog')
+    plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.xlabel("DOFs")
+    plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$")
+    plt.legend()
+
+    plt.subplot(133)
+    plt.plot(dofs1, c2_L2err_p1_Gummel_DG, ':s', label='p=1')
+    plt.plot(dofs1, c2_L2err_p2_Gummel_DG, ':o', label='p=2')
+    plt.plot(dofs1, c2_L2err_p3_Gummel_DG, ':*', label='p=3')
+    plt.xscale('symlog')
+    plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.xlabel("DOFs")
+    plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$")
+    plt.legend()
+
+    plt.show()
+
+    # ------------------------------------------------------------------------------------------------------------------
+
+    # 数据来源dddd5,dddd7,dddd9
+    dofs1 = [375, 2187, 14739, 107811] # CG
+    total_time_cg_p1 = [0.210650833, 0.741110076 , 5.315967528  , 46.369986687 ]
+    total_time_cg_p2 = [1.236275491, 11.600974869, 121.869654467, 1199.248494011]
+    total_time_cg_p3 = [6.909309446, 88.314832273, 962.684786833, 9293.58390373]
+    # 数据来源dddd6,dddd8,dddd10
+    dofs2 = [4607, 36864, 294912, 2359296] # DG
+    total_time_dg_p1 = [0.511482366 , 5.675165956  , 60.855592931  , 590.498538606]
+    total_time_dg_p2 = [3.260492066 , 37.243939857 , 359.543541736 , 3234.251345357]
+    total_time_dg_p3 = [15.379614678, 161.333081452, 1511.730181773, 13465.790963216]
+
+    fig = plt.figure()
+    plt.subplot(121)
+    plt.plot(dofs1, total_time_cg_p1, ':s', label='p=1')
+    plt.plot(dofs1, total_time_cg_p2, ':o', label='p=2')
+    plt.plot(dofs1, total_time_cg_p3, ':*', label='p=3')
+    plt.xscale('symlog')
+    plt.yscale('symlog')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.xlabel("DOFs")
+    plt.ylabel("time (s)")
+    plt.title("Gummel-CG Algorithm")
+    plt.legend()
+
+    plt.subplot(122)
+    plt.plot(dofs2, total_time_dg_p1, ':s', label='p=1')
+    plt.plot(dofs2, total_time_dg_p2, ':o', label='p=2')
+    plt.plot(dofs2, total_time_dg_p3, ':*', label='p=3')
+    plt.xscale('symlog')
+    plt.yscale('symlog')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.xlabel("DOFs")
+    plt.ylabel("time (s)")
+    plt.title("Gummel-DG Algorithm")
+    plt.legend()
+
+    plt.show()
+
     os._exit(0)
 
 
 if __name__ == '__main__':
-    # demo()
+    demo()
 
     if 1:
         # 数据来源dddd5
