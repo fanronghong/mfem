@@ -441,10 +441,10 @@ private:
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *phi3);
 
-        (*phi3_n) *= relax_phi;
-        (*phi3)   *= 1-relax_phi;
+        (*phi3_n) *= relax;
+        (*phi3)   *= 1-relax;
         (*phi3)   += (*phi3_n); // 利用松弛方法更新phi3
-        (*phi3_n) /= relax_phi+TOL; // 还原phi3_n.避免松弛因子为0的情况造成除0
+        (*phi3_n) /= relax+TOL; // 还原phi3_n.避免松弛因子为0的情况造成除0
 
         if (verbose)
         {
@@ -492,7 +492,7 @@ private:
             }
         }
 
-        if (1)
+        if (1) // 去掉蛋白区域的自由度
         {
             Array<int> need_dofs;
             need_dofs.Append(water_dofs);
@@ -564,10 +564,10 @@ private:
             }
         }
 
-        (*c1_n) *= relax_c1;
-        (*c1)   *= 1-relax_c1;
+        (*c1_n) *= relax;
+        (*c1)   *= 1-relax;
         (*c1)   += (*c1_n); // 利用松弛方法更新c1
-        (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
+        (*c1_n) /= relax; // 还原c1_n.避免松弛因子为0的情况造成除0
 
         delete lf, blf, A, x, b;
     }
@@ -672,10 +672,10 @@ private:
             }
         }
 
-        (*c1_n) *= relax_c1;
-        (*c1)   *= 1-relax_c1;
+        (*c1_n) *= relax;
+        (*c1)   *= 1-relax;
         (*c1)   += (*c1_n); // 利用松弛方法更新c1
-        (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
+        (*c1_n) /= relax; // 还原c1_n.避免松弛因子为0的情况造成除0
 
         delete lf, blf, A, x, b;
     }
@@ -712,7 +712,7 @@ private:
             }
         }
 
-        if (1)
+        if (0)
         {
             Array<int> need_dofs;
             need_dofs.Append(water_dofs);
@@ -784,10 +784,10 @@ private:
             }
         }
 
-        (*c1_n) *= relax_c1;
-        (*c1)   *= 1-relax_c1;
+        (*c1_n) *= relax;
+        (*c1)   *= 1-relax;
         (*c1)   += (*c1_n); // 利用松弛方法更新c1
-        (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
+        (*c1_n) /= relax; // 还原c1_n.避免松弛因子为0的情况造成除0
 
         delete lf, blf, A, x, b;
     }
@@ -825,7 +825,7 @@ private:
             }
         }
 
-        if (1)
+        if (1) // 去掉蛋白区域的自由度，形成一个较小的代数系统
         {
             Array<int> need_dofs;
             need_dofs.Append(water_dofs);
@@ -898,10 +898,10 @@ private:
             }
         }
 
-        (*c2_n) *= relax_c2;
-        (*c2)   *= 1-relax_c2;
+        (*c2_n) *= relax;
+        (*c2)   *= 1-relax;
         (*c2)   += (*c2_n); // 利用松弛方法更新c2
-        (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
+        (*c2_n) /= relax+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
 
         delete lf, blf, A, x, b;
     }
@@ -1007,10 +1007,10 @@ private:
             }
         }
 
-        (*c2_n) *= relax_c2;
-        (*c2)   *= 1-relax_c2;
+        (*c2_n) *= relax;
+        (*c2)   *= 1-relax;
         (*c2)   += (*c2_n); // 利用松弛方法更新c2
-        (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
+        (*c2_n) /= relax+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
 
         delete lf, blf, A, x, b;
     }
@@ -1120,10 +1120,10 @@ private:
             }
         }
 
-        (*c2_n) *= relax_c2;
-        (*c2)   *= 1-relax_c2;
+        (*c2_n) *= relax;
+        (*c2)   *= 1-relax;
         (*c2)   += (*c2_n); // 利用松弛方法更新c2
-        (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
+        (*c2_n) /= relax+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
 
         delete lf, blf, A, x, b;
     }
@@ -1599,10 +1599,10 @@ private:
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *phi3);
 
-        (*phi3_n) *= relax_phi;
-        (*phi3)   *= 1-relax_phi;
+        (*phi3_n) *= relax;
+        (*phi3)   *= 1-relax;
         (*phi3)   += (*phi3_n); // 利用松弛方法更新phi3
-        (*phi3_n) /= relax_phi+TOL; // 还原phi3_n.避免松弛因子为0的情况造成除0
+        (*phi3_n) /= relax+TOL; // 还原phi3_n.避免松弛因子为0的情况造成除0
 
         if (verbose) {
             cout << "            L2 norm of phi3: " << phi3->ComputeL2Error(zero) << endl;

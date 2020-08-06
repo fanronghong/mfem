@@ -22,6 +22,7 @@ bool self_debug         = false;
 bool visualize          = false;
 bool local_conservation = true;
 bool show_peclet        = true;
+double relax            = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 
 double sigma            = -1.0; // symmetric parameter for DG
 double kappa            = 200; // penalty parameter for DG
@@ -220,9 +221,6 @@ ConstantCoefficient c2_D_bottom_coeff(c2_bottom);
 const int Gummel_max_iters  = 20;
 const double Gummel_rel_tol = 1e-8;
 const double TOL            = 1e-10;
-const double relax_phi      = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
-const double relax_c1       = 0.2;
-const double relax_c2       = 0.2;
 
 const double harmonic_rtol = 1.0e-8;
 const double harmonic_atol = 1.0e-20;

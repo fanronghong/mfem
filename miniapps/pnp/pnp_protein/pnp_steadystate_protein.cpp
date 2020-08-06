@@ -24,6 +24,7 @@ int main(int argc, char **argv)
     args.AddOption(&refine_times, "-r", "--refine", "Refine mesh times");
     args.AddOption(&p_order, "-p", "--p_order", "Polynomial order of basis function.");
     args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method: choose: cg, dg");
+    args.AddOption(&relax, "-relax", "--relax", "Relax parameter: (0.0, 1.0)");
     args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method, choose: newton, gummel");
     args.AddOption(&AdvecStable, "-stab", "--stable", "Choose Stabilization method: none, supg, eafe");
     args.AddOption(&self_debug, "-debug", "--self_debug", "-nodebug", "--no_self_debug", "Run many asserts to debug");

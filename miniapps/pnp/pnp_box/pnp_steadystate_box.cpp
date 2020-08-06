@@ -16,6 +16,7 @@ int main(int argc, char *argv[])
     args.AddOption(&p_order, "-p", "--p_order", "Polynomial order of basis function.");
     args.AddOption(&refine_times, "-ref", "--refinetimes", "Refine the initial mesh times.");
     args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method.");
+    args.AddOption(&relax, "-relax", "--relax", "Relax parameter: (0.0, 1.0)");
     args.AddOption(&max_newton, "-maxNewton", "--maxNewton", "Newton max iterations");
     args.AddOption(&zero_initial, "-zero", "--zero_initial", "-nonzero", "--nonzero_initial", "Choose zero or nonzero for nonlinear iteration initial value");
     args.AddOption(&initTol, "-initTol", "--initTol", "For obtaining initial value, Gummel iteration to satisfy the Tol");

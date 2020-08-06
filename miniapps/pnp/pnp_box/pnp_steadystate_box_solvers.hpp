@@ -297,10 +297,10 @@ private:
 //        cout << "l2 error norm of |phi_h - phi_e|: " << phi->ComputeL2Error(phi_exact) << endl;
 //        MFEM_ABORT("Stop here for testing convergence rate!");
 
-        (*phi_n) *= relax_phi;
-        (*phi)   *= 1-relax_phi;
+        (*phi_n) *= relax;
+        (*phi)   *= 1-relax;
         (*phi)   += (*phi_n); // 利用松弛方法更新phi3
-        (*phi_n) /= relax_phi+TOL; // 还原phi3_n.避免松弛因子为0的情况造成除0
+        (*phi_n) /= relax+TOL; // 还原phi3_n.避免松弛因子为0的情况造成除0
 
         delete blf;
         delete lf;
@@ -378,10 +378,10 @@ private:
 //        cout << "l2 error norm of |c1_h - c1_e|: " << c1->ComputeL2Error(c1_exact) << endl;
 //        MFEM_ABORT("Stop here for test convergence rate!");
 
-        (*c1_n) *= relax_c1;
-        (*c1)   *= 1-relax_c1;
+        (*c1_n) *= relax;
+        (*c1)   *= 1-relax;
         (*c1)   += (*c1_n); // 利用松弛方法更新c1
-        (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
+        (*c1_n) /= relax; // 还原c1_n.避免松弛因子为0的情况造成除0
 
         delete lf, blf, solver, smoother;
     }
@@ -436,10 +436,10 @@ private:
 //        cout << "l2 error norm of |c2_h - c2_e|: " << c2->ComputeL2Error(c2_exact) << endl;
 //        MFEM_ABORT("Stop here for test convergence rate!");
 
-        (*c2_n) *= relax_c2;
-        (*c2)   *= 1-relax_c2;
+        (*c2_n) *= relax;
+        (*c2)   *= 1-relax;
         (*c2)   += (*c2_n); // 利用松弛方法更新c2
-        (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
+        (*c2_n) /= relax+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
 
         delete lf, blf, solver, smoother;
     }
@@ -1752,10 +1752,10 @@ private:
 //        cout << "L2 error norm of |phi_h - phi_e|: " << phi->ComputeL2Error(phi_exact) << endl;
 //        MFEM_ABORT("Stop here for testing Poisson convergence rate in PNP_CG_Gummel_Solver_par!");
 
-        (*phi_n) *= relax_phi;
-        (*phi)   *= 1-relax_phi;
+        (*phi_n) *= relax;
+        (*phi)   *= 1-relax;
         (*phi)   += (*phi_n); // 利用松弛方法更新phi3
-        (*phi_n) /= relax_phi+TOL; // 还原phi3_n.避免松弛因子为0的情况造成除0
+        (*phi_n) /= relax+TOL; // 还原phi3_n.避免松弛因子为0的情况造成除0
 
         delete blf;
         delete lf;
@@ -1835,10 +1835,10 @@ private:
 //        cout << "L2 error norm of | c1_h - c1_e |: " << c1->ComputeL2Error(c1_exact) << endl;
 //        MFEM_ABORT("Stop here for test NP1 convergence rate in PNP_CG_Gummel_Solver_par!");
 
-        (*c1_n) *= relax_c1;
-        (*c1)   *= 1-relax_c1;
+        (*c1_n) *= relax;
+        (*c1)   *= 1-relax;
         (*c1)   += (*c1_n); // 利用松弛方法更新c1
-        (*c1_n) /= relax_c1; // 还原c1_n.避免松弛因子为0的情况造成除0
+        (*c1_n) /= relax; // 还原c1_n.避免松弛因子为0的情况造成除0
 
         delete lf, blf, solver;
     }
@@ -1906,10 +1906,10 @@ private:
 //        cout << "L2 error norm of | c2_h - c2_e |: " << c2->ComputeL2Error(c2_exact) << endl;
 //        MFEM_ABORT("Stop here for test convergence rate in PNP_CG_Gummel_Solver_par!");
 
-        (*c2_n) *= relax_c2;
-        (*c2)   *= 1-relax_c2;
+        (*c2_n) *= relax;
+        (*c2)   *= 1-relax;
         (*c2)   += (*c2_n); // 利用松弛方法更新c2
-        (*c2_n) /= relax_c2+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
+        (*c2_n) /= relax+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
 
         delete lf, blf, solver;
     }

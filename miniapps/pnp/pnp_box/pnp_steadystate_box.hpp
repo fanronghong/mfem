@@ -21,6 +21,7 @@ bool local_conservation     = false;
 bool visualize              = false;
 const char* output          = NULL;
 int max_newton              = 20;
+double relax                = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 
 const int bottom_attr       = 1;
 const int top_attr          = 6;
@@ -29,12 +30,9 @@ const int front_attr        = 2;
 const int back_attr         = 4;
 const int right_attr        = 3;
 
-const int Gummel_max_iters  = 100;
+const int Gummel_max_iters  = 50;
 const double Gummel_rel_tol = 1e-10;
 const double TOL            = 1e-20;
-const double relax_phi = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
-const double relax_c1  = 0.2;
-const double relax_c2  = 0.2;
 const double sigma = -1.0; // symmetric parameter for DG
 const double kappa = 20; // penalty parameter for DG
 
