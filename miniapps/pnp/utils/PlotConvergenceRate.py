@@ -49,17 +49,20 @@ def PlotConvergRate(p_order, mesh_sizes=None, errornorms1=None, errornorms2=None
     plt.legend()
     plt.show()
 
-def demo():
+def demo(): # Gummel线性化对应的CG和DG离散格式
     # 数据来源dddd5,dddd7,dddd9
-    dofs1 = [375, 2187, 14739, 107811] # CG
+    mesh_size = [0.38268343236509, 0.19134171618254, 0.095670858091283, 0.047835429045611] # CG, refine 3
+
     phi_L2err_p1_Gummel_CG = [1.709663142867e-06 ,5.331941427823e-07  ,1.417857507295e-07  ,3.6017364967346e-08]
-    phi_L2err_p2_Gummel_CG = [9.0677006036163e-08, 9.6411904332864e-09, 1.109203806505e-09 ,1.3505173221464e-10]
-    phi_L2err_p3_Gummel_CG = [7.1194678823885e-09, 4.0253823886387e-10, 2.3856537329199e-11, 1.4556205114757e-12]
     c1_L2err_p1_Gummel_CG  = [7.3887406793338e-05, 2.0872575658785e-05, 5.3954068610653e-06, 1.360507562863e-06]
-    c1_L2err_p2_Gummel_CG  = [4.8228081439797e-06, 5.9971712999153e-07, 7.4754960106047e-08, 9.340389628465e-09]
-    c1_L2err_p3_Gummel_CG  = [4.8436574995652e-07, 2.7996570372119e-08, 1.6643325888192e-09, 1.0160209458625e-10]
     c2_L2err_p1_Gummel_CG  = [7.3887625976381e-05, 2.0872659731248e-05, 5.3954305107203e-06, 1.3605136545165e-06]
+
+    phi_L2err_p2_Gummel_CG = [9.0677006036163e-08, 9.6411904332864e-09, 1.109203806505e-09 ,1.3505173221464e-10]
+    c1_L2err_p2_Gummel_CG  = [4.8228081439797e-06, 5.9971712999153e-07, 7.4754960106047e-08, 9.340389628465e-09]
     c2_L2err_p2_Gummel_CG  = [4.8228132396781e-06, 5.9971734542429e-07, 7.4754967450763e-08, 9.3403897286654e-09]
+
+    phi_L2err_p3_Gummel_CG = [7.1194678823885e-09, 4.0253823886387e-10, 2.3856537329199e-11, 1.4556205114757e-12]
+    c1_L2err_p3_Gummel_CG  = [4.8436574995652e-07, 2.7996570372119e-08, 1.6643325888192e-09, 1.0160209458625e-10]
     c2_L2err_p3_Gummel_CG  = [4.8436581086501e-07, 2.7996570874086e-08, 1.6643325840855e-09, 1.016021018976e-10]
 
     fig = plt.figure()
@@ -67,38 +70,41 @@ def demo():
     # fig.suptitle('Gummel-CG Algorithm')
 
     plt.subplot(131)
-    plt.plot(dofs1, phi_L2err_p1_Gummel_CG, ':s', label='p=1')
-    plt.plot(dofs1, phi_L2err_p2_Gummel_CG, ':o', label='p=2')
-    plt.plot(dofs1, phi_L2err_p3_Gummel_CG, ':*', label='p=3')
-    plt.xscale('symlog')
+    plt.plot(mesh_size, phi_L2err_p1_Gummel_CG, ':s', label='p=1')
+    plt.plot(mesh_size, phi_L2err_p2_Gummel_CG, ':o', label='p=2')
+    plt.plot(mesh_size, phi_L2err_p3_Gummel_CG, ':*', label='p=3')
+    # plt.xscale('symlog')
     plt.yscale('logit')
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("DOFs")
+    plt.gca().invert_xaxis()
+    plt.xlabel("mesh size (h)")
     plt.ylabel("$||\phi_e - \phi_h||_{L^2}$")
     plt.legend()
 
     plt.subplot(132)
-    plt.plot(dofs1, c1_L2err_p1_Gummel_CG, ':s', label='p=1')
-    plt.plot(dofs1, c1_L2err_p2_Gummel_CG, ':o', label='p=2')
-    plt.plot(dofs1, c1_L2err_p3_Gummel_CG, ':*', label='p=3')
-    plt.xscale('symlog')
+    plt.plot(mesh_size, c1_L2err_p1_Gummel_CG, ':s', label='p=1')
+    plt.plot(mesh_size, c1_L2err_p2_Gummel_CG, ':o', label='p=2')
+    plt.plot(mesh_size, c1_L2err_p3_Gummel_CG, ':*', label='p=3')
+    # plt.xscale('symlog')
     plt.yscale('logit')
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("DOFs")
+    plt.gca().invert_xaxis()
+    plt.xlabel("mesh size (h)")
     plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$")
     plt.legend()
 
     plt.subplot(133)
-    plt.plot(dofs1, c2_L2err_p1_Gummel_CG, ':s', label='p=1')
-    plt.plot(dofs1, c2_L2err_p2_Gummel_CG, ':o', label='p=2')
-    plt.plot(dofs1, c2_L2err_p3_Gummel_CG, ':*', label='p=3')
-    plt.xscale('symlog')
+    plt.plot(mesh_size, c2_L2err_p1_Gummel_CG, ':s', label='p=1')
+    plt.plot(mesh_size, c2_L2err_p2_Gummel_CG, ':o', label='p=2')
+    plt.plot(mesh_size, c2_L2err_p3_Gummel_CG, ':*', label='p=3')
+    # plt.xscale('symlog')
     plt.yscale('logit')
+    plt.gca().invert_xaxis()
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("DOFs")
+    plt.xlabel("mesh size (h)")
     plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$")
     plt.legend()
 
@@ -107,15 +113,18 @@ def demo():
     # ------------------------------------------------------------------------------------------------------------------
 
     # 数据来源dddd6,dddd8,dddd10
-    dofs2 = [4607, 36864, 294912, 2359296] # DG
+    mesh_size = [0.38268343236509, 0.19134171618254, 0.095670858091283, 0.047835429045611] # DG, refine 3
+
     phi_L2err_p1_Gummel_DG = [1.1908213316503e-06, 3.8176261280444e-07, 1.0404646102519e-07, 2.6787429280004e-08]
-    phi_L2err_p2_Gummel_DG = [5.580632641125e-08 , 6.0640956661286e-09, 7.0743246617863e-10, 8.6736711096234e-11]
-    phi_L2err_p3_Gummel_DG = [4.6405897152029e-09, 2.9565306186731e-10, 1.8573609966271e-11, 1.1640495522987e-12]
     c1_L2err_p1_Gummel_DG  = [4.9368227106152e-05, 1.4896002572748e-05, 3.985692356082e-06 , 1.0213733304598e-06]
-    c1_L2err_p2_Gummel_DG  = [3.1422496583221e-06, 3.865702123161e-07 , 4.8032839183601e-08, 6.0102797904016e-09]
-    c1_L2err_p3_Gummel_DG  = [3.1921634593105e-07, 2.0585565098525e-08, 1.2959191897289e-09, 8.1249149295828e-11]
     c2_L2err_p1_Gummel_DG  = [4.9368410620442e-05, 1.4896070498027e-05, 3.9857115708548e-06, 1.0213783077032e-06]
+
+    phi_L2err_p2_Gummel_DG = [5.580632641125e-08 , 6.0640956661286e-09, 7.0743246617863e-10, 8.6736711096234e-11]
+    c1_L2err_p3_Gummel_DG  = [3.1921634593105e-07, 2.0585565098525e-08, 1.2959191897289e-09, 8.1249149295828e-11]
     c2_L2err_p2_Gummel_DG  = [3.1422521951085e-06, 3.8657027271244e-07, 4.8032834638581e-08, 6.010278539527e-09]
+
+    phi_L2err_p3_Gummel_DG = [4.6405897152029e-09, 2.9565306186731e-10, 1.8573609966271e-11, 1.1640495522987e-12]
+    c1_L2err_p2_Gummel_DG  = [3.1422496583221e-06, 3.865702123161e-07 , 4.8032839183601e-08, 6.0102797904016e-09]
     c2_L2err_p3_Gummel_DG  = [3.1921646668613e-07, 2.0585571858461e-08, 1.2959195459689e-09, 8.1249162907996e-11]
 
     fig = plt.figure()
@@ -123,38 +132,41 @@ def demo():
     # fig.suptitle('Gummel-DG Algorithm')
 
     plt.subplot(131)
-    plt.plot(dofs1, phi_L2err_p1_Gummel_DG, ':s', label='p=1')
-    plt.plot(dofs1, phi_L2err_p2_Gummel_DG, ':o', label='p=2')
-    plt.plot(dofs1, phi_L2err_p3_Gummel_DG, ':*', label='p=3')
-    plt.xscale('symlog')
+    plt.plot(mesh_size, phi_L2err_p1_Gummel_DG, ':s', label='p=1')
+    plt.plot(mesh_size, phi_L2err_p2_Gummel_DG, ':o', label='p=2')
+    plt.plot(mesh_size, phi_L2err_p3_Gummel_DG, ':*', label='p=3')
+    # plt.xscale('symlog')
     plt.yscale('logit')
     plt.grid(True)
+    plt.gca().invert_xaxis()
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("DOFs")
+    plt.xlabel("mesh size (h)")
     plt.ylabel("$||\phi_e - \phi_h||_{L^2}$")
     plt.legend()
 
     plt.subplot(132)
-    plt.plot(dofs1, c1_L2err_p1_Gummel_DG, ':s', label='p=1')
-    plt.plot(dofs1, c1_L2err_p2_Gummel_DG, ':o', label='p=2')
-    plt.plot(dofs1, c1_L2err_p3_Gummel_DG, ':*', label='p=3')
-    plt.xscale('symlog')
+    plt.plot(mesh_size, c1_L2err_p1_Gummel_DG, ':s', label='p=1')
+    plt.plot(mesh_size, c1_L2err_p2_Gummel_DG, ':o', label='p=2')
+    plt.plot(mesh_size, c1_L2err_p3_Gummel_DG, ':*', label='p=3')
+    # plt.xscale('symlog')
     plt.yscale('logit')
     plt.grid(True)
+    plt.gca().invert_xaxis()
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("DOFs")
+    plt.xlabel("mesh size (h)")
     plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$")
     plt.legend()
 
     plt.subplot(133)
-    plt.plot(dofs1, c2_L2err_p1_Gummel_DG, ':s', label='p=1')
-    plt.plot(dofs1, c2_L2err_p2_Gummel_DG, ':o', label='p=2')
-    plt.plot(dofs1, c2_L2err_p3_Gummel_DG, ':*', label='p=3')
-    plt.xscale('symlog')
+    plt.plot(mesh_size, c2_L2err_p1_Gummel_DG, ':s', label='p=1')
+    plt.plot(mesh_size, c2_L2err_p2_Gummel_DG, ':o', label='p=2')
+    plt.plot(mesh_size, c2_L2err_p3_Gummel_DG, ':*', label='p=3')
+    # plt.xscale('symlog')
     plt.yscale('logit')
     plt.grid(True)
+    plt.gca().invert_xaxis()
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("DOFs")
+    plt.xlabel("mesh size (h)")
     plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$")
     plt.legend()
 
@@ -163,39 +175,40 @@ def demo():
     # ------------------------------------------------------------------------------------------------------------------
 
     # 数据来源dddd5,dddd7,dddd9
-    dofs1 = [375, 2187, 14739, 107811] # CG
+    mesh_size = [0.38268343236509, 0.19134171618254, 0.095670858091283, 0.047835429045611]
     total_time_cg_p1 = [0.210650833, 0.741110076 , 5.315967528  , 46.369986687 ]
     total_time_cg_p2 = [1.236275491, 11.600974869, 121.869654467, 1199.248494011]
     total_time_cg_p3 = [6.909309446, 88.314832273, 962.684786833, 9293.58390373]
     # 数据来源dddd6,dddd8,dddd10
-    dofs2 = [4607, 36864, 294912, 2359296] # DG
     total_time_dg_p1 = [0.511482366 , 5.675165956  , 60.855592931  , 590.498538606]
     total_time_dg_p2 = [3.260492066 , 37.243939857 , 359.543541736 , 3234.251345357]
     total_time_dg_p3 = [15.379614678, 161.333081452, 1511.730181773, 13465.790963216]
 
     fig = plt.figure()
     plt.subplot(121)
-    plt.plot(dofs1, total_time_cg_p1, ':s', label='p=1')
-    plt.plot(dofs1, total_time_cg_p2, ':o', label='p=2')
-    plt.plot(dofs1, total_time_cg_p3, ':*', label='p=3')
-    plt.xscale('symlog')
+    plt.plot(mesh_size, total_time_cg_p1, ':s', label='p=1')
+    plt.plot(mesh_size, total_time_cg_p2, ':o', label='p=2')
+    plt.plot(mesh_size, total_time_cg_p3, ':*', label='p=3')
+    # plt.xscale('symlog')
     plt.yscale('symlog')
     plt.grid(True)
+    plt.gca().invert_xaxis()
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("DOFs")
+    plt.xlabel("mesh size (h)")
     plt.ylabel("time (s)")
     plt.title("Gummel-CG Algorithm")
     plt.legend()
 
     plt.subplot(122)
-    plt.plot(dofs2, total_time_dg_p1, ':s', label='p=1')
-    plt.plot(dofs2, total_time_dg_p2, ':o', label='p=2')
-    plt.plot(dofs2, total_time_dg_p3, ':*', label='p=3')
-    plt.xscale('symlog')
+    plt.plot(mesh_size, total_time_dg_p1, ':s', label='p=1')
+    plt.plot(mesh_size, total_time_dg_p2, ':o', label='p=2')
+    plt.plot(mesh_size, total_time_dg_p3, ':*', label='p=3')
+    # plt.xscale('symlog')
     plt.yscale('symlog')
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("DOFs")
+    plt.gca().invert_xaxis()
+    plt.xlabel("mesh size (h)")
     plt.ylabel("time (s)")
     plt.title("Gummel-DG Algorithm")
     plt.legend()
@@ -204,9 +217,174 @@ def demo():
 
     os._exit(0)
 
+def demo1(): # Newton线性化对应的CG和DG离散格式
+    # 数据来源ggggg5,ggggg7,ggggg9
+    mesh_size = [0.38268343236509, 0.19134171618254, 0.095670858091283, 0.047835429045611] # refine 3 times
+
+    phi_L2err_p1_Newton_CG = [4.9076706008227e-06, 4.3338167765831e-07, 1.3435952134685e-07, 3.5531787552875e-08]
+    c1_L2err_p1_Newton_CG  = [0.00029850795683089, 2.0872575499734e-05, 5.3954068397671e-06, 1.360507579623e-06]
+    c2_L2err_p1_Newton_CG  = [9.187202621044e-05 , 2.0872659889465e-05, 5.3954305313618e-06, 1.3605136383262e-06]
+
+    phi_L2err_p2_Newton_CG = [2.9629110978087e-07, 1.8670159593064e-08, 1.4400357417177e-09, 1.4563874484459e-10]
+    c1_L2err_p2_Newton_CG  = [4.822807658265e-06 , 5.9971712471177e-07, 7.4754960755148e-08, 9.3403893481035e-09]
+    c2_L2err_p2_Newton_CG  = [4.8228137250288e-06, 5.9971735082251e-07, 7.4754966924163e-08, 9.3403899759726e-09]
+
+    phi_L2err_p3_Newton_CG = [4.8677615998827e-08, 2.8337052716854e-09, 1.6031905025776e-10, 9.3186025279306e-12]
+    c1_L2err_p3_Newton_CG  = [4.8436573442466e-07, 2.7996570195992e-08, 1.6643325814789e-09, 1.016020955722e-10]
+    c2_L2err_p3_Newton_CG  = [4.8436582638666e-07, 2.7996571019712e-08, 1.6643325869872e-09, 1.016020964525e-10]
+
+    fig = plt.figure()
+    fig.canvas.set_window_title('Window Title')
+    # fig.suptitle('Newton-CG Algorithm')
+
+    plt.subplot(131)
+    plt.plot(mesh_size, phi_L2err_p1_Newton_CG, ':s', label='p=1')
+    plt.plot(mesh_size, phi_L2err_p2_Newton_CG, ':o', label='p=2')
+    plt.plot(mesh_size, phi_L2err_p3_Newton_CG, ':*', label='p=3')
+    # plt.xscale('symlog')
+    plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().invert_xaxis()
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.xlabel("mesh size (h)")
+    plt.ylabel("$||\phi_e - \phi_h||_{L^2}$")
+    plt.legend()
+
+    plt.subplot(132)
+    plt.plot(mesh_size, c1_L2err_p1_Newton_CG, ':s', label='p=1')
+    plt.plot(mesh_size, c1_L2err_p2_Newton_CG, ':o', label='p=2')
+    plt.plot(mesh_size, c1_L2err_p3_Newton_CG, ':*', label='p=3')
+    # plt.xscale('symlog')
+    plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().invert_xaxis()
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.xlabel("mesh size (h)")
+    plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$")
+    plt.legend()
+
+    plt.subplot(133)
+    plt.plot(mesh_size, c2_L2err_p1_Newton_CG, ':s', label='p=1')
+    plt.plot(mesh_size, c2_L2err_p2_Newton_CG, ':o', label='p=2')
+    plt.plot(mesh_size, c2_L2err_p3_Newton_CG, ':*', label='p=3')
+    # plt.xscale('symlog')
+    plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.gca().invert_xaxis()
+    plt.xlabel("mesh size (h)")
+    plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$")
+    plt.legend()
+
+    plt.show()
+
+    # ------------------------------------------------------------------------------------------------------------------
+
+    # 数据来源ggggg6,ggggg8,ggggg10
+    phi_L2err_p1_Newton_DG = [1.4080441169605e-06, 4.3726876673531e-07, 1.1746850212489e-07, 3.0054706270964e-08]
+    c1_L2err_p1_Newton_DG  = [4.9368238499083e-05, 1.4896013036878e-05, 3.9856960363718e-06, 1.0213743536607e-06]
+    c2_L2err_p1_Newton_DG  = [4.9368422163591e-05, 1.4896079499274e-05, 3.9857146848341e-06, 1.0213791825122e-06]
+
+    phi_L2err_p2_Newton_DG = [6.910269731495e-08 , 7.5963296171886e-09, 8.943292837865e-10 ,1.0992319969451e-10]
+    c1_L2err_p2_Newton_DG  = [3.1422444583083e-06, 3.8656915698253e-07, 4.8032688690171e-08, 6.0102600548903e-09]
+    c2_L2err_p2_Newton_DG  = [3.1422481054841e-06, 3.8656949356228e-07, 4.8032724096439e-08, 6.0102650690159e-09]
+
+    phi_L2err_p3_Newton_DG = []
+    c1_L2err_p3_Newton_DG  = []
+    c2_L2err_p3_Newton_DG  = []
+
+    fig = plt.figure()
+    fig.canvas.set_window_title('Window Title')
+    # fig.suptitle('Newton-DG Algorithm')
+
+    plt.subplot(131)
+    plt.plot(mesh_size, phi_L2err_p1_Newton_DG, ':s', label='p=1')
+    plt.plot(mesh_size, phi_L2err_p2_Newton_DG, ':o', label='p=2')
+    plt.plot(mesh_size, phi_L2err_p3_Newton_DG, ':*', label='p=3')
+    # plt.xscale('symlog')
+    plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.gca().invert_xaxis()
+    plt.xlabel("mesh size (h)")
+    plt.ylabel("$||\phi_e - \phi_h||_{L^2}$")
+    plt.legend()
+
+    plt.subplot(132)
+    plt.plot(mesh_size, c1_L2err_p1_Newton_DG, ':s', label='p=1')
+    plt.plot(mesh_size, c1_L2err_p2_Newton_DG, ':o', label='p=2')
+    plt.plot(mesh_size, c1_L2err_p3_Newton_DG, ':*', label='p=3')
+    # plt.xscale('symlog')
+    plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.gca().invert_xaxis()
+    plt.xlabel("mesh size (h)")
+    plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$")
+    plt.legend()
+
+    plt.subplot(133)
+    plt.plot(mesh_size, c2_L2err_p1_Newton_DG, ':s', label='p=1')
+    plt.plot(mesh_size, c2_L2err_p2_Newton_DG, ':o', label='p=2')
+    plt.plot(mesh_size, c2_L2err_p3_Newton_DG, ':*', label='p=3')
+    # plt.xscale('symlog')
+    plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.gca().invert_xaxis()
+    plt.xlabel("mesh size (h)")
+    plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$")
+    plt.legend()
+
+    plt.show()
+
+    # ------------------------------------------------------------------------------------------------------------------
+
+    # 数据来源ggggg5,ggggg7,ggggg9
+    total_time_cg_p1 = [0.214845806, 0.597663727 , 4.69957973   , 26.865184912]
+    total_time_cg_p2 = [0.612946536, 5.182390011 , 49.280601455 , 302.793871018]
+    total_time_cg_p3 = [3.068604385, 32.420339671, 317.660134215, 1981.021138444]
+    # 数据来源dddd6,dddd8,dddd10
+    total_time_dg_p1 = [0.821611292, 9.782432553 , 108.581384507, 1057.423638407]
+    total_time_dg_p2 = [5.195099324, 58.013185158, 560.675797105, 5058.251439714]
+    total_time_dg_p3 = []
+
+    fig = plt.figure()
+    plt.subplot(121)
+    plt.plot(mesh_size, total_time_cg_p1, ':s', label='p=1')
+    plt.plot(mesh_size, total_time_cg_p2, ':o', label='p=2')
+    plt.plot(mesh_size, total_time_cg_p3, ':*', label='p=3')
+    # plt.xscale('symlog')
+    plt.yscale('symlog')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.gca().invert_xaxis()
+    plt.xlabel("mesh size (h)")
+    plt.ylabel("time (s)")
+    plt.title("Newton-CG Algorithm")
+    plt.legend()
+
+    plt.subplot(122)
+    plt.plot(mesh_size, total_time_dg_p1, ':s', label='p=1')
+    plt.plot(mesh_size, total_time_dg_p2, ':o', label='p=2')
+    plt.plot(mesh_size, total_time_dg_p3, ':*', label='p=3')
+    # plt.xscale('symlog')
+    plt.yscale('symlog')
+    plt.grid(True)
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.gca().invert_xaxis()
+    plt.xlabel("mesh size (h)")
+    plt.ylabel("time (s)")
+    plt.title("Newton-DG Algorithm")
+    plt.legend()
+
+    plt.show()
+
+    os._exit(0)
+
 
 if __name__ == '__main__':
-    demo()
+    demo1()
 
     if 1:
         # 数据来源dddd5
