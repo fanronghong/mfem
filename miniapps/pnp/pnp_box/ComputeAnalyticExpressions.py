@@ -63,13 +63,21 @@ def SymbolCompute():
 
     phi_flux = [-water_rel_permittivity * phi3_x,
                 -water_rel_permittivity * phi3_y,
-                -water_rel_permittivity * phi3_z]
+                -water_rel_permittivity * phi3_z] # - epsilon_s grad(phi)
     c1_flux = [-D1 * (c1_x + z1 * c1 * phi3_x),
                -D1 * (c1_y + z1 * c1 * phi3_y),
-               -D1 * (c1_z + z1 * c1 * phi3_z)]
+               -D1 * (c1_z + z1 * c1 * phi3_z)] # - D1 (grad(c1) + z1 c1 grad(phi))
     c2_flux = [-D2 * (c2_x + z2 * c2 * phi3_x),
                -D2 * (c2_y + z2 * c2 * phi3_y),
-               -D2 * (c2_z + z2 * c2 * phi3_z)]
+               -D2 * (c2_z + z2 * c2 * phi3_z)] # - D2 (grad(c2) + z2 c2 grad(phi))
+
+    # 真实的对流速度
+    adv1 = [D1 * z1 * phi3_x,
+            D1 * z1 * phi3_y,
+            D1 * z1 * phi3_z]
+    adv2 = [D2 * z2 * phi3_x,
+            D2 * z2 * phi3_y,
+            D2 * z2 * phi3_z]
 
     f1 = c1_flux[0].diff(x, 1) + c1_flux[1].diff(y, 1) + c1_flux[2].diff(z, 1)
     f2 = c2_flux[0].diff(x, 1) + c2_flux[1].diff(y, 1) + c2_flux[2].diff(z, 1)
@@ -84,6 +92,9 @@ def SymbolCompute():
     print("\nphi flux:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(phi_flux[0]), sympy.printing.ccode(phi_flux[1]), sympy.printing.ccode(phi_flux[2])))
     print("\nc1 flux:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(c1_flux[0]), sympy.printing.ccode(c1_flux[1]), sympy.printing.ccode(c1_flux[2])))
     print("\nc2 flux:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(c2_flux[0]), sympy.printing.ccode(c2_flux[1]), sympy.printing.ccode(c2_flux[2])))
+
+    print("\nexact adv1:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(adv1[0]), sympy.printing.ccode(adv1[1]), sympy.printing.ccode(adv1[2])))
+    print("\nexact adv2:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(adv2[0]), sympy.printing.ccode(adv2[1]), sympy.printing.ccode(adv2[2])))
 
 
 if __name__ == '__main__':
