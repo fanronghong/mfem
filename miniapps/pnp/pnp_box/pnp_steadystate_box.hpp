@@ -15,6 +15,7 @@ const char* Linearize       = "gummel"; // newton, gummel
 bool zero_initial           = true; // 非线性迭代的初值是否为0
 double initTol              = 1e-3; // 为得到非线性迭代的初值所需Gummel迭代
 const char* Discretize      = "cg"; // cg, dg
+const char* AdvecStable     = "none"; // none, eafe, supg
 const char* options_src     = "././pnp_box_petsc_opts";
 bool ComputeConvergenceRate = false; // 利用解析解计算误差阶
 bool local_conservation     = false;

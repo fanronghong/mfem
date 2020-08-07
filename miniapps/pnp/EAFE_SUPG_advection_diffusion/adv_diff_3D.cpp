@@ -3,7 +3,7 @@
  * [1] a monotone finite element scheme for convection-diffusion equations
  *
  *  -\nabla\cdot(\alpha \nabla u + \beta u) = f, in \Omega,
- *  u = u_D, on \partial\Omega
+ *                                        u = u_D, on \partial\Omega
  */
 #include <string>
 #include <iostream>

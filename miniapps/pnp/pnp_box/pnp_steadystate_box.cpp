@@ -21,6 +21,7 @@ int main(int argc, char *argv[])
     args.AddOption(&zero_initial, "-zero", "--zero_initial", "-nonzero", "--nonzero_initial", "Choose zero or nonzero for nonlinear iteration initial value");
     args.AddOption(&initTol, "-initTol", "--initTol", "For obtaining initial value, Gummel iteration to satisfy the Tol");
     args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method.");
+    args.AddOption(&AdvecStable, "-stable", "--stable", "Choose stabilization: none, supg, eafe");
     args.AddOption(&ComputeConvergenceRate, "-rate", "--computerate", "-norate", "--nocomputerate", "Compute convergence rate by using analytic solutions");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.AddOption(&visualize, "-vis", "--visualize", "-novis", "--novisualize", "Plot solution");
