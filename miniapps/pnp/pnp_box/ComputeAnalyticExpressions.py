@@ -79,6 +79,9 @@ def SymbolCompute():
             D2 * z2 * phi3_y,
             D2 * z2 * phi3_z]
 
+    div_adv1 = adv1[0].diff(x, 1) + adv1[1].diff(y, 1) + adv1[2].diff(z, 1)
+    div_adv2 = adv2[0].diff(x, 1) + adv2[1].diff(y, 1) + adv2[2].diff(z, 1)
+
     f1 = c1_flux[0].diff(x, 1) + c1_flux[1].diff(y, 1) + c1_flux[2].diff(z, 1)
     f2 = c2_flux[0].diff(x, 1) + c2_flux[1].diff(y, 1) + c2_flux[2].diff(z, 1)
 
@@ -95,6 +98,9 @@ def SymbolCompute():
 
     print("\nexact adv1:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(adv1[0]), sympy.printing.ccode(adv1[1]), sympy.printing.ccode(adv1[2])))
     print("\nexact adv2:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(adv2[0]), sympy.printing.ccode(adv2[1]), sympy.printing.ccode(adv2[2])))
+
+    print("\nexact div_adv1:\nreturn {};".format(sympy.printing.ccode(div_adv1)))
+    print("\nexact div_adv2:\nreturn {};".format(sympy.printing.ccode(div_adv2)))
 
 
 if __name__ == '__main__':

@@ -35,6 +35,10 @@ void DiffusionTensor_Cl(const Vector &x, DenseMatrix &K) {
     K(2, 1) = 0;
     K(2, 2) = D_Cl;
 }
+MatrixFunctionCoefficient diffusion_tensor_K(3, DiffusionTensor_K);
+VectorFunctionCoefficient advection_vector_K(3, adv1);
+MatrixFunctionCoefficient diffusion_tensor_Cl(3, DiffusionTensor_Cl);
+VectorFunctionCoefficient advection_vector_Cl(3, adv2);
 
 
 class SPD_PreconditionerSolver: public Solver
@@ -214,13 +218,13 @@ public:
 
             if (strcmp(AdvecStable, "none") == 0)      Solve_NP1();
             else if (strcmp(AdvecStable, "eafe") == 0) Solve_NP1_EAFE();
-//            else if (strcmp(AdvecStable, "supg") == 0) Solve_NP1_SUPG();
+            else if (strcmp(AdvecStable, "supg") == 0) Solve_NP1_SUPG();
             else MFEM_ABORT("Not support stabilization.");
             (*c1_n) = (*c1);
 
             if (strcmp(AdvecStable, "none") == 0)      Solve_NP2();
             else if (strcmp(AdvecStable, "eafe") == 0) Solve_NP2_EAFE();
-//            else if (strcmp(AdvecStable, "supg") == 0) Solve_NP2_SUPG();
+            else if (strcmp(AdvecStable, "supg") == 0) Solve_NP2_SUPG();
             else MFEM_ABORT("Not support stabilization.");
             (*c2_n) = (*c2);
 
@@ -592,6 +596,86 @@ private:
 
         delete lf, blf, solver;
     }
+    void Solve_NP1_SUPG()
+    {
+//        phi_n->ProjectCoefficient(phi_exact); // test NP1 convergence rate
+
+        ParBilinearForm *blf = new ParBilinearForm(fsp);
+        // D1 (grad(c1), grad(v1))
+        blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+        // D1 z1 (c1 grad(phi^k), grad(v1))
+        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_K_prod_v_K));
+        blf->AddDomainIntegrator(new SUPG_BilinearFormIntegrator(&diffusion_tensor_K, neg, advection_vector_K, neg, div_Adv1, mesh));
+        blf->AddDomainIntegrator(new MassIntegrator(neg_div_Adv1));
+        blf->Assemble(0);
+        blf->Finalize(0);
+
+        ParLinearForm *lf = new ParLinearForm(fsp); //NP1方程的右端项
+        *lf = 0.0;
+        // D1 <(grad(c1_e) + z1 c1_e grad(phi_e)) . n, v1>, c1_flux = J1 = -D1 (grad(c1_e) + z1 c1_e grad(phi_e))
+        ScalarVectorProductCoefficient neg_J1(neg, J1);
+        lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J1), Neumann_attr);
+        // (f1, v1)
+        lf->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+        lf->AddDomainIntegrator(new SUPG_LinearFormIntegrator(diffusion_tensor_K, advection_vector_K, one, f1_analytic, mesh));
+        lf->Assemble();
+
+        PetscParMatrix *A = new PetscParMatrix();
+        PetscParVector *x = new PetscParVector(fsp);
+        PetscParVector *b = new PetscParVector(fsp);
+        blf->SetOperatorType(Operator::PETSC_MATAIJ);
+        blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
+
+        {
+//            Mat A_mat = Mat(*A);
+//            Write_Mat(A_mat, "./A_matlab.txt");
+//            MFEM_ABORT("output matrix A.");
+        }
+
+        PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
+
+        if (use_np1spd)
+        {
+            ParBilinearForm* p_blf = new ParBilinearForm(fsp);
+            p_blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+            p_blf->Assemble(0);
+            p_blf->Finalize(0);
+
+            PetscParMatrix* P = new PetscParMatrix();
+            p_blf->SetOperatorType(Operator::PETSC_MATAIJ);
+            p_blf->FormSystemMatrix(ess_tdof_list, *P);
+
+            PetscLinearSolver* pc = new PetscLinearSolver(*P, "np1spdpc_");
+            PetscPreconditioner* pc_ = new PetscPreconditioner(*P, "np1spdpc_");
+            solver->SetPreconditioner(*pc_);
+        }
+
+        chrono.Clear();
+        chrono.Start();
+        solver->Mult(*b, *x);
+        chrono.Stop();
+        blf->RecoverFEMSolution(*x, *lf, *c1);
+
+#ifdef SELF_VERBOSE
+        if (solver->GetConverged() == 1)
+            cout << "np1 solver: Converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
+        else if (solver->GetConverged() != 1)
+            cerr << "np1 solver: Not Converge, taking " << chrono.RealTime() << " s." << endl;
+#endif
+
+        np1_iter.Append(solver->GetNumIterations());
+        np1_time.Append(chrono.RealTime());
+
+//        cout << "L2 error norm of | c1_h - c1_e |: " << c1->ComputeL2Error(c1_exact) << endl;
+//        MFEM_ABORT("Stop here for test NP1 convergence rate in PNP_CG_Gummel_Solver_par!");
+
+        (*c1_n) *= relax;
+        (*c1)   *= 1-relax;
+        (*c1)   += (*c1_n); // 利用松弛方法更新c1
+        (*c1_n) /= relax; // 还原c1_n.避免松弛因子为0的情况造成除0
+
+        delete lf, blf, solver;
+    }
 
     // 5.求解耦合的方程NP2方程
     void Solve_NP2()
@@ -695,6 +779,78 @@ private:
         chrono.Clear();
         chrono.Start();
         solver->Mult(*lf, *x);
+        chrono.Stop();
+        blf->RecoverFEMSolution(*x, *lf, *c2);
+
+#ifdef SELF_VERBOSE
+        if (solver->GetConverged() == 1)
+            cout << "np2 solver: Converged by iterating " << solver->GetNumIterations() << " times, taking " << chrono.RealTime() << " s." << endl;
+        else if (solver->GetConverged() != 1)
+            cerr << "np2 solver: Not Converge, taking " << chrono.RealTime() << " s." << endl;
+#endif
+
+        np2_iter.Append(solver->GetNumIterations());
+        np2_time.Append(chrono.RealTime());
+
+//        cout << "L2 error norm of | c2_h - c2_e |: " << c2->ComputeL2Error(c2_exact) << endl;
+//        MFEM_ABORT("Stop here for test convergence rate in PNP_CG_Gummel_Solver_par!");
+
+        (*c2_n) *= relax;
+        (*c2)   *= 1-relax;
+        (*c2)   += (*c2_n); // 利用松弛方法更新c2
+        (*c2_n) /= relax+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
+
+        delete lf, blf, solver;
+    }
+    void Solve_NP2_SUPG()
+    {
+//        phi_n->ProjectCoefficient(phi_exact); // test NP2 convergence rate
+
+        ParBilinearForm *blf(new ParBilinearForm(fsp));
+        // D2 (grad(c2), grad(v2))
+        blf->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
+        // D2 z2 (c2 grad(phi^k), grad(v2))
+        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_Cl_prod_v_Cl));
+        blf->AddDomainIntegrator(new SUPG_BilinearFormIntegrator(&diffusion_tensor_Cl, neg, advection_vector_Cl, neg, div_Adv2, mesh));
+        blf->AddDomainIntegrator(new MassIntegrator(neg_div_Adv2));
+        blf->Assemble(0);
+        blf->Finalize(0);
+
+        ParLinearForm *lf = new ParLinearForm(fsp); //NP2方程的右端项
+        // D2 <(grad(c2_e) + z2 c2_e grad(phi_e)) . n, v2>, c2_flux = J2 = -D2 (grad(c2_e) + z2 c2_e grad(phi_e))
+        ScalarVectorProductCoefficient neg_J2(neg, J2);
+        lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J2), Neumann_attr);
+        // (f2, v2)
+        lf->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
+        lf->AddDomainIntegrator(new SUPG_LinearFormIntegrator(diffusion_tensor_Cl, advection_vector_Cl, one, f2_analytic, mesh));
+        lf->Assemble();
+
+        PetscParMatrix *A = new PetscParMatrix();
+        PetscParVector *x = new PetscParVector(fsp);
+        PetscParVector *b = new PetscParVector(fsp);
+        blf->SetOperatorType(Operator::PETSC_MATAIJ);
+        blf->FormLinearSystem(ess_tdof_list, *c2, *lf, *A, *x, *b);
+
+        PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
+
+        if (use_np2spd)
+        {
+            ParBilinearForm* p = new ParBilinearForm(fsp);
+            p->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
+            p->Assemble(0);
+            p->Finalize(0);
+
+            PetscParMatrix* P = new PetscParMatrix();
+            p->SetOperatorType(Operator::PETSC_MATAIJ);
+            p->FormSystemMatrix(ess_tdof_list, *P);
+
+            PetscLinearSolver* pc = new PetscLinearSolver(*P, "np2spdpc_");
+            solver->SetPreconditioner(*pc);
+        }
+
+        chrono.Clear();
+        chrono.Start();
+        solver->Mult(*b, *x);
         chrono.Stop();
         blf->RecoverFEMSolution(*x, *lf, *c2);
 

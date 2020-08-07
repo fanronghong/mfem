@@ -117,7 +117,7 @@ void SUPG_advec_diffu(Mesh& mesh, Array<double>& L2norms, Array<double>& meshsiz
     blf->AddDomainIntegrator(new DiffusionIntegrator(diffusion_tensor)); // (alpha grad(u), grad(v))
     blf->AddDomainIntegrator(new ConvectionIntegrator(advection_vector, -1.0)); // -(beta \cdot grad(u), v)
     blf->AddDomainIntegrator(new MassIntegrator(neg_div_advection_)); // (-div(beta) u, v)
-    blf->AddDomainIntegrator(new SUPG_BilinearFormIntegrator(diffusion_tensor, neg, advection_vector, neg, div_adv, mesh));
+    blf->AddDomainIntegrator(new SUPG_BilinearFormIntegrator(&diffusion_tensor, neg, advection_vector, neg, div_adv, mesh));
     blf->Assemble(0);
 //    {
 //        SparseMatrix temp(blf->SpMat());

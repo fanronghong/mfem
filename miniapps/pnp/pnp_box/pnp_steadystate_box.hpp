@@ -96,6 +96,14 @@ void adv2(const Vector& x, Vector& y)
     y[1] = 1.3753739348113418e-6*sin(1.570796326795*x[1])*cos(1.570796326795*x[0])*cos(1.570796326795*x[2]);
     y[2] = 1.3753739348113418e-6*sin(1.570796326795*x[2])*cos(1.570796326795*x[0])*cos(1.570796326795*x[1]) - 3.9505574808348666e-7;
 }
+double div_adv1(const Vector& x)
+{
+    return -6.2578039751994586e-6*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
+}
+double div_adv2(const Vector& x)
+{
+    return 6.4812969743137253e-6*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
+}
 
 FunctionCoefficient phi_exact(phi_exact_);
 FunctionCoefficient c1_exact(c1_exact_);
@@ -105,6 +113,8 @@ FunctionCoefficient f2_analytic(f2_analytic_);
 VectorFunctionCoefficient J (3, J_);
 VectorFunctionCoefficient J1(3, J1_);
 VectorFunctionCoefficient J2(3, J2_);
+FunctionCoefficient div_Adv1(div_adv1);
+FunctionCoefficient div_Adv2(div_adv2);
 #elif defined(Nano_SCALE)
 double phi_exact_(Vector& x)
 {
@@ -214,4 +224,6 @@ ProductCoefficient kappa_D2(kappa_coeff, D_Cl_);
 ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl(neg, alpha2_prod_alpha3_prod_v_Cl);
 ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K(neg, alpha2_prod_alpha3_prod_v_K);
 
+ProductCoefficient neg_div_Adv1(neg, div_Adv1);
+ProductCoefficient neg_div_Adv2(neg, div_Adv2);
 #endif
