@@ -19,7 +19,6 @@ using namespace mfem;
 class PNP_Newton_CG_Operator_par;
 class PNP_Newton_DG_Operator_par;
 
-
 class PNP_Gummel_CG_Solver_par
 {
 private:
@@ -2004,11 +2003,16 @@ public:
 
     virtual void Mult(const Vector& x, Vector& y) const
     {
+        /* [ A C1 C2
+         *  B1 A1
+         *  B2    A2 ]
+         *  use lower triangular preconditioner
+         *  */
         Vec x1, x2, x3, y1, y2, y3;
-        X->PlaceArray(x.GetData()); // no copy, only the data pointer is passed to PETSc
+        X->PlaceArray(x.GetData()); // no copy, only the data pointer is passed to PETSc，不要修改X
         Y->PlaceArray(y.GetData());
 
-        VecGetSubVector(*X, index_set[0], &x1);
+        VecGetSubVector(*X, index_set[0], &x1); // 不要修改x1,x2,x3
         VecGetSubVector(*X, index_set[1], &x2);
         VecGetSubVector(*X, index_set[2], &x3);
 
@@ -2021,6 +2025,7 @@ public:
         Vec B1_y1, x2_;
         VecDuplicate(x2, &B1_y1);
         VecDuplicate(x2, &x2_);
+        VecCopy(x2, x2_);
         MatMult(sub[1][0], y1, B1_y1);
         VecAXPY(x2_, -1.0, B1_y1); // x2 - B1 y1 -> x2
         KSPSolve(kspblock[1], x2_, y2); // solve A1 y2 = x2 - B1 y1
@@ -2030,6 +2035,7 @@ public:
         Vec B2_y1, x3_;
         VecDuplicate(x3, &B2_y1);
         VecDuplicate(x3, &x3_);
+        VecCopy(x3, x3_);
         MatMult(sub[2][0], y1, B2_y1);
         VecAXPY(x3_, -1.0, B2_y1); // x3 - B2 y1 -> x3
         KSPSolve(kspblock[2], x3_, y3); // solve A2 y3 = x3 - B2 y1
@@ -2128,6 +2134,7 @@ public:
         VecDuplicate(x1, &C1_y2);
         VecDuplicate(x1, &C2_y3);
         VecDuplicate(x1, &x1_); // 避免下面改变x1的值
+        VecCopy(x1, x1_);
 
         MatMult(sub[0][1], y2, C1_y2);
         MatMult(sub[0][2], y3, C2_y3);
@@ -2146,6 +2153,123 @@ public:
         VecRestoreSubVector(*Y, index_set[0], &y1);
         VecRestoreSubVector(*Y, index_set[1], &y2);
         VecRestoreSubVector(*Y, index_set[2], &y3);
+
+        X->ResetArray();
+        Y->ResetArray();
+    }
+};
+class BlockSchurPreconditionerSolver: public Solver
+{
+private:
+    IS index_set[3];
+    Mat **sub, schur;
+    KSP kspblock[3];
+    mutable PetscParVector *X, *Y; // Create PetscParVectors as placeholders X and Y
+    Vec diag1, diag2;
+
+public:
+    BlockSchurPreconditionerSolver(const OperatorHandle& oh): Solver()
+    {
+        /* [ A C1 C2
+         *  B1 A1
+         *  B2    A2 ]
+         *  use
+         *  [ schur
+         *          A1
+         *              A2 ] for preconditioner
+         *  schur = A - C1 A1^-1 B1 - C2 A2^-1 B2
+         *  */
+        PetscErrorCode ierr;
+
+        // Get the PetscParMatrix out of oh.
+        PetscParMatrix *Jacobian_;
+        oh.Get(Jacobian_);
+        Mat Jacobian = *Jacobian_; // type cast to Petsc Mat
+
+        // update base (Solver) class
+        width = Jacobian_->Width();
+        height = Jacobian_->Height();
+        X = new PetscParVector(PETSC_COMM_WORLD, *this, true, false);
+        Y = new PetscParVector(PETSC_COMM_WORLD, *this, false, false);
+
+        PetscInt M, N;
+        ierr = MatNestGetSubMats(Jacobian, &N, &M, &sub); PCHKERRQ(sub[0][0], ierr); // get block matrices
+        ierr = MatNestGetISs(Jacobian, index_set, NULL); PCHKERRQ(index_set, ierr); // get the index sets of the blocks
+
+        MatCreateVecs(sub[1][1], &diag1, NULL);
+        MatCreateVecs(sub[2][2], &diag2, NULL);
+        MatGetDiagonal(sub[1][1], diag1); // diagonal of A1
+        MatGetDiagonal(sub[2][2], diag2); // diagonal of A2
+        VecReciprocal(diag1); // diag(A1)^-1 => diag1
+        VecReciprocal(diag2); // diag(A2)^-1 => diag2
+
+        Mat temp1, temp2;
+        MatDuplicate(sub[0][1], MAT_COPY_VALUES, &temp1); // C1 => temp1
+        MatDuplicate(sub[0][2], MAT_COPY_VALUES, &temp2); // C2 => temp2
+        MatDiagonalScale(temp1, NULL, diag1); // C1 diag(A1)^-1 => temp1
+        MatDiagonalScale(temp2, NULL, diag2); // C2 diag(A2)^-1 => temp2
+
+        MatDuplicate(sub[0][0], MAT_COPY_VALUES, &schur); // A => schur
+        Mat temp3, temp4;
+        MatDuplicate(schur, MAT_DO_NOT_COPY_VALUES, &temp3);
+        MatDuplicate(schur, MAT_DO_NOT_COPY_VALUES, &temp4);
+        MatMatMult(temp1, sub[1][0], MAT_INITIAL_MATRIX, PETSC_DEFAULT, &temp3); // C1 diag(A1)^-1 B1 => temp3
+        MatMatMult(temp2, sub[2][0], MAT_INITIAL_MATRIX, PETSC_DEFAULT, &temp4); // C2 diag(A2)^-1 B2 => temp4
+        MatAXPY(schur, -1.0, temp3, DIFFERENT_NONZERO_PATTERN); // A - C1 diag(A1)^-1 B1 => schur
+        MatAXPY(schur, -1.0, temp4, DIFFERENT_NONZERO_PATTERN); // A - C1 diag(A1)^-1 B1 - C2 diag(A2)^-1 B2 => schur
+
+        MatDestroy(&temp1); MatDestroy(&temp2); MatDestroy(&temp3); MatDestroy(&temp4);
+
+        ierr = KSPCreate(MPI_COMM_WORLD, &kspblock[0]); PCHKERRQ(kspblock[0], ierr);
+        ierr = KSPSetOperators(kspblock[0], schur, schur); PCHKERRQ(schur, ierr);
+        KSPAppendOptionsPrefix(kspblock[0], "sub_block1_");
+        KSPSetFromOptions(kspblock[0]);
+        KSPSetUp(kspblock[0]);
+
+        ierr = KSPCreate(MPI_COMM_WORLD, &kspblock[1]); PCHKERRQ(kspblock[1], ierr);
+        ierr = KSPSetOperators(kspblock[1], sub[1][1], sub[1][1]); PCHKERRQ(sub[1][1], ierr);
+        KSPAppendOptionsPrefix(kspblock[1], "sub_block2_");
+        KSPSetFromOptions(kspblock[1]);
+        KSPSetUp(kspblock[1]);
+
+        ierr = KSPCreate(MPI_COMM_WORLD, &kspblock[2]); PCHKERRQ(kspblock[2], ierr);
+        ierr = KSPSetOperators(kspblock[2], sub[2][2], sub[2][2]); PCHKERRQ(sub[2][2], ierr);
+        KSPAppendOptionsPrefix(kspblock[2], "sub_block3_");
+        KSPSetFromOptions(kspblock[2]);
+        KSPSetUp(kspblock[2]);
+    }
+    virtual ~BlockSchurPreconditionerSolver()
+    {
+        for (int i=0; i<3; i++)
+        {
+            KSPDestroy(&kspblock[i]);
+            //ISDestroy(&index_set[i]); no need to delete it
+        }
+
+        delete X;
+        delete Y;
+    }
+
+    virtual void SetOperator(const Operator& op) { MFEM_ABORT("Not support!"); }
+
+    virtual void Mult(const Vector& x, Vector& y) const
+    {
+        Vec blockx, blocky;
+        Vec blockx0, blocky0;
+
+        X->PlaceArray(x.GetData()); // no copy, only the data pointer is passed to PETSc
+        Y->PlaceArray(y.GetData());
+        // solve 3 equations
+        for (int i=0; i<3; ++i)
+        {
+            VecGetSubVector(*X, index_set[i], &blockx);
+            VecGetSubVector(*Y, index_set[i], &blocky);
+
+            KSPSolve(kspblock[i], blockx, blocky);
+
+            VecRestoreSubVector(*X, index_set[i], &blockx);
+            VecRestoreSubVector(*Y, index_set[i], &blocky);
+        }
 
         X->ResetArray();
         Y->ResetArray();
@@ -2421,7 +2545,9 @@ public:
         else if(name == "lower")
             return new LowerBlockPreconditionerSolver(oh); // lower triangular
         else if(name == "upper")
-            return new UpperBlockPreconditionerSolver(oh); // lower triangular
+            return new UpperBlockPreconditionerSolver(oh); // upper triangular
+        else if (name == "blockschur")
+            return new BlockSchurPreconditionerSolver(oh); // block schur
     }
 };
 
