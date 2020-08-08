@@ -1943,6 +1943,215 @@ public:
         Y->ResetArray();
     }
 };
+class LowerBlockPreconditionerSolver: public Solver
+{
+private:
+    IS index_set[3];
+    Mat **sub;
+    KSP kspblock[3];
+    mutable PetscParVector *X, *Y; // Create PetscParVectors as placeholders X and Y
+
+public:
+    LowerBlockPreconditionerSolver(const OperatorHandle& oh): Solver()
+    {
+        PetscErrorCode ierr;
+
+        // Get the PetscParMatrix out of oh.
+        PetscParMatrix *Jacobian_;
+        oh.Get(Jacobian_);
+        Mat Jacobian = *Jacobian_; // type cast to Petsc Mat
+
+        // update base (Solver) class
+        width = Jacobian_->Width();
+        height = Jacobian_->Height();
+        X = new PetscParVector(PETSC_COMM_WORLD, *this, true, false);
+        Y = new PetscParVector(PETSC_COMM_WORLD, *this, false, false);
+
+        PetscInt M, N;
+        ierr = MatNestGetSubMats(Jacobian, &N, &M, &sub); PCHKERRQ(sub[0][0], ierr); // get block matrices
+        ierr = MatNestGetISs(Jacobian, index_set, NULL); PCHKERRQ(index_set, ierr); // get the index sets of the blocks
+
+        for (int i=0; i<3; ++i)
+        {
+            ierr = KSPCreate(MPI_COMM_WORLD, &kspblock[i]); PCHKERRQ(kspblock[i], ierr);
+            ierr = KSPSetOperators(kspblock[i], sub[i][i], sub[i][i]); PCHKERRQ(sub[i][i], ierr);
+
+            if (i == 0)
+                KSPAppendOptionsPrefix(kspblock[i], "sub_block1_");
+            else if (i == 1)
+                KSPAppendOptionsPrefix(kspblock[i], "sub_block2_");
+            else if (i == 2)
+                KSPAppendOptionsPrefix(kspblock[i], "sub_block3_");
+            else MFEM_ABORT("Wrong block preconditioner solver!");
+
+            KSPSetFromOptions(kspblock[i]);
+            KSPSetUp(kspblock[i]);
+        }
+    }
+    virtual ~LowerBlockPreconditionerSolver()
+    {
+        for (int i=0; i<3; i++)
+        {
+            KSPDestroy(&kspblock[i]);
+            //ISDestroy(&index_set[i]); no need to delete it
+        }
+
+        delete X;
+        delete Y;
+    }
+
+    virtual void SetOperator(const Operator& op) { MFEM_ABORT("Not support!"); }
+
+    virtual void Mult(const Vector& x, Vector& y) const
+    {
+        Vec x1, x2, x3, y1, y2, y3;
+        X->PlaceArray(x.GetData()); // no copy, only the data pointer is passed to PETSc
+        Y->PlaceArray(y.GetData());
+
+        VecGetSubVector(*X, index_set[0], &x1);
+        VecGetSubVector(*X, index_set[1], &x2);
+        VecGetSubVector(*X, index_set[2], &x3);
+
+        VecGetSubVector(*Y, index_set[0], &y1);
+        VecGetSubVector(*Y, index_set[1], &y2);
+        VecGetSubVector(*Y, index_set[2], &y3);
+
+        KSPSolve(kspblock[0], x1, y1); // solve A y1 = x1
+
+        Vec B1_y1, x2_;
+        VecDuplicate(x2, &B1_y1);
+        VecDuplicate(x2, &x2_);
+        MatMult(sub[1][0], y1, B1_y1);
+        VecAXPY(x2_, -1.0, B1_y1); // x2 - B1 y1 -> x2
+        KSPSolve(kspblock[1], x2_, y2); // solve A1 y2 = x2 - B1 y1
+        VecDestroy(&B1_y1);
+        VecDestroy(&x2_);
+
+        Vec B2_y1, x3_;
+        VecDuplicate(x3, &B2_y1);
+        VecDuplicate(x3, &x3_);
+        MatMult(sub[2][0], y1, B2_y1);
+        VecAXPY(x3_, -1.0, B2_y1); // x3 - B2 y1 -> x3
+        KSPSolve(kspblock[2], x3_, y3); // solve A2 y3 = x3 - B2 y1
+        VecDestroy(&B2_y1);
+        VecDestroy(&x3_);
+
+        VecRestoreSubVector(*X, index_set[0], &x1);
+        VecRestoreSubVector(*X, index_set[1], &x2);
+        VecRestoreSubVector(*X, index_set[2], &x3);
+
+        VecRestoreSubVector(*Y, index_set[0], &y1);
+        VecRestoreSubVector(*Y, index_set[1], &y2);
+        VecRestoreSubVector(*Y, index_set[2], &y3);
+
+        X->ResetArray();
+        Y->ResetArray();
+    }
+};
+class UpperBlockPreconditionerSolver: public Solver
+{
+private:
+    IS index_set[3];
+    Mat **sub;
+    KSP kspblock[3];
+    mutable PetscParVector *X, *Y; // Create PetscParVectors as placeholders X and Y
+
+public:
+    UpperBlockPreconditionerSolver(const OperatorHandle& oh): Solver()
+    {
+        PetscErrorCode ierr;
+
+        // Get the PetscParMatrix out of oh.
+        PetscParMatrix *Jacobian_;
+        oh.Get(Jacobian_);
+        Mat Jacobian = *Jacobian_; // type cast to Petsc Mat
+
+        // update base (Solver) class
+        width = Jacobian_->Width();
+        height = Jacobian_->Height();
+        X = new PetscParVector(PETSC_COMM_WORLD, *this, true, false);
+        Y = new PetscParVector(PETSC_COMM_WORLD, *this, false, false);
+
+        PetscInt M, N;
+        ierr = MatNestGetSubMats(Jacobian, &N, &M, &sub); PCHKERRQ(sub[0][0], ierr); // get block matrices
+        ierr = MatNestGetISs(Jacobian, index_set, NULL); PCHKERRQ(index_set, ierr); // get the index sets of the blocks
+
+        for (int i=0; i<3; ++i)
+        {
+            ierr = KSPCreate(MPI_COMM_WORLD, &kspblock[i]); PCHKERRQ(kspblock[i], ierr);
+            ierr = KSPSetOperators(kspblock[i], sub[i][i], sub[i][i]); PCHKERRQ(sub[i][i], ierr);
+
+            if (i == 0)
+                KSPAppendOptionsPrefix(kspblock[i], "sub_block1_");
+            else if (i == 1)
+                KSPAppendOptionsPrefix(kspblock[i], "sub_block2_");
+            else if (i == 2)
+                KSPAppendOptionsPrefix(kspblock[i], "sub_block3_");
+            else MFEM_ABORT("Wrong block preconditioner solver!");
+
+            KSPSetFromOptions(kspblock[i]);
+            KSPSetUp(kspblock[i]);
+        }
+    }
+    virtual ~UpperBlockPreconditionerSolver()
+    {
+        for (int i=0; i<3; i++)
+        {
+            KSPDestroy(&kspblock[i]);
+            //ISDestroy(&index_set[i]); no need to delete it
+        }
+
+        delete X;
+        delete Y;
+    }
+
+    virtual void SetOperator(const Operator& op) { MFEM_ABORT("Not support!"); }
+
+    virtual void Mult(const Vector& x, Vector& y) const
+    {
+        Vec x1, x2, x3, y1, y2, y3;
+        X->PlaceArray(x.GetData()); // no copy, only the data pointer is passed to PETSc
+        Y->PlaceArray(y.GetData());
+
+        VecGetSubVector(*X, index_set[0], &x1);
+        VecGetSubVector(*X, index_set[1], &x2);
+        VecGetSubVector(*X, index_set[2], &x3);
+
+        VecGetSubVector(*Y, index_set[0], &y1);
+        VecGetSubVector(*Y, index_set[1], &y2);
+        VecGetSubVector(*Y, index_set[2], &y3);
+
+        KSPSolve(kspblock[1], x2, y2); // solve A1 y2 = x2
+        KSPSolve(kspblock[2], x3, y3); // solve A2 y3 = x3
+
+        Vec C1_y2, C2_y3, x1_;
+        VecDuplicate(x1, &C1_y2);
+        VecDuplicate(x1, &C2_y3);
+        VecDuplicate(x1, &x1_); // 避免下面改变x1的值
+
+        MatMult(sub[0][1], y2, C1_y2);
+        MatMult(sub[0][2], y3, C2_y3);
+        VecAXPY(x1_, -1.0, C1_y2);
+        VecAXPY(x1_, -1.0, C2_y3);
+        KSPSolve(kspblock[0], x1, y1);
+
+        VecDestroy(&C1_y2);
+        VecDestroy(&C2_y3);
+        VecDestroy(&x1_);
+
+        VecRestoreSubVector(*X, index_set[0], &x1);
+        VecRestoreSubVector(*X, index_set[1], &x2);
+        VecRestoreSubVector(*X, index_set[2], &x3);
+
+        VecRestoreSubVector(*Y, index_set[0], &y1);
+        VecRestoreSubVector(*Y, index_set[1], &y2);
+        VecRestoreSubVector(*Y, index_set[2], &y3);
+
+        X->ResetArray();
+        Y->ResetArray();
+    }
+};
+
 class UzawaPreconditionerSolver: public Solver
 {
 private:
@@ -2027,9 +2236,10 @@ public:
         MatMult(sub[0][1], block_c1, temp1); // B1 c1
         MatMult(sub[0][2], block_c2, temp2); // B2 c2
         VecAXPY(block_phi_k, -1.0, temp1); // f - B1 c1
-        VecAXPY(block_phi_k, -1.0, temp2); // f - B2 c2
+        VecAXPY(block_phi_k, -1.0, temp2); // f - B1 c1 - B2 c2
+        VecScale(block_phi_k, 0.1); // 0.2 * (f - B1 c1 - B2 c2)，做一个scale
 
-        KSPSolve(kspblock[0], block_phi_k, block_phi); // solve A y_{phi} = x_{phi}
+//        KSPSolve(kspblock[0], block_phi_k, block_phi); // solve A y_{phi} = x_{phi}
 
         VecRestoreSubVector(*X, index_set[0], &block_phi_k);
         VecRestoreSubVector(*X, index_set[1], &block_c1_k);
@@ -2040,8 +2250,6 @@ public:
 
         X->ResetArray();
         Y->ResetArray();
-//        cout << "in BlockPreconditionerSolver::Mult(), l2 norm y after: " << y.Norml2() << endl;
-//        MFEM_ABORT("in BlockPreconditionerSolver::Mult()");
     }
 };
 class SIMPLEPreconditionerSolver: public Solver
@@ -2210,6 +2418,10 @@ public:
             return new UzawaPreconditionerSolver(oh); // uzawa preconditioner
         else if (name == "simple")
             return new SIMPLEPreconditionerSolver(oh); // simple preconditioner
+        else if(name == "lower")
+            return new LowerBlockPreconditionerSolver(oh); // lower triangular
+        else if(name == "upper")
+            return new UpperBlockPreconditionerSolver(oh); // lower triangular
     }
 };
 
@@ -3054,9 +3266,9 @@ public:
         a12 = new ParBilinearForm(fsp);
         // - alpha2 alpha3 z1 (dc1, psi3)_{\Omega_s}
         a12->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_K_water));
-        // kappa <h^{-1} [dc1], [psi3]>_{\Omega_s}
-        a12->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker));
-        a12->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker), Dirichlet_attr);
+//        // kappa <h^{-1} [dc1], [psi3]>_{\Omega_s}
+//        a12->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker));
+//        a12->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker), Dirichlet_attr);
         a12->Assemble();
         a12->Finalize();
         a12->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3068,9 +3280,9 @@ public:
         a13 = new ParBilinearForm(fsp);
         // - alpha2 alpha3 z2 (dc2, psi3)_{\Omega_s}
         a13->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_Cl_water));
-        // kappa <h^{-1} [dc2], [psi3]>_{\Omega_s}
-        a13->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker)); // fff
-        a13->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker), Dirichlet_attr);
+//        // kappa <h^{-1} [dc2], [psi3]>_{\Omega_s}
+//        a13->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker)); // fff
+//        a13->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker), Dirichlet_attr);
         a13->Assemble();
         a13->Finalize();
         a13->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3088,10 +3300,10 @@ public:
         g = new ParLinearForm(fsp);
         // sigma <phi3_D, (epsilon grad(psi3)).n> + kappa <h^{-1} epsilon phi3_D, psi3>
         g->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, epsilon_water, sigma, kappa), Dirichlet_attr);
-        // kappa <h^{-1} c1_D, psi3>
-        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_D_coeff), Dirichlet_attr);
-        // kappa <h^{-1} c2_D, psi3>
-        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_D_coeff), Dirichlet_attr);
+//        // kappa <h^{-1} c1_D, psi3>
+//        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c1_D_coeff), Dirichlet_attr);
+//        // kappa <h^{-1} c2_D, psi3>
+//        g->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &c2_D_coeff), Dirichlet_attr);
         // epsilon_m <grad(phi1 + phi2).n, {psi3}>_{\Gamma}
         g->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator1(&epsilon_protein, grad_phi1_plus_grad_phi2, mesh, protein_marker, water_marker));
         // omit 0 Neumann boundary condition
