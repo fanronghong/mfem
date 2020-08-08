@@ -1941,8 +1941,6 @@ public:
 
         X->ResetArray();
         Y->ResetArray();
-//        cout << "in BlockPreconditionerSolver::Mult(), l2 norm y after: " << y.Norml2() << endl;
-//        MFEM_ABORT("in BlockPreconditionerSolver::Mult()");
     }
 };
 class UzawaPreconditionerSolver: public Solver
@@ -2248,7 +2246,7 @@ protected:
 
 public:
     PNP_Newton_CG_Operator_par(ParFiniteElementSpace *fsp_, ParGridFunction* phi1_, ParGridFunction* phi2_)
-    : fsp(fsp_), phi1(phi1_), phi2(phi2_)
+            : fsp(fsp_), phi1(phi1_), phi2(phi2_)
     {
         MPI_Comm_size(fsp->GetComm(), &num_procs);
         MPI_Comm_rank(fsp->GetComm(), &myid);
@@ -2308,12 +2306,9 @@ public:
                 }
             }
         }
-        protein_dofs.Sort();
-        protein_dofs.Unique();
-        water_dofs.Sort();
-        water_dofs.Unique();
-        interface_dofs.Sort();
-        interface_dofs.Unique();
+        protein_dofs  .Sort();   protein_dofs.Unique();
+        water_dofs    .Sort();     water_dofs.Unique();
+        interface_dofs.Sort(); interface_dofs.Unique();
         for (int i = 0; i < interface_dofs.Size(); i++) // 去掉protein和water中的interface上的dofs
         {
             protein_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
@@ -2323,9 +2318,9 @@ public:
         {
             need_dofs.Append(water_dofs);
             need_dofs.Append(interface_ess_tdof_list);
-            need_dofs.Sort();
+            need_dofs.Sort(); // c_i在溶剂区域的自由度，包括界面
 
-            all_dofs.SetSize(fsp->GetTrueVSize());
+            all_dofs.SetSize(fsp->GetTrueVSize()); // phi_3在整个区域的自由度
             for (int i = 0; i < fsp->GetTrueVSize(); ++i)
                 all_dofs[i] = i;
 
@@ -2418,7 +2413,6 @@ public:
     virtual void Mult(const Vector& x, Vector& y) const
     {
 //        cout << "\nin PNP_Newton_Operator::Mult(), l2 norm of x: " << x.Norml2() << endl;
-//        cout << "l2 norm of y: " << y.Norml2() << endl;
 //        cout << "x size: " << x.Size() << ", y size: " << y.Size() << endl;
 
         int sc = fsp->GetTrueVSize();
@@ -2434,32 +2428,17 @@ public:
         phi3_k->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
+        cout << "After set bdc (in Newton::Mult()), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
+        cout << "After set bdc (in Newton::Mult()), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
+        cout << "After set bdc (in Newton::Mult()), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
 
         GridFunctionCoefficient c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
-        if (self_debug)
-        {
-            // essential边界条件
-            for (int i = 0; i < top_ess_tdof_list.Size(); ++i) {
-                assert(abs((*phi3_k)[top_ess_tdof_list[i]] - phi_top) < TOL);
-                assert(abs((*c1_k)[top_ess_tdof_list[i]] - c1_top) < TOL);
-                assert(abs((*c2_k)[top_ess_tdof_list[i]] - c2_top) < TOL);
-            }
-            for (int i = 0; i < bottom_ess_tdof_list.Size(); ++i) {
-                assert(abs((*phi3_k)[bottom_ess_tdof_list[i]] - phi_bottom) < TOL);
-                assert(abs((*c1_k)[bottom_ess_tdof_list[i]] - c1_bottom) < TOL);
-                assert(abs((*c2_k)[bottom_ess_tdof_list[i]] - c2_bottom) < TOL);
-            }
-            for (int i = 0; i < protein_dofs.Size(); ++i) {
-                assert(abs((*c1_k)[protein_dofs[i]]) < TOL);
-                assert(abs((*c2_k)[protein_dofs[i]]) < TOL);
-            }
-        }
-
-        rhs_k->Update(y.GetData(), block_trueoffsets); // update residual
+//        rhs_k->Update(y.GetData(), block_trueoffsets); // update residual
         Vector y1(y.GetData() + 0, sc);
         Vector y2(y.GetData() + sc, need_dofs.Size());
         Vector y3(y.GetData() + sc + need_dofs.Size(), need_dofs.Size());
+        cout << "1. l2 norm of y: " << y.Norml2() << endl;
 
         delete f;
         f = new ParLinearForm(fsp);
@@ -2479,6 +2458,8 @@ public:
         (*f) += (*g); // add interface integrate
         f->SetSubVector(ess_tdof_list, 0.0);
         y1 = (*f);
+        cout << "2. l2 norm of y: " << y.Norml2() << endl;
+        cout << "   l2 norm of y1: " << y1.Norml2() << endl;
 
         delete f1;
         f1 = new ParLinearForm(fsp);
@@ -2490,6 +2471,8 @@ public:
         f1->Assemble();
         f1->SetSubVector(ess_tdof_list, 0.0);
         for (int i=0; i<need_dofs.Size(); ++i) y2[i] = (*f1)[need_dofs[i]];
+        cout << "3. l2 norm of y: " << y.Norml2() << endl;
+        cout << "   l2 norm of y2: " << y2.Norml2() << endl;
 
         delete f2;
         f2 = new ParLinearForm(fsp);
@@ -2501,18 +2484,15 @@ public:
         f2->Assemble();
         f2->SetSubVector(ess_tdof_list, 0.0);
         for (int i=0; i<need_dofs.Size(); ++i) y3[i] = (*f2)[need_dofs[i]];
+        cout << "4. l2 norm of y: " << y.Norml2() << endl;
+        cout << "   l2 norm of y3: " << y3.Norml2() << endl;
 
-//        cout << "l2 norm of y: " << y.Norml2() << endl;
     }
 
     virtual Operator &GetGradient(const Vector& x) const
     {
 //        cout << "in PNP_Newton_Operator::GetGradient()" << endl;
 //        cout << "x size: " << x.Size() << endl;
-
-        Array<int> need_dofs;
-        need_dofs.Append(water_dofs);
-        need_dofs.Append(interface_dofs);
 
         int sc = fsp->GetTrueVSize();
         Vector x_(sc * 3);
@@ -2527,6 +2507,9 @@ public:
         phi3_k->SetFromTrueVector();
         c1_k->SetFromTrueVector();
         c2_k->SetFromTrueVector();
+        cout << "After set bdc (in Newton::GetGradient()), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
+        cout << "After set bdc (in Newton::GetGradient()), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
+        cout << "After set bdc (in Newton::GetGradient()), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
 
         GridFunctionCoefficient c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
@@ -2707,7 +2690,7 @@ public:
         block_trueoffsets.PartialSum();
 
         int sc = h1_space->GetTrueVSize();
-        Vector x_(sc * 3);
+        Vector x_(sc * 3); // 解向量在所有自由度上的值组成的一个长向量：浓度变量在蛋白中为0的部分被保留
         x_ = 0.0;
         phi3_k.MakeTRef(h1_space, x_, 0);
         c1_k  .MakeTRef(h1_space, x_, sc);
@@ -2727,8 +2710,12 @@ public:
         phi3_k.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
+        cout << "After set bdc (before Solve()), L2 norm of phi3: " << phi3_k.ComputeL2Error(zero) << endl;
+        cout << "After set bdc (before Solve()), L2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
+        cout << "After set bdc (before Solve()), L2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
 
-        u_k = new BlockVector(block_trueoffsets); //必须满足essential边界条件
+        u_k = new BlockVector(block_trueoffsets); // 解向量只在所在的非0的自由度上的取值：浓度变量在蛋白中的为0的部分被去掉
+        *u_k = 0.0;
         for (int i=0; i<sc; ++i)               u_k->GetBlock(0)[i] = x_[i];
         for (int i=0; i<need_dofs.Size(); ++i) u_k->GetBlock(1)[i] = x_[sc + need_dofs[i]];
         for (int i=0; i<need_dofs.Size(); ++i) u_k->GetBlock(2)[i] = x_[2*sc + need_dofs[i]];
@@ -2825,7 +2812,7 @@ public:
              << ", preconditioner: " << prec_type << ", petsc option file: " << options_src
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 
-        Vector x_; // convert u_k to x_
+        Vector x_; // convert u_k to x_: 相当于extension
         int sc = h1_space->GetTrueVSize();
         x_.SetSize(sc * 3);
         x_ = 0.0;
@@ -2835,18 +2822,15 @@ public:
         phi3_k.MakeTRef(h1_space, x_, 0);
         c1_k  .MakeTRef(h1_space, x_, sc);
         c2_k  .MakeTRef(h1_space, x_, 2*sc);
-        phi3_k.SetTrueVector();
-        c1_k.SetTrueVector();
-        c2_k.SetTrueVector();
         phi3_k.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();
-        cout << "After set bdc, L2 norm of phi3: " << phi3_k.ComputeL2Error(zero) << endl;
-        cout << "After set bdc, L2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
-        cout << "After set bdc, L2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
+        cout << "After set bdc (in Solve()), L2 norm of phi3: " << phi3_k.ComputeL2Error(zero) << endl;
+        cout << "After set bdc (in Solve()), L2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
+        cout << "After set bdc (in Solve()), L2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
 
         Vector zero_vec;
-//        cout << "u_k l2 norm: " << u_k->Norml2() << endl;
+        cout << "initial u_k l2 norm: " << u_k->Norml2() << endl;
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
 
         for (int i=0; i<sc; ++i)               x_[i]                   = u_k->GetBlock(0)[i];
@@ -2855,9 +2839,6 @@ public:
         phi3_k.MakeTRef(h1_space, x_, 0);
         c1_k  .MakeTRef(h1_space, x_, sc);
         c2_k  .MakeTRef(h1_space, x_, 2*sc);
-//        phi3_k.SetTrueVector();
-//        c1_k.SetTrueVector();
-//        c2_k.SetTrueVector();
         phi3_k.SetFromTrueVector();
         c1_k.SetFromTrueVector();
         c2_k.SetFromTrueVector();

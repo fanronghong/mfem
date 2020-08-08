@@ -68,7 +68,7 @@
 -newton_snes_converged_reason
 #-newton_snes_view
 #
--newton_ksp_type gmres
+-newton_ksp_type fgmres
 #-newton_pc_type jacobi # jacobi, ilu
 -newton_ksp_max_it 1000
 -newton_ksp_rtol 1E-8

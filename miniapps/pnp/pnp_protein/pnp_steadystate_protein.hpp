@@ -11,7 +11,7 @@ using namespace mfem;
 
 
 int p_order             = 1; //有限元基函数的多项式次数
-const char* Linearize   = "gummel"; // newton, gummel
+const char* Linearize   = "newton"; // newton, gummel
 const char* Discretize  = "cg"; // cg, dg
 const char* AdvecStable = "eafe"; // none, supg, eafe
 const char* prec_type   = "uzawa"; // preconditioner for Newton discretization: block, uzawa, simple
@@ -20,12 +20,12 @@ int refine_times        = 0;
 const char* output      = NULL;
 bool self_debug         = false;
 bool visualize          = false;
-bool local_conservation = true;
-bool show_peclet        = true;
+bool local_conservation = false;
+bool show_peclet        = false;
 double relax            = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 
 double sigma            = -1.0; // symmetric parameter for DG
-double kappa            = 200; // penalty parameter for DG
+double kappa            = 20; // penalty parameter for DG
 bool verbose            = false;
 
 /* 只能定义如下集中参数
@@ -221,37 +221,6 @@ ConstantCoefficient c2_D_bottom_coeff(c2_bottom);
 const int Gummel_max_iters  = 20;
 const double Gummel_rel_tol = 1e-8;
 const double TOL            = 1e-10;
-
-const double harmonic_rtol = 1.0e-8;
-const double harmonic_atol = 1.0e-20;
-const int harmonic_maxiter = 1000;
-const int harmonic_printlvl= 0;
-
-const double phi3_rtol = 1.0e-8;
-const double phi3_atol = 1.0e-20;
-const int phi3_maxiter = 1000;
-const int phi3_printlvl= -1;
-
-const double np1_rtol = 1.0e-8;
-const double np1_atol = 1.0e-20;
-const int np1_maxiter = 10000;
-const int np1_printlvl= -1;
-
-const double np2_rtol = 1.0e-8;
-const double np2_atol = 1.0e-20;
-const int np2_maxiter = 10000;
-const int np2_printlvl= -1;
-
-const double newton_rtol   = 1.0e-8;
-const double newton_atol   = 1.0e-20;
-const double newton_maxitr = 20;
-const int newton_printlvl  = 1;
-
-const double jacobi_rtol = 1.0e-8;
-const double jacobi_atol = 1.0e-20;
-const int jacobi_maxiter = 1000;
-const int jacobi_printlv = -1;
-
 
 
 // ------------------------- 一些辅助变量(避免在main函数里面定义) ------------------------
