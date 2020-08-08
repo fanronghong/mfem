@@ -2909,7 +2909,7 @@ class PNP_Newton_DG_Operator_par: public Operator
 {
 protected:
     Mesh* mesh;
-    ParFiniteElementSpace *fsp;
+    ParFiniteElementSpace *fsp; // fsp is DG space
 
     Array<int> block_trueoffsets;
     mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
@@ -2983,6 +2983,7 @@ public:
                 protein_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
                 water_dofs.DeleteFirst(interface_dofs[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
             }
+            assert(fsp->GetTrueVSize() == protein_dofs.Size() + water_dofs.Size() + interface_dofs.Size());
         }
 
         int bdr_size = mesh->bdr_attributes.Max();
@@ -3440,6 +3441,7 @@ public:
         block_trueoffsets.PartialSum();
 
         u_k = new BlockVector(block_trueoffsets); // 必须满足essential边界条件
+        *u_k = 0.0;
         { // set essential bdc
             phi3_k.MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
             c1_k  .MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
@@ -3480,6 +3482,7 @@ public:
             cout << "After set bdc, L2 norm of phi3: " << phi3_k.ComputeL2Error(zero) << endl;
             cout << "After set bdc, L2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
             cout << "After set bdc, L2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
+            cout << "l2 norm of u_k (initial after set bdc): " << u_k->Norml2() << endl;
         }
 
         for (int i=0; i<h1_space->GetNE(); ++i)
@@ -3617,6 +3620,8 @@ public:
              << ", sigma: " << sigma << ", kappa: " << kappa
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 
+        cout << "l2 norm of u_k (initial): " << u_k->Norml2() << endl;
+        MFEM_ABORT("3623");
         Vector zero_vec;
         chrono.Start();
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
