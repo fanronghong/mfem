@@ -2318,7 +2318,7 @@ public:
         {
             need_dofs.Append(water_dofs);
             need_dofs.Append(interface_ess_tdof_list);
-            need_dofs.Sort(); // c_i在溶剂区域的自由度，包括界面
+            need_dofs.Sort(); // c_i在溶剂和界面区域的自由度
 
             all_dofs.SetSize(fsp->GetTrueVSize()); // phi_3在整个区域的自由度
             for (int i = 0; i < fsp->GetTrueVSize(); ++i)
@@ -2912,12 +2912,16 @@ protected:
     ParFiniteElementSpace *fsp; // fsp is DG space
 
     Array<int> block_trueoffsets;
+    IS is, long_is;
+    Array<int> need_dofs, all_dofs;
+
     mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
     mutable BlockOperator *jac_k; // Jacobian at current solution
     PetscNonlinearSolver* newton_solver;
 
     mutable ParLinearForm *f, *f1, *f2, *g, *g1, *g2;
     mutable PetscParMatrix A11, A12, A13, A21, A22, A31, A33;
+    mutable PetscParMatrix *A12__, *A13__, *A21__, *A22__, *A31__, *A33__;
     mutable ParBilinearForm *a11, *a12, *a13, *a21, *a22, *a31, *a33;
 
     ParGridFunction *phi1, *phi2;
@@ -2932,7 +2936,7 @@ protected:
 
 public:
     PNP_Newton_DG_Operator_par(ParFiniteElementSpace *fsp_, ParGridFunction *phi1_, ParGridFunction *phi2_)
-        : Operator(fsp_->TrueVSize()*3), fsp(fsp_), phi1(phi1_), phi2(phi2_)
+        : fsp(fsp_), phi1(phi1_), phi2(phi2_)
     {
         MPI_Comm_size(fsp->GetComm(), &num_procs);
         MPI_Comm_rank(fsp->GetComm(), &myid);
@@ -2992,11 +2996,36 @@ public:
         Dirichlet_attr[top_marker - 1]    = 1;
         Dirichlet_attr[bottom_marker - 1] = 1;
 
+        {
+            need_dofs.Append(water_dofs);
+            need_dofs.Append(interface_dofs);
+            need_dofs.Sort(); // c_i在溶剂和界面区域的自由度
+
+            all_dofs.SetSize(fsp->GetTrueVSize()); // phi_3在整个区域的自由度
+            for (int i = 0; i < fsp->GetTrueVSize(); ++i)
+                all_dofs[i] = i;
+
+            PetscInt *indices; // only include water dofs and interface dofs
+            PetscInt size = PetscInt(need_dofs.Size());
+            PetscMalloc1(size, &indices);
+            for (int i = 0; i < need_dofs.Size(); ++i) indices[i] = need_dofs[i];
+            ISCreateGeneral(MPI_COMM_WORLD, size, indices, PETSC_COPY_VALUES, &is);
+            PetscFree(indices);
+
+            PetscInt *long_indices; // include all dofs
+            PetscInt long_size = PetscInt(all_dofs.Size());
+            PetscMalloc1(long_size, &long_indices);
+            for (int i = 0; i < all_dofs.Size(); ++i) long_indices[i] = all_dofs[i];
+            ISCreateGeneral(MPI_COMM_WORLD, long_size, long_indices, PETSC_COPY_VALUES, &long_is);
+            PetscFree(long_indices);
+        }
+
+        height = width = fsp->GetTrueVSize() + 2 * (water_dofs.Size() + interface_dofs.Size());
         block_trueoffsets.SetSize(4); // number of variables + 1;
         block_trueoffsets[0] = 0;
         block_trueoffsets[1] = fsp->GetTrueVSize();
-        block_trueoffsets[2] = fsp->GetTrueVSize();
-        block_trueoffsets[3] = fsp->GetTrueVSize();
+        block_trueoffsets[2] = water_dofs.Size() + interface_dofs.Size();
+        block_trueoffsets[3] = water_dofs.Size() + interface_dofs.Size();
         block_trueoffsets.PartialSum();
 
         rhs_k = new BlockVector(block_trueoffsets); // not block_offsets !!!
@@ -3032,6 +3061,9 @@ public:
         a12->Finalize();
         a12->SetOperatorType(Operator::PETSC_MATAIJ);
         a12->FormSystemMatrix(null_array, A12);
+        Mat A12_;
+        MatCreateSubMatrix(A12, long_is, is, MAT_INITIAL_MATRIX, &A12_);
+        A12__ = new PetscParMatrix(A12_, true);
 
         a13 = new ParBilinearForm(fsp);
         // - alpha2 alpha3 z2 (dc2, psi3)_{\Omega_s}
@@ -3043,6 +3075,9 @@ public:
         a13->Finalize();
         a13->SetOperatorType(Operator::PETSC_MATAIJ);
         a13->FormSystemMatrix(null_array, A13);
+        Mat A13_;
+        MatCreateSubMatrix(A13, long_is, is, MAT_INITIAL_MATRIX, &A13_);
+        A13__ = new PetscParMatrix(A13_, true);
 
         f  = new ParLinearForm(fsp);
         f1 = new ParLinearForm(fsp);
@@ -3088,10 +3123,14 @@ public:
 
     virtual void Mult(const Vector& x, Vector& y) const
     {
-//        cout << "\nin PNP_DG_Newton_Operator::Mult()" << endl;
-        int sc = height / 3;
-        Vector& x_ = const_cast<Vector&>(x);
         Array<int>& Dirichlet_attr_ = const_cast<Array<int>&>(Dirichlet_attr);
+
+        int sc = fsp->GetTrueVSize();
+        Vector x_(sc * 3);
+        x_ = 0.0;
+        for (int i=0; i<sc; ++i)               x_[i]                   = x[i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]]   = x[sc + i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[2*sc + need_dofs[i]] = x[sc + need_dofs.Size() + i];
 
         phi3_k->MakeTRef(fsp, x_, 0);
         c1_k  ->MakeTRef(fsp, x_, sc);
@@ -3099,13 +3138,16 @@ public:
         phi3_k->SetFromTrueVector();
         c1_k  ->SetFromTrueVector();
         c2_k  ->SetFromTrueVector();
+        cout << "After set bdc (in Newton::Mult()), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
+        cout << "After set bdc (in Newton::Mult()), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
+        cout << "After set bdc (in Newton::Mult()), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
 
         GridFunctionCoefficient phi3_k_coeff(phi3_k), c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
-        rhs_k->Update(y.GetData(), block_trueoffsets); // update residual
-        Vector y1(y.GetData() +   0, sc);
-        Vector y2(y.GetData() +  sc, sc);
-        Vector y3(y.GetData() +2*sc, sc);
+        Vector y1(y.GetData() + 0, sc);
+        Vector y2(y.GetData() + sc, need_dofs.Size());
+        Vector y3(y.GetData() + sc + need_dofs.Size(), need_dofs.Size());
+        cout << "1. l2 norm of y: " << y.Norml2() << endl;
 
         delete f;
         f = new ParLinearForm(fsp);
@@ -3135,6 +3177,9 @@ public:
         f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_coeff, &c2_D_coeff, mesh, water_marker), Dirichlet_attr_);
         f->Assemble();
         (*f) -= (*g);
+        y1 = (*f);
+        cout << "2. l2 norm of y: " << y.Norml2() << endl;
+        cout << "   l2 norm of y1: " << y1.Norml2() << endl;
 
         delete f1;
         f1 = new ParLinearForm(fsp);
@@ -3172,6 +3217,9 @@ public:
         f1->Assemble();
         (*f1) -= (*g1);
         f1->SetSubVector(protein_dofs, 0.0);
+        for (int i=0; i<need_dofs.Size(); ++i) y2[i] = (*f1)[need_dofs[i]];
+        cout << "3. l2 norm of y: " << y.Norml2() << endl;
+        cout << "   l2 norm of y2: " << y2.Norml2() << endl;
 
         delete f2;
         f2 = new ParLinearForm(fsp);
@@ -3209,13 +3257,21 @@ public:
         f2->Assemble();
         (*f2) -= (*g2);
         f2->SetSubVector(protein_dofs, 0.0);
+        for (int i=0; i<need_dofs.Size(); ++i) y3[i] = (*f2)[need_dofs[i]];
+        cout << "4. l2 norm of y: " << y.Norml2() << endl;
+        cout << "   l2 norm of y3: " << y3.Norml2() << endl;
     }
 
     virtual Operator &GetGradient(const Vector& x) const
     {
-        int sc = height / 3;
-        Vector& x_ = const_cast<Vector&>(x);
         Array<int>& Dirichlet_attr_ = const_cast<Array<int>&>(Dirichlet_attr);
+
+        int sc = fsp->GetTrueVSize();
+        Vector x_(sc * 3);
+        x_ = 0.0;
+        for (int i=0; i<sc; ++i)               x_[i]                   = x[i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]]   = x[sc + i];
+        for (int i=0; i<need_dofs.Size(); ++i) x_[2*sc + need_dofs[i]] = x[sc + need_dofs.Size() + i];
 
         phi3_k->MakeTRef(fsp, x_, 0);
         c1_k  ->MakeTRef(fsp, x_, sc);
@@ -3223,6 +3279,9 @@ public:
         phi3_k->SetFromTrueVector();
         c1_k  ->SetFromTrueVector();
         c2_k  ->SetFromTrueVector();
+        cout << "After set bdc (in Newton::GetGradient()), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
+        cout << "After set bdc (in Newton::GetGradient()), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
+        cout << "After set bdc (in Newton::GetGradient()), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
 
         GridFunctionCoefficient c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
@@ -3239,6 +3298,9 @@ public:
         a21->Finalize();
         a21->SetOperatorType(Operator::PETSC_MATAIJ);
         a21->FormSystemMatrix(null_array, A21);
+        Mat A21_;
+        MatCreateSubMatrix(A21, is, long_is, MAT_INITIAL_MATRIX, &A21_);
+        A21__ = new PetscParMatrix(A21_, true);
 
         delete a22;
         a22 = new ParBilinearForm(fsp);
@@ -3262,7 +3324,9 @@ public:
         a22->Finalize();
         a22->SetOperatorType(Operator::PETSC_MATAIJ);
         a22->FormSystemMatrix(null_array, A22);
-        A22.EliminateRows(protein_dofs, 1.0);
+        Mat A22_;
+        MatCreateSubMatrix(A22, is, is, MAT_INITIAL_MATRIX, &A22_);
+        A22__ = new PetscParMatrix(A22_, true);
 
         delete a31;
         a31 = new ParBilinearForm(fsp);
@@ -3277,6 +3341,9 @@ public:
         a31->Finalize();
         a31->SetOperatorType(Operator::PETSC_MATAIJ);
         a31->FormSystemMatrix(null_array, A31);
+        Mat A31_;
+        MatCreateSubMatrix(A31, is, long_is, MAT_INITIAL_MATRIX, &A31_);
+        A31__ = new PetscParMatrix(A31_, true);
 
         delete a33;
         a33 = new ParBilinearForm(fsp);
@@ -3300,71 +3367,18 @@ public:
         a33->Finalize();
         a33->SetOperatorType(Operator::PETSC_MATAIJ);
         a33->FormSystemMatrix(null_array, A33);
-        A33.EliminateRows(protein_dofs, 1.0);
+        Mat A33_;
+        MatCreateSubMatrix(A33, is, is, MAT_INITIAL_MATRIX, &A33_);
+        A33__ = new PetscParMatrix(A33_, true);
 
         jac_k = new BlockOperator(block_trueoffsets);
         jac_k->SetBlock(0, 0, &A11);
-        jac_k->SetBlock(0, 1, &A12);
-        jac_k->SetBlock(0, 2, &A13);
-        jac_k->SetBlock(1, 0, &A21);
-        jac_k->SetBlock(1, 1, &A22);
-        jac_k->SetBlock(2, 0, &A31);
-        jac_k->SetBlock(2, 2, &A33);
-#ifdef CLOSE
-        { // for test
-            cout << "after Assemble() in GetGradient() in par:\n";
-            Vector temp(height/3), haha(height/3);
-            for (int i=0; i<height/3; ++i) {
-                haha[i] = i%10;
-            }
-
-            ofstream temp_file;
-
-            temp_file.open("./A11_mult_phi_par");
-            A11.Mult(haha, temp);
-            cout << "A11_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A12_mult_phi_par");
-            A12.Mult(haha, temp);
-            cout << "A12_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A13_mult_phi_par");
-            A13.Mult(haha, temp);
-            cout << "A13_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A21_mult_phi_par");
-            A21.Mult(haha, temp);
-            cout << "A21_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A22_mult_phi_par");
-            A22.Mult(haha, temp);
-            cout << "A22_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A31_mult_phi_par");
-            A31.Mult(haha, temp);
-            cout << "A31_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-            temp_file.open("./A33_mult_phi_par");
-            A33.Mult(haha, temp);
-            cout << "A33_temp norm: " << temp.Norml2() << endl;
-            temp.Print(temp_file, 1);
-            temp_file.close();
-
-//            MFEM_ABORT("save mesh done in par");
-        }
-#endif
+        jac_k->SetBlock(0, 1, A12__);
+        jac_k->SetBlock(0, 2, A13__);
+        jac_k->SetBlock(1, 0, A21__);
+        jac_k->SetBlock(1, 1, A22__);
+        jac_k->SetBlock(2, 0, A31__);
+        jac_k->SetBlock(2, 2, A33__);
         return *jac_k;
     }
 };
@@ -3621,7 +3635,6 @@ public:
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 
         cout << "l2 norm of u_k (initial): " << u_k->Norml2() << endl;
-        MFEM_ABORT("3623");
         Vector zero_vec;
         chrono.Start();
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector

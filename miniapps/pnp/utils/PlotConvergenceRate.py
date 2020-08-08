@@ -382,9 +382,37 @@ def demo1(): # Newton线性化对应的CG和DG离散格式
 
     os._exit(0)
 
+def demo2(): # 使用EAFE和SUPG求解NP方程的时间差异
+    # 数据来源ee1,ee2,ee3,ss1,ss2,ss3
+    mesh_size = [0.38268343236509, 0.19134171618254, 0.095670858091283, 0.047835429045611, 0.047835429045611/2, 0.047835429045611/4] # refine 5
+
+    np1_eafe = [0.003897635 , 0.01361938   , 0.1076190626, 0.9105708488 , 24.3784115578 , 210.2011713252]
+    np2_eafe = [0.0043495255, 0.0141814942 , 0.1082109336, 0.9121379526 , 24.3529989016 , 215.2970149852]
+    np1_supg = [0.0040086875, 0.01509560775, 0.1098770995, 0.98384646975, 27.23847211525, 244.3053652115]
+    np2_supg = [0.004266588 , 0.01528169725, 0.1102986135, 0.98290693375, 27.19731748675, 243.967417715]
+
+    fig = plt.figure()
+    fig.canvas.set_window_title('Window Title')
+    # fig.suptitle('Gummel-CG Algorithm')
+    plt.plot(mesh_size, np1_eafe, ':s', label='EAFE for NP1')
+    plt.plot(mesh_size, np2_eafe, ':o', label='EAFE for NP2')
+    plt.plot(mesh_size, np1_supg, ':*', label='SUPG for NP1')
+    plt.plot(mesh_size, np2_supg, ':x', label='SUPG for NP2')
+    # plt.xscale('symlog') # symlog, logit, log
+    # plt.yscale('logit')
+    plt.grid(True)
+    plt.gca().invert_xaxis()
+    plt.gca().yaxis.set_minor_formatter(NullFormatter())
+    plt.xlabel("mesh size (h)")
+    plt.ylabel("average time (s)")
+    # plt.title("Gummel-CG Algorithm")
+    plt.legend()
+    plt.show()
+
+    os._exit(0)
 
 if __name__ == '__main__':
-    demo1()
+    demo2()
 
     if 1:
         # 数据来源dddd5
