@@ -39,6 +39,10 @@ configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_protein/newton_amg
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_protein/newton_amg
                COPYONLY)
 
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_protein/newton_amg_lu
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_protein/newton_amg_lu
+               COPYONLY)
+
 configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_protein/newton_lu
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_protein/newton_lu
                COPYONLY)
