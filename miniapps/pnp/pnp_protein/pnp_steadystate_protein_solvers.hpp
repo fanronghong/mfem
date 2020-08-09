@@ -3185,6 +3185,11 @@ public:
         chrono.Start();
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
         chrono.Stop();
+
+        cout << "\nNewton, CG" << p_order << ", protein, parallel"
+             << ", preconditioner: " << prec_type << ", petsc option file: " << options_src
+             << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
+
         linearize_iter = newton_solver->GetNumIterations();
         total_time = chrono.RealTime();
         ndofs = u_k->Size();
@@ -3206,7 +3211,6 @@ public:
         map<string, double>::iterator it2;
         for (it2=out2.begin(); it2!=out2.end(); ++it2)
             cout << (*it2).first << ": " << (*it2).second << endl;
-
 
         for (int i=0; i<sc; ++i)               x_[i]                   = u_k->GetBlock(0)[i];
         for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]]   = u_k->GetBlock(1)[i];
@@ -4020,6 +4024,11 @@ public:
         out2["linearize_iter"] = linearize_iter;
         out2["total_time"] = total_time;
         out2["ndofs"] = ndofs;
+
+        cout << "\nNewton, DG" << p_order << ", protein, parallel"
+             << ", prec: " << prec_type << ", petsc option file: " << options_src
+             << ", sigma: " << sigma << ", kappa: " << kappa
+             << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
 
         SNESGetConvergenceHistory(snes, &residual_norms, &its, &num_its);
 //        for (int i=0; i<num_its; ++i)
