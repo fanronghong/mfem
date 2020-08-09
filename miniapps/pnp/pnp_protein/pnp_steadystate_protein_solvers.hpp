@@ -3455,6 +3455,7 @@ protected:
 
     StopWatch chrono;
     int num_procs, myid;
+    VisItDataCollection* dc;
 
 public:
     PNP_Newton_DG_Operator_par(ParFiniteElementSpace *fsp_, ParGridFunction *phi1_, ParGridFunction *phi2_)
@@ -3634,6 +3635,14 @@ public:
 //        g2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_coeff, &phi_D_coeff), Dirichlet_attr);
         // omit zero Neumann bdc
         g2->Assemble();
+
+
+        dc = new VisItDataCollection("data collection", mesh);
+        dc->RegisterField("phi1", phi1);
+        dc->RegisterField("phi2", phi2);
+        dc->RegisterField("phi3_k", phi3_k);
+        dc->RegisterField("c1_k",   c1_k);
+        dc->RegisterField("c2_k",   c2_k);
     }
     virtual ~PNP_Newton_DG_Operator_par()
     {
@@ -3663,6 +3672,9 @@ public:
         cout << "After set bdc (in Newton::Mult()), L2 norm of phi3: " << phi3_k->ComputeL2Error(zero) << endl;
         cout << "After set bdc (in Newton::Mult()), L2 norm of   c1: " <<   c1_k->ComputeL2Error(zero) << endl;
         cout << "After set bdc (in Newton::Mult()), L2 norm of   c2: " <<   c2_k->ComputeL2Error(zero) << endl;
+        Visualize(*dc, "phi3_k", "phi3_k");
+        Visualize(*dc, "c1_k", "c1_k");
+        Visualize(*dc, "c2_k", "c2_k");
 
         GridFunctionCoefficient phi3_k_coeff(phi3_k), c1_k_coeff(c1_k), c2_k_coeff(c2_k);
 
@@ -3923,6 +3935,7 @@ private:
     ParGridFunction *phi1, *phi2;
 
     Array<int> block_trueoffsets, protein_dofs, water_dofs, interface_dofs;
+    Array<int> protein_dofs_dg, water_dofs_dg, interface_dofs_dg, need_dofs;
     Array<int> top_bdr, bottom_bdr, interface_bdr, Gamma_m_bdr;
     Array<int> top_ess_tdof_list, bottom_ess_tdof_list, interface_ess_tdof_list;
 
@@ -3934,6 +3947,7 @@ private:
     PetscInt *its=0, num_its=100;
     PetscReal *residual_norms=0;
     StopWatch chrono;
+    VisItDataCollection* dc;
 
 public:
     PNP_Newton_DG_Solver_par(Mesh& mesh_): mesh(&mesh_)
@@ -3969,19 +3983,71 @@ public:
             Gamma_m_bdr[Gamma_m_marker - 1] = 1;
         }
 
+        // extract protein dofs, water dofs and interface dofs
+        for (int i=0; i<dg_space->GetNE(); ++i)
+        {
+            Element* el = mesh->GetElement(i);
+            int attr = el->GetAttribute();
+            Array<int> dofs;
+            if (attr == protein_marker)
+            {
+                dg_space->GetElementDofs(i, dofs);
+                protein_dofs_dg.Append(dofs);
+            } else {
+                assert(attr == water_marker);
+                dg_space->GetElementDofs(i,dofs);
+                water_dofs_dg.Append(dofs);
+            }
+        }
+        for (int i=0; i<mesh->GetNumFaces(); ++i)
+        {
+            FaceElementTransformations* tran = mesh->GetFaceElementTransformations(i);
+            if (tran->Elem2No > 0) // interior facet
+            {
+                const Element* e1  = mesh->GetElement(tran->Elem1No);
+                const Element* e2  = mesh->GetElement(tran->Elem2No);
+                int attr1 = e1->GetAttribute();
+                int attr2 = e2->GetAttribute();
+                Array<int> fdofs;
+                if (attr1 != attr2) // interface facet
+                {
+                    dg_space->GetFaceVDofs(i, fdofs);
+                    interface_dofs_dg.Append(fdofs);
+                }
+            }
+        }
+        protein_dofs_dg.Sort();   protein_dofs_dg.Unique();
+        water_dofs_dg.Sort();     water_dofs_dg.Unique();
+        interface_dofs_dg.Sort(); interface_dofs_dg.Unique();
+        for (int i=0; i<interface_dofs.Size(); i++) // 去掉protein和water中的interface上的dofs
+        {
+            protein_dofs_dg.DeleteFirst(interface_dofs_dg[i]); //经过上面的Unique()函数后protein_dofs里面不可能有相同的元素
+            water_dofs_dg.DeleteFirst(interface_dofs_dg[i]); //经过上面的Unique()函数后water_dofs里面不可能有相同的元素
+        }
+        assert(dg_space->GetTrueVSize() == protein_dofs_dg.Size() + water_dofs_dg.Size() + interface_dofs_dg.Size());
+
+        // combine water dofs and interface dofs to use in variable concentration.
+        need_dofs.Append(water_dofs_dg);
+        need_dofs.Append(interface_dofs_dg);
+        need_dofs.Sort();
+
         block_trueoffsets.SetSize(4);
         block_trueoffsets[0] = 0;
         block_trueoffsets[1] = dg_space->GetTrueVSize();
-        block_trueoffsets[2] = dg_space->GetTrueVSize();
-        block_trueoffsets[3] = dg_space->GetTrueVSize();
+        block_trueoffsets[2] = need_dofs.Size();
+        block_trueoffsets[3] = need_dofs.Size();
         block_trueoffsets.PartialSum();
 
         u_k = new BlockVector(block_trueoffsets); // 必须满足essential边界条件
         *u_k = 0.0;
         { // set essential bdc
-            phi3_k.MakeTRef(dg_space, *u_k, block_trueoffsets[0]);
-            c1_k  .MakeTRef(dg_space, *u_k, block_trueoffsets[1]);
-            c2_k  .MakeTRef(dg_space, *u_k, block_trueoffsets[2]);
+            int sc = dg_space->GetTrueVSize();
+            Vector x_(sc * 3); // 解向量在所有自由度上的值组成的一个长向量：浓度变量在蛋白中为0的部分被保留
+            x_ = 0.0;
+            phi3_k.MakeTRef(dg_space, x_, 0);
+            c1_k  .MakeTRef(dg_space, x_, sc);
+            c2_k  .MakeTRef(dg_space, x_, 2*sc);
+
             phi3_k = 0.0;
             c1_k   = 0.0;
             c2_k   = 0.0;
@@ -4018,6 +4084,12 @@ public:
             cout << "After set bdc, L2 norm of phi3: " << phi3_k.ComputeL2Error(zero) << endl;
             cout << "After set bdc, L2 norm of   c1: " <<   c1_k.ComputeL2Error(zero) << endl;
             cout << "After set bdc, L2 norm of   c2: " <<   c2_k.ComputeL2Error(zero) << endl;
+
+            // 扩展 x_ 成 u_k
+            for (int i=0; i<sc; ++i)               u_k->GetBlock(0)[i] = x_[i];
+            for (int i=0; i<need_dofs.Size(); ++i) u_k->GetBlock(1)[i] = x_[sc + need_dofs[i]];
+            for (int i=0; i<need_dofs.Size(); ++i) u_k->GetBlock(2)[i] = x_[2*sc + need_dofs[i]];
+
             cout << "l2 norm of u_k (initial after set bdc): " << u_k->Norml2() << endl;
         }
 
@@ -4130,6 +4202,13 @@ public:
         phi2->ProjectGridFunction(*phi2_);
         cout << "L2 norm of phi2: " << phi2->ComputeL2Error(zero) << endl;
 
+        dc = new VisItDataCollection("data collection", pmesh);
+        dc->RegisterField("phi1", phi1);
+        dc->RegisterField("phi2", phi2);
+        dc->RegisterField("phi3_k", &phi3_k);
+        dc->RegisterField("c1_k",   &c1_k);
+        dc->RegisterField("c2_k",   &c2_k);
+
         op = new PNP_Newton_DG_Operator_par(dg_space, phi1, phi2);
 
         jac_factory = new PreconditionerFactory(*op, prec_type);
@@ -4155,6 +4234,28 @@ public:
              << ", prec: " << prec_type << ", petsc option file: " << options_src
              << ", sigma: " << sigma << ", kappa: " << kappa
              << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
+
+        if (0) {
+            int sc = dg_space->GetTrueVSize();
+            Vector x_(sc * 3); // 解向量在所有自由度上的值组成的一个长向量：浓度变量在蛋白中为0的部分被保留
+            x_ = 0.0;
+            for (int i=0; i<sc; ++i)               x_[i] = u_k->GetBlock(0)[i];
+            for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]] = u_k->GetBlock(1)[i];
+            for (int i=0; i<need_dofs.Size(); ++i) x_[2*sc + need_dofs[i]] = u_k->GetBlock(2)[i];
+
+            phi3_k.MakeTRef(dg_space, x_, 0);
+            c1_k  .MakeTRef(dg_space, x_, sc);
+            c2_k  .MakeTRef(dg_space, x_, 2*sc);
+            phi3_k.SetFromTrueVector();
+            phi3_k.SetFromTrueVector();
+            phi3_k.SetFromTrueVector();
+
+            Visualize(*dc, "phi3_k", "phi3_k");
+            Visualize(*dc, "c1_k", "c1_k");
+            Visualize(*dc, "c2_k", "c2_k");
+
+        }
+
 
         cout << "l2 norm of u_k (initial): " << u_k->Norml2() << endl;
         Vector zero_vec;

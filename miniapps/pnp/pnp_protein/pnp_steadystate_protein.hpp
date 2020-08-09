@@ -25,7 +25,7 @@ bool show_peclet        = false;
 double relax            = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 
 double sigma            = -1.0; // symmetric parameter for DG
-double kappa            = 20; // penalty parameter for DG
+double kappa            = 10.0; // penalty parameter for DG
 bool verbose            = false;
 
 /* 只能定义如下集中参数
