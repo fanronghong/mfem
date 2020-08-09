@@ -23,6 +23,8 @@ bool visualize          = false;
 bool local_conservation = false;
 bool show_peclet        = false;
 double relax            = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
+double schur_alpha1      = 1.0; // schur = A - alpha1 B1 A1^-1 C1 - alpha2 B2 A2^-1 C2, 这个alpha1就是该参数
+double schur_alpha2      = 1.0;
 
 double sigma            = -1.0; // symmetric parameter for DG
 double kappa            = 10.0; // penalty parameter for DG

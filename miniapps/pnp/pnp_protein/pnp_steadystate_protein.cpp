@@ -33,6 +33,8 @@ int main(int argc, char **argv)
     args.AddOption(&verbose, "-ver", "--verbose", "-nover", "--noverbose", "Verbose for more outputs");
     args.AddOption(&visualize, "-v", "--vis", "-nov", "--novis", "Visualize outputs");
     args.AddOption(&prec_type, "-prec", "--prec_type", "Preconditioner type for Newton disretization, choose: block, uzawa, simple");
+    args.AddOption(&schur_alpha1, "-schur1", "--schur1", "1st parameter for Schur Complement");
+    args.AddOption(&schur_alpha2, "-schur2", "--schur2", "2nd parameter for Schur Complement");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.Parse();
     if (!args.Good())
