@@ -3576,7 +3576,7 @@ public:
         a12 = new ParBilinearForm(fsp);
         // - alpha2 alpha3 z1 (dc1, psi3)_{\Omega_s}
         a12->AddDomainIntegrator(new MassIntegrator(neg_alpha2_prod_alpha3_prod_v_K_water));
-//        // kappa <h^{-1} [dc1], [psi3]>_{\Omega_s}
+//        // kappa <h^{-1} [dc1], [psi3]>_{\Omega_s}, 对ci的连续性的惩罚，可以去掉，对应地右端项也要去掉
 //        a12->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker));
 //        a12->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker), Dirichlet_attr);
         a12->Assemble();
@@ -3691,12 +3691,12 @@ public:
         // kappa epsilon <h^{-1} [phi3^k], [psi3]>
         f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_Epsilon, &phi3_k_coeff));
         f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4(&kappa_Epsilon, &phi3_k_coeff), Dirichlet_attr_);
-        // kappa <h^{-1} [c1^k], [psi3]>
-        f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_coeff, &c1_k_coeff, mesh, water_marker));
-        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_coeff, &c1_k_coeff, mesh, water_marker), Dirichlet_attr_);
-        // kappa <h^{-1} [c2^k], [psi3]>
-        f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_coeff, &c2_D_coeff, mesh, water_marker));
-        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_coeff, &c2_D_coeff, mesh, water_marker), Dirichlet_attr_);
+//        // kappa <h^{-1} [c1^k], [psi3]>
+//        f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_coeff, &c1_k_coeff, mesh, water_marker));
+//        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_coeff, &c1_k_coeff, mesh, water_marker), Dirichlet_attr_);
+//        // kappa <h^{-1} [c2^k], [psi3]>
+//        f->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_coeff, &c2_D_coeff, mesh, water_marker));
+//        f->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_coeff, &c2_D_coeff, mesh, water_marker), Dirichlet_attr_);
         f->Assemble();
         (*f) -= (*g);
         y1 = (*f);
@@ -3731,11 +3731,11 @@ public:
         // sigma <[phi3^k], {D1 z1 c1^k grad(v1)}>  所有位于水中的单元的边界积分
         f1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_7_1(sigma_D1_prod_z1_prod_c1_k, phi3_k_coeff, mesh, water_marker));
         f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_7_1(sigma_D1_prod_z1_prod_c1_k, phi3_k_coeff, mesh, water_marker), Dirichlet_attr_);
-        // kappa <{h^{-1} D1 z1 c1^k}[phi3^k], [v1]>  所有位于水中的单元的边界积分
-        f1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_prod_D1_prod_z1_prod_c1_k, &phi3_k_coeff, mesh, water_marker));
-        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_prod_D1_prod_z1_prod_c1_k, &phi3_k_coeff, mesh, water_marker), Dirichlet_attr_);
+//        // kappa <{h^{-1} D1 z1 c1^k}[phi3^k], [v1]>  所有位于水中的单元的边界积分
+//        f1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_prod_D1_prod_z1_prod_c1_k, &phi3_k_coeff, mesh, water_marker));
+//        f1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_prod_D1_prod_z1_prod_c1_k, &phi3_k_coeff, mesh, water_marker), Dirichlet_attr_);
         // - sigma <phi_D, D1 z1 c1^k grad(v1).n> - kappa D1 z1 c1^k <h^{-1} phi_D, v1>
-        f1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D1_prod_z1_prod_c1_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
+        f1->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D1_prod_z1_prod_c1_k, -1.0*sigma, 0.0), Dirichlet_attr_);
         f1->Assemble();
         (*f1) -= (*g1);
         f1->SetSubVector(protein_dofs, 0.0);
@@ -3771,11 +3771,11 @@ public:
         // sigma <[phi3^k], {D2 z2 c2^k grad(v2)}>  所有位于水中的单元的边界积分
         f2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_7_1(sigma_D2_prod_z2_prod_c2_k, phi3_k_coeff, mesh, water_marker));
         f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_7_1(sigma_D2_prod_z2_prod_c2_k, phi3_k_coeff, mesh, water_marker), Dirichlet_attr_);
-        // kappa <{h^{-1} D2 z2 c2^k}[phi3^k], [v2]>  所有位于水中的单元的边界积分
-        f2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_prod_D2_prod_z2_prod_c2_k, &phi3_k_coeff, mesh, water_marker));
-        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_prod_D2_prod_z2_prod_c2_k, &phi3_k_coeff, mesh, water_marker), Dirichlet_attr_);
+//        // kappa <{h^{-1} D2 z2 c2^k}[phi3^k], [v2]>  所有位于水中的单元的边界积分
+//        f2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_prod_D2_prod_z2_prod_c2_k, &phi3_k_coeff, mesh, water_marker));
+//        f2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_4_1(&kappa_prod_D2_prod_z2_prod_c2_k, &phi3_k_coeff, mesh, water_marker), Dirichlet_attr_);
         // - sigma <phi_D, D2 z2 c2^k grad(v2).n> - kappa D2 z2 c2^k <h^{-1} phi_D, v2>
-        f2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D2_prod_z2_prod_c2_k, -1.0*sigma, -1.0*kappa), Dirichlet_attr_);
+        f2->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_D_coeff, D2_prod_z2_prod_c2_k, -1.0*sigma, 0.0), Dirichlet_attr_);
         f2->Assemble();
         (*f2) -= (*g2);
         f2->SetSubVector(protein_dofs, 0.0);
@@ -3836,12 +3836,12 @@ public:
         // - <{D1 z1 dc1 grad(phi3^k)}, [v1]>
         a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi3_k, mesh, water_marker));
         a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D1_z1, *phi3_k, mesh, water_marker), Dirichlet_attr_);
-        // sigma <[dc1], {D1 z1 v1 grad(phi3^k)}>
-        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi3_k, mesh, water_marker));
-        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi3_k, mesh, water_marker), Dirichlet_attr_);
-        // kappa <h^{-1} [dc1], [v1]>
-        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker));
-        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker), Dirichlet_attr_);
+//        // sigma <[dc1], {D1 z1 v1 grad(phi3^k)}>
+//        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi3_k, mesh, water_marker));
+//        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D1_z1, *phi3_k, mesh, water_marker), Dirichlet_attr_);
+//        // kappa <h^{-1} [dc1], [v1]>
+//        a22->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker));
+//        a22->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker), Dirichlet_attr_);
         a22->Assemble();
         a22->Finalize();
         a22->SetOperatorType(Operator::PETSC_MATAIJ);
@@ -3879,12 +3879,12 @@ public:
         // - <{D2 z2 dc2 grad(phi3^k)}, [v2]>
         a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D2_z2, *phi3_k, mesh, water_marker));
         a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D2_z2, *phi3_k, mesh, water_marker), Dirichlet_attr_);
-        // sigma <[dc2], {D2 z2 v2 grad(phi3^k)}>
-        a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi3_k, mesh, water_marker));
-        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi3_k, mesh, water_marker), Dirichlet_attr_);
-        // kappa <h^{-1} [dc2], [v2]>
-        a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker));
-        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker), Dirichlet_attr_);
+//        // sigma <[dc2], {D2 z2 v2 grad(phi3^k)}>
+//        a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi3_k, mesh, water_marker));
+//        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D2_z2, *phi3_k, mesh, water_marker), Dirichlet_attr_);
+//        // kappa <h^{-1} [dc2], [v2]>
+//        a33->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker));
+//        a33->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_3_1(kappa_coeff, mesh, water_marker), Dirichlet_attr_);
         a33->Assemble();
         a33->Finalize();
         a33->SetOperatorType(Operator::PETSC_MATAIJ);
