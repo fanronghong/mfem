@@ -35,7 +35,7 @@ bool verbose            = false;
  * _1MAG_2:
  * _1bl8_tu:
  * */
-#define _1MAG_2
+#define _1bl8_tu
 
 
 #if defined(_1MAG_2_test_case)
