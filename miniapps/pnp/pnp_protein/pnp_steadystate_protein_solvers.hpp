@@ -2938,6 +2938,14 @@ protected:
     ParGridFunction phi3_k, c1_k, c2_k;
     ParGridFunction *phi1, *phi2;
 
+    SNES snes;
+    map<string, Array<double>> out1;
+    map<string, double> out2;
+    Array<double> linear_iter;
+    double linearize_iter, total_time, ndofs, linear_avg_iter;
+    PetscInt *its=0, num_its=100;
+    PetscReal *residual_norms=0;
+
     StopWatch chrono;
     VisItDataCollection* dc;
 
@@ -3138,6 +3146,11 @@ public:
         newton_solver = new PetscNonlinearSolver(h1_space->GetComm(), *op, "newton_");
         newton_solver->iterative_mode = true;
         newton_solver->SetPreconditionerFactory(jac_factory);
+
+        snes = SNES(*newton_solver);
+        PetscMalloc(num_its * sizeof(PetscInt), &its);
+        PetscMalloc(num_its * sizeof(PetscReal), &residual_norms);
+        SNESSetConvergenceHistory(snes, residual_norms, its, num_its, PETSC_TRUE);
     }
     virtual ~PNP_Newton_CG_Solver_par()
     {
@@ -3169,7 +3182,31 @@ public:
 
         Vector zero_vec;
         cout << "initial u_k l2 norm: " << u_k->Norml2() << endl;
+        chrono.Start();
         newton_solver->Mult(zero_vec, *u_k); // u_k must be a true vector
+        chrono.Stop();
+        linearize_iter = newton_solver->GetNumIterations();
+        total_time = chrono.RealTime();
+        ndofs = u_k->Size();
+        out2["linearize_iter"] = linearize_iter;
+        out2["total_time"] = total_time;
+        out2["ndofs"] = ndofs;
+        SNESGetConvergenceHistory(snes, &residual_norms, &its, &num_its);
+//        for (int i=0; i<num_its; ++i)
+//            cout << residual_norms[i] << endl;
+        for (int i=1; i<num_its; ++i)
+            linear_iter.Append(its[i]);
+        out1["linear_iter"] = linear_iter;
+        linear_avg_iter = round(linear_iter.Sum() / linear_iter.Size());
+        out2["linear_avg_iter"] = linear_avg_iter;
+
+        map<string, Array<double>>::iterator it1;
+        for (it1=out1.begin(); it1!=out1.end(); ++it1)
+            (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
+        map<string, double>::iterator it2;
+        for (it2=out2.begin(); it2!=out2.end(); ++it2)
+            cout << (*it2).first << ": " << (*it2).second << endl;
+
 
         for (int i=0; i<sc; ++i)               x_[i]                   = u_k->GetBlock(0)[i];
         for (int i=0; i<need_dofs.Size(); ++i) x_[sc + need_dofs[i]]   = u_k->GetBlock(1)[i];
