@@ -31,11 +31,10 @@ double kappa            = 10.0; // penalty parameter for DG
 bool verbose            = false;
 
 /* 只能定义如下集中参数
- * _1MAG_2_test_case: only do tests to verify the code, forbid to change any parameters
  * _1MAG_2:
  * _1bl8_tu:
  * */
-#define _1bl8_tu
+#define _1MAG_2
 
 
 #if defined(_1MAG_2_test_case)

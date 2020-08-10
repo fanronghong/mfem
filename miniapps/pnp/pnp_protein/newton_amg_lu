@@ -44,7 +44,7 @@
 -sub_block2_ksp_converged_reason
 
 -sub_block3_ksp_type gmres
--sub_block3_pc_type gamg -sub_block3_pc_gamg_type classical -sub_block3_pc_gamg_agg_nsmooths 1
+-sub_block3_pc_type lu
 -sub_block3_ksp_rtol 1e-8
 -sub_block3_ksp_atol 1e-10
 -sub_block3_ksp_divtol 1e5
