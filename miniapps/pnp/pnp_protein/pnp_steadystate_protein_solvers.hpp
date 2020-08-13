@@ -2533,6 +2533,7 @@ public:
         VecDuplicate(x1, &C2_y3);
 
         MatMult(sub[0][1], y2, C1_y2);
+        MatMult(sub[0][2], y3, C2_y3);
         VecAXPY(x4, -1.0, C1_y2); // x1 - C1 y2 -> x4
         VecAXPY(x4, -1.0, C2_y3); // x1 - C1 y2 - C2 y3 -> x4
         KSPSolve(kspblock[0], x4, y1); // solve Schur y1 = x1 - C1 y2 - C2 y3
