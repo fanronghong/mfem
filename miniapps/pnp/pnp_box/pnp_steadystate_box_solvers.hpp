@@ -253,15 +253,15 @@ public:
         out2["linearize_iter"] = linearize_iter;
         out2["total_time"] = total_time;
         out2["ndofs"] = ndofs;
-        poisson_avg_iter = round(poisson_iter.Sum() / poisson_iter.Size());
+        poisson_avg_iter = (poisson_iter.Sum() / poisson_iter.Size());
         poisson_avg_time = poisson_time.Sum() / poisson_time.Size();
         out2["poisson_avg_iter"] = poisson_avg_iter;
         out2["poisson_avg_time"] = poisson_avg_time;
-        np1_avg_iter     = round(np1_iter.Sum() / np1_iter.Size());
+        np1_avg_iter     = (np1_iter.Sum() / np1_iter.Size());
         np1_avg_time     = np1_time.Sum() / np1_iter.Size();
         out2["np1_avg_iter"] = np1_avg_iter;
         out2["np1_avg_time"] = np1_avg_time;
-        np2_avg_iter     = round(np2_iter.Sum() / np2_iter.Size());
+        np2_avg_iter     = (np2_iter.Sum() / np2_iter.Size());
         np2_avg_time     = np2_time.Sum() / np2_iter.Size();
         out2["np2_avg_iter"] = np2_avg_iter;
         out2["np2_avg_time"] = np2_avg_time;
@@ -991,15 +991,15 @@ public:
         out2["linearize_iter"] = linearize_iter;
         out2["total_time"] = total_time;
         out2["ndofs"] = ndofs;
-        poisson_avg_iter = round(poisson_iter.Sum() / poisson_iter.Size());
+        poisson_avg_iter = (poisson_iter.Sum() / poisson_iter.Size());
         poisson_avg_time = poisson_time.Sum() / poisson_time.Size();
         out2["poisson_avg_iter"] = poisson_avg_iter;
         out2["poisson_avg_time"] = poisson_avg_time;
-        np1_avg_iter     = round(np1_iter.Sum() / np1_iter.Size());
+        np1_avg_iter     = (np1_iter.Sum() / np1_iter.Size());
         np1_avg_time     = np1_time.Sum() / np1_iter.Size();
         out2["np1_avg_iter"] = np1_avg_iter;
         out2["np1_avg_time"] = np1_avg_time;
-        np2_avg_iter     = round(np2_iter.Sum() / np2_iter.Size());
+        np2_avg_iter     = (np2_iter.Sum() / np2_iter.Size());
         np2_avg_time     = np2_time.Sum() / np2_iter.Size();
         out2["np2_avg_iter"] = np2_avg_iter;
         out2["np2_avg_time"] = np2_avg_time;
@@ -1862,7 +1862,7 @@ public:
         for (int i=1; i<num_its; ++i)
             linear_iter.Append(its[i]);
         out1["linear_iter"] = linear_iter;
-        linear_avg_iter = round(linear_iter.Sum() / linear_iter.Size());
+        linear_avg_iter = (linear_iter.Sum() / linear_iter.Size());
         out2["linear_avg_iter"] = linear_avg_iter;
 
         phi .MakeTRef(h1_space, *u_k, block_trueoffsets[0]);
@@ -2543,7 +2543,7 @@ public:
         for (int i=1; i<num_its; ++i)
             linear_iter.Append(its[i]);
         out1["linear_iter"] = linear_iter;
-        linear_avg_iter = round(linear_iter.Sum() / linear_iter.Size());
+        linear_avg_iter = (linear_iter.Sum() / linear_iter.Size());
         out2["linear_avg_iter"] = linear_avg_iter;
 
         phi .MakeTRef(dg_space, *u_k, block_trueoffsets[0]);

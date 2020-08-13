@@ -12,9 +12,9 @@ using namespace mfem;
 
 int p_order             = 1; //有限元基函数的多项式次数
 const char* Linearize   = "newton"; // newton, gummel
-const char* Discretize  = "dg"; // cg, dg
+const char* Discretize  = "cg"; // cg, dg
 const char* AdvecStable = "eafe"; // none, supg, eafe
-const char* prec_type   = "block"; // preconditioner for Newton discretization: block, uzawa, simple
+const char* prec_type   = "uzawa"; // preconditioner for Newton discretization: block, uzawa, simple
 const char* options_src = "./newton_amg_lu";
 int refine_times        = 0;
 const char* output      = NULL;
