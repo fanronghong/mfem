@@ -318,12 +318,12 @@ int main(int argc, char *argv[])
 
    ParBilinearForm *m = new ParBilinearForm(fes);
    ParBilinearForm *k = new ParBilinearForm(fes);
-   if (pa)
+   if (pa) // partial assembly
    {
       m->SetAssemblyLevel(AssemblyLevel::PARTIAL);
       k->SetAssemblyLevel(AssemblyLevel::PARTIAL);
    }
-   else if (ea)
+   else if (ea) // element assembly
    {
       m->SetAssemblyLevel(AssemblyLevel::ELEMENT);
       k->SetAssemblyLevel(AssemblyLevel::ELEMENT);
