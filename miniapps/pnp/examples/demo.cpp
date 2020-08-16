@@ -3,61 +3,73 @@
 using namespace mfem;
 using namespace std;
 
-double func(Vector& x)
+int main(int argc, char *argv[])
 {
-    return x[0] + x[1];
-}
+    int num_procs, myid;
+    MPI_Init(&argc, &argv);
+    MFEMInitializePetsc(NULL, NULL, NULL, NULL);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
-int main()
-{
-    Mesh mesh(10, 10, Element::TRIANGLE, true, 1.0, 1.0);
+    Mesh* mesh = new Mesh("./inline-tri-modify.mesh");
+    ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
+    delete mesh;
 
-    int p_order = 1;
-    H1_FECollection h1_fec(p_order, mesh.Dimension());
-    FiniteElementSpace h1_space(&mesh, &h1_fec);
+    Array<int> vert;
+    pmesh->GetElementVertices(1, vert);
+    vert.Print(cout << "vert: ");
 
-    GridFunction gf(&h1_space);
-    FunctionCoefficient coeff(func);
-    gf.ProjectCoefficient(coeff);
+    DG_FECollection* dg_fec = new DG_FECollection(1, 2);
+    ParFiniteElementSpace* dg_space = new ParFiniteElementSpace(pmesh, dg_fec);
 
-    Vector phy_point(2);
-    phy_point(0) = 0.15;
-    phy_point(1) = 0.25;
-    phy_point.Print(cout << "physical point: ");
+    Array<int> dofs;
+    dg_space->GetElementDofs(4, dofs);
+    const Table& el2dof = dg_space->GetElementToDofTable();
+    dofs.Print(cout << "dofs: ");
+    el2dof.Print(cout << "element to dofs:\n");
 
-    IntegrationPoint ip;
-    int elem_idx;
-    ElementTransformation* tran;
-    for (int i=0; i<mesh.GetNE(); ++i)
+    Array<int> null_array;
+
+    ParBilinearForm* a = new ParBilinearForm(dg_space);
+    a->AddDomainIntegrator(new MassIntegrator);
+    a->Assemble();
+
+    ParBilinearForm* b = new ParBilinearForm(dg_space);
+    b->AddDomainIntegrator(new MassIntegrator);
+    b->Assemble();
+
+    ParBilinearForm* c = new ParBilinearForm(dg_space);
+    c->AddDomainIntegrator(new MassIntegrator);
+    c->Assemble();
+
+    ParBilinearForm* d = new ParBilinearForm(dg_space);
+    d->AddDomainIntegrator(new MassIntegrator);
+    d->Assemble();
+
     {
-        tran = mesh.GetElementTransformation(i);
-        InverseElementTransformation invtran(tran);
-        int ret = invtran.Transform(phy_point, ip);
-        if (ret == 0)
-        {
-            elem_idx = i;
-            break;
-        }
+        PetscParMatrix A, B, C, D;
+
+        a->SetOperatorType(Operator::PETSC_MATAIJ);
+        a->FormSystemMatrix(null_array, A);
+
+        b->SetOperatorType(Operator::PETSC_MATAIJ);
+        b->FormSystemMatrix(null_array, B);
+
+        c->SetOperatorType(Operator::PETSC_MATAIJ);
+        c->FormSystemMatrix(null_array, C);
+
+        d->SetOperatorType(Operator::PETSC_MATAIJ);
+        d->FormSystemMatrix(null_array, D);
     }
 
-    cout << elem_idx << "-th element\n"
-         << "reference point: " << ip.x << ", " << ip.y << endl;
-    tran->SetIntPoint(&ip);
-    cout << "func value: " << coeff.Eval(*tran, ip) << endl;
+    ParLinearForm* f = new ParLinearForm(dg_space);
+    ParLinearForm* g = new ParLinearForm(dg_space);
 
-    DenseMatrix phy_point_mat(2, 1);
-    phy_point_mat(0, 0) = 0.15;
-    phy_point_mat(1, 0) = 0.25;
-    Array<int> elem_ids;
-    Array<IntegrationPoint> ips;
-    mesh.FindPoints(phy_point_mat, elem_ids, ips);
+    delete pmesh;
+    delete dg_fec, dg_space;
+    delete a, b, c, d, f, g;
 
-    elem_ids.Print(cout << "element ids: ");
-
-    for (int i=0; i<ips.Size(); ++i)
-    {
-        cout << i << "-th integration point: " << ips[i].x << ", " << ips[i].y << endl;
-    }
-
+    MFEMFinalizePetsc();
+    MPI_Finalize();
     return 0;
 }
