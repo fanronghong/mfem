@@ -264,12 +264,14 @@ public:
     algebraic equation F(x,k,t) = G(x,t). The functions F and G represent the
     _implicit_ and _explicit_ parts of the operator, respectively. For explicit
     operators, F(x,k,t) = k, so f(x,t) = G(x,t). */
+    // 总的来讲：给定x，t，求k。一般的不含时间的Operator就是：给定x，求k
 class TimeDependentOperator : public Operator
 {
 public:
    enum Type
    {
       EXPLICIT,   ///< This type assumes F(x,k,t) = k, i.e. k = f(x,t) = G(x,t).
+      // 给定t之后，就是一个不含时的方形算子（类似矩阵A）： Ax -> k
       IMPLICIT,   ///< This is the most general type, no assumptions on F and G.
       HOMOGENEOUS ///< This type assumes that G(x,t) = 0.
    };
@@ -295,6 +297,7 @@ protected:
 public:
    /** @brief Construct a "square" TimeDependentOperator y = f(x,t), where x and
        y have the same dimension @a n. */
+       // 这个TimeDependentOperator相当于一个方形矩阵A，给定时间t，Ax->y. x,y都是一样的dimension，所以是“方形的”
    explicit TimeDependentOperator(int n = 0, double t_ = 0.0,
                                   Type type_ = EXPLICIT)
       : Operator(n) { t = t_; type = type_; eval_mode = NORMAL; }

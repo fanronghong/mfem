@@ -249,6 +249,7 @@ int main(int argc, char *argv[])
       // When using PETSc, we just create the ODE solver. We use command line
       // customization to select a specific solver.
       MFEMInitializePetsc(NULL, NULL, petscrc_file, NULL);
+      // 涉及到PETSc的TS的使用
       ode_solver = pode_solver = new PetscODESolver(MPI_COMM_WORLD);
    }
 
@@ -323,7 +324,8 @@ int main(int argc, char *argv[])
    //    GLVis visualization.
    ParGridFunction *u = new ParGridFunction(fes);
    u->ProjectCoefficient(u0);
-   HypreParVector *U = u->GetTrueDofs();
+    // 在进行线性求解和时间迭代时，都是使用True***, 即纯代数的表现形式
+    HypreParVector *U = u->GetTrueDofs();
 
    {
       ostringstream mesh_name, sol_name;

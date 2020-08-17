@@ -24,6 +24,7 @@ class ODESolver
 protected:
    /// Pointer to the associated TimeDependentOperator.
    // 即系统dx/dt = f(x,t)中不带时间导数的其余所有项
+   // 给定时间t后f就是一个方形的Operator，类似一个方阵
    TimeDependentOperator *f;  // f(.,t) : R^n --> R^n
    MemoryType mem_type;
 
