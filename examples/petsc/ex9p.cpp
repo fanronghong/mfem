@@ -418,6 +418,7 @@ int main(int argc, char *argv[])
    }
 
    // 10. Define the time-dependent evolution operator describing the ODE
+    //fff注意:这三个参数 M, K, B 都是与时间t无关的
    FE_Evolution *adv = new FE_Evolution(*M, *K, *B, implicit);
 
    double t = 0.0;
@@ -425,6 +426,7 @@ int main(int argc, char *argv[])
    if (use_petsc)
    {
        // 使用petsc的TS
+       //adv是跟时间t有关的函数
       pode_solver->Init(*adv,PetscODESolver::ODE_SOLVER_LINEAR);
    }
    else
@@ -440,6 +442,7 @@ int main(int argc, char *argv[])
       for (int ti = 0; !done; )
       {
          double dt_real = min(dt, t_final - t);
+          //这里面并没有重新assemble刚度矩阵. U是上一个时间步(t, 不是t+dt_real)的解(已知)
          ode_solver->Step(*U, t, dt_real);
          ti++;
 

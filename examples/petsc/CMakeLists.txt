@@ -23,7 +23,6 @@ if (MFEM_USE_MPI)
     ex9p.cpp
     ex10p.cpp
 
-    snes_ex5.cpp
     ts_tutorial_ex1.cpp
     ts_tutorial_ex2.cpp
     ts_tutorial_ex3.cpp

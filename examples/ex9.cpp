@@ -272,6 +272,7 @@ int main(int argc, char *argv[])
    FunctionCoefficient inflow(inflow_function);
    FunctionCoefficient u0(u0_function);
 
+    // DG 格式参考: https://mfem.org/bilininteg/#scalar-field-operators
    BilinearForm m(&fes);
    BilinearForm k(&fes);
    if (pa)
