@@ -65,6 +65,7 @@ typedef struct {
    User-defined routines, provided below.
 */
 extern PetscErrorCode InitialConditions(Vec,AppCtx*);
+// 只提供了 G, jacG, 没有提供 F，jacF，因为 F=du/dt，可以不提供 F(ref petsc user manual)
 extern PetscErrorCode RHSFunction(TS,PetscReal,Vec,Vec,void*);
 extern PetscErrorCode RHSJacobian(TS,PetscReal,Vec,Mat,Mat,void*);
 extern PetscErrorCode Monitor(TS,PetscInt,PetscReal,Vec,void*);
@@ -440,6 +441,7 @@ PetscErrorCode RHSFunction(TS ts,PetscReal t,Vec global_in,Vec global_out,void *
   /*
       Access directly the values in our local INPUT work array
   */
+  // read-only pointer
   ierr = VecGetArrayRead(local_in,&localptr);CHKERRQ(ierr);
 
   /*
@@ -447,6 +449,7 @@ PetscErrorCode RHSFunction(TS ts,PetscReal t,Vec global_in,Vec global_out,void *
   */
   ierr = VecGetArray(localwork,&copyptr);CHKERRQ(ierr);
 
+  // 差分法：离散 u_xx 会出现一个 h*h
   sc = 1.0/(appctx->h*appctx->h*2.0*(1.0+t)*(1.0+t));
 
   /*
@@ -476,6 +479,7 @@ PetscErrorCode RHSFunction(TS ts,PetscReal t,Vec global_in,Vec global_out,void *
      Handle the interior nodes where the PDE is replace by finite
      difference operators.
   */
+  // 计算了sc * u_i * (u_i+1 + u_i-1 - 2*u_i)
   for (i=1; i<localsize-1; i++) copyptr[i] =  localptr[i] * sc * (localptr[i+1] + localptr[i-1] - 2.0*localptr[i]);
 
   /*
@@ -528,6 +532,7 @@ PetscErrorCode RHSFunction(TS ts,PetscReal t,Vec global_in,Vec global_out,void *
    - Note that MatSetValues() uses 0-based row and column numbers
      in Fortran as well as in C.
 */
+// fff 用来干嘛的？？？
 PetscErrorCode RHSJacobian(TS ts,PetscReal t,Vec global_in,Mat AA,Mat BB,void *ctx)
 {
   AppCtx            *appctx  = (AppCtx*)ctx;    /* user-defined application context */

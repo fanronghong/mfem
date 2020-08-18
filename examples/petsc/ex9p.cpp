@@ -82,8 +82,11 @@ public:
 
     // 计算 du/dt = M^-1 (K u + b) 的右端项
    virtual void ExplicitMult(const Vector &x, Vector &y) const;
+   // 计算左端项
    virtual void ImplicitMult(const Vector &x, const Vector &xp, Vector &y) const;
+   // 计算右端项
    virtual void Mult(const Vector &x, Vector &y) const;
+
    virtual Operator& GetExplicitGradient(const Vector &x) const;
    virtual Operator& GetImplicitGradient(const Vector &x, const Vector &xp,
                                          double shift) const;
@@ -419,7 +422,7 @@ int main(int argc, char *argv[])
 
    // 10. Define the time-dependent evolution operator describing the ODE
     //fff注意:这三个参数 M, K, B 都是与时间t无关的
-   FE_Evolution *adv = new FE_Evolution(*M, *K, *B, implicit);
+   FE_Evolution *adv = new FE_Evolution(*M, *K, *B, 1);
 
    double t = 0.0;
    adv->SetTime(t);
@@ -428,6 +431,7 @@ int main(int argc, char *argv[])
        // 使用petsc的TS
        //adv是跟时间t有关的函数
       pode_solver->Init(*adv,PetscODESolver::ODE_SOLVER_LINEAR);
+//       pode_solver->Init(*adv,PetscODESolver::ODE_SOLVER_GENERAL);
    }
    else
    {
@@ -443,6 +447,7 @@ int main(int argc, char *argv[])
       {
          double dt_real = min(dt, t_final - t);
           //这里面并没有重新assemble刚度矩阵. U是上一个时间步(t, 不是t+dt_real)的解(已知)
+          // U就是初始值，纯代数的
          ode_solver->Step(*U, t, dt_real);
          ti++;
 
@@ -537,6 +542,7 @@ FE_Evolution::FE_Evolution(HypreParMatrix &_M, HypreParMatrix &_K,
 // RHS evaluation
 void FE_Evolution::ExplicitMult(const Vector &x, Vector &y) const
 {
+    // x是当前解
     // 计算 du/dt = M^-1 (K u + b) 的右端项
    if (isExplicit()) // 使用显示方法，则 (u^n - u^n-1)/dt = M^-1 (K u^n-1 + b)，这里x就是u^n-1
    {
@@ -557,6 +563,8 @@ void FE_Evolution::ExplicitMult(const Vector &x, Vector &y) const
 void FE_Evolution::ImplicitMult(const Vector &x, const Vector &xp,
                                 Vector &y) const
 {
+    // ref petsc 的 TS的函数 TSSetIFunction(***) 的形参可以知道
+    // ，这里传进来的x,xp,y分别是当前解u，du_dt, F
    if (isImplicit())
    {
       M.Mult(xp, y);
@@ -576,6 +584,7 @@ void FE_Evolution::Mult(const Vector &x, Vector &y) const
 }
 
 // RHS Jacobian
+// F(u,du/dt,t) = G(u,t)，G(u,t) = Ku+b, so G_u = K
 Operator& FE_Evolution::GetExplicitGradient(const Vector &x) const
 {
    delete rJacobian;
@@ -591,6 +600,7 @@ Operator& FE_Evolution::GetExplicitGradient(const Vector &x) const
 }
 
 // LHS Jacobian, evaluated as shift*F_du/dt + F_u
+// F(u,du/dt,t) = G(u,t), here F_u=0, F_du/dt = M
 Operator& FE_Evolution::GetImplicitGradient(const Vector &x, const Vector &xp,
                                             double shift) const
 {

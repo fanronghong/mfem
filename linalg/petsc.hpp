@@ -547,6 +547,7 @@ protected:
    PetscClassId cid;
 
    /// Right-hand side and solution vector
+   // 对子类PetscODESolver X 是当前时间步的解向量
    mutable PetscParVector *B, *X;
 
    /// Handler for boundary conditions
