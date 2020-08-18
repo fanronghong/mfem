@@ -2847,9 +2847,9 @@ protected:
     PetscNonlinearSolver* newton_solver;
 
     mutable ParLinearForm *f, *f1, *f2, *g;
-    mutable PetscParMatrix A11, A12, A13, A21, A22, A31, A33;
     mutable ParBilinearForm *a11, *a12, *a13, *a21, *a22, *a31, *a33;
-    mutable PetscParMatrix *A12__, *A13__, *A21__, *A22__, *A31__, *A33__;
+    mutable PetscParMatrix A11, A12, A13, A21, A22, A31, A33;
+    mutable PetscParMatrix *A12_, *A13_, *A21_, *A22_, *A31_, *A33_;
 
     ParGridFunction *phi1, *phi2;
     VectorCoefficient* grad_phi1_plus_grad_phi2;
@@ -3006,9 +3006,7 @@ public:
         a12->Finalize();
         a12->SetOperatorType(Operator::PETSC_MATAIJ);
         a12->FormSystemMatrix(null_array, A12);
-        Mat A12_;
-        MatCreateSubMatrix(A12, long_is, is, MAT_INITIAL_MATRIX, &A12_);
-        A12__ = new PetscParMatrix(A12_, true);
+        A12_ = new PetscParMatrix(A12, all_dofs, need_dofs);
 
         a13 = new ParBilinearForm(fsp);
         // - alpha2 alpha3 z2 (dc2, psi3)_{\Omega_s}
@@ -3017,10 +3015,7 @@ public:
         a13->Finalize();
         a13->SetOperatorType(Operator::PETSC_MATAIJ);
         a13->FormSystemMatrix(null_array, A13);
-        Mat A13_;
-        MatCreateSubMatrix(A13, long_is, is, MAT_INITIAL_MATRIX, &A13_);
-        A13__ = new PetscParMatrix(A13_, true);
-
+        A13_ = new PetscParMatrix(A13, all_dofs, need_dofs);
     }
     virtual ~PNP_Newton_CG_Operator_par()
     {
@@ -3143,9 +3138,7 @@ public:
         a21->SetOperatorType(Operator::PETSC_MATAIJ);
         a21->FormSystemMatrix(null_array, A21);
         A21.EliminateRows(ess_tdof_list, 0.0);
-        Mat A21_;
-        MatCreateSubMatrix(A21, is, long_is, MAT_INITIAL_MATRIX, &A21_);
-        A21__ = new PetscParMatrix(A21_, true);
+        A21_ = new PetscParMatrix(A21, need_dofs, all_dofs);
 
         delete a22;
         a22 = new ParBilinearForm(fsp);
@@ -3158,9 +3151,7 @@ public:
         a22->SetOperatorType(Operator::PETSC_MATAIJ);
         a22->FormSystemMatrix(ess_tdof_list, A22);
         A22.EliminateRows(protein_dofs, 1.0);
-        Mat A22_;
-        MatCreateSubMatrix(A22, is, is, MAT_INITIAL_MATRIX, &A22_);
-        A22__ = new PetscParMatrix(A22_, true);
+        A22_ = new PetscParMatrix(A22, need_dofs, need_dofs);
 
         delete a31;
         a31 = new ParBilinearForm(fsp);
@@ -3172,9 +3163,7 @@ public:
         a31->SetOperatorType(Operator::PETSC_MATAIJ);
         a31->FormSystemMatrix(null_array, A31);
         A31.EliminateRows(ess_tdof_list, 0.0);
-        Mat A31_;
-        MatCreateSubMatrix(A31, is, long_is, MAT_INITIAL_MATRIX, &A31_);
-        A31__ = new PetscParMatrix(A31_, true);
+        A31_ = new PetscParMatrix(A31, need_dofs, all_dofs);
 
         delete a33;
         a33 = new ParBilinearForm(fsp);
@@ -3187,18 +3176,16 @@ public:
         a33->SetOperatorType(Operator::PETSC_MATAIJ);
         a33->FormSystemMatrix(ess_tdof_list, A33);
         A33.EliminateRows(protein_dofs, 1.0);
-        Mat A33_;
-        MatCreateSubMatrix(A33, is, is, MAT_INITIAL_MATRIX, &A33_);
-        A33__ = new PetscParMatrix(A33_, true);
+        A33_ = new PetscParMatrix(A33, need_dofs, need_dofs);
 
         jac_k = new BlockOperator(block_trueoffsets);
         jac_k->SetBlock(0, 0, &A11);
-        jac_k->SetBlock(0, 1, A12__);
-        jac_k->SetBlock(0, 2, A13__);
-        jac_k->SetBlock(1, 0, A21__);
-        jac_k->SetBlock(1, 1, A22__);
-        jac_k->SetBlock(2, 0, A31__);
-        jac_k->SetBlock(2, 2, A33__);
+        jac_k->SetBlock(0, 1, A12_);
+        jac_k->SetBlock(0, 2, A13_);
+        jac_k->SetBlock(1, 0, A21_);
+        jac_k->SetBlock(1, 1, A22_);
+        jac_k->SetBlock(2, 0, A31_);
+        jac_k->SetBlock(2, 2, A33_);
         return *jac_k;
     }
 };
