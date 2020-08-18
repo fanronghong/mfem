@@ -15,18 +15,35 @@ int main(int argc, char *argv[])
     ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
     delete mesh;
 
-    Array<int> vert;
-    pmesh->GetElementVertices(1, vert);
-    vert.Print(cout << "vert: ");
+//    DG_FECollection* fec = new DG_FECollection(1, 2);
+    H1_FECollection* fec = new H1_FECollection(1, 2);
+    ParFiniteElementSpace* dg_space = new ParFiniteElementSpace(pmesh, fec);
 
-    DG_FECollection* dg_fec = new DG_FECollection(1, 2);
-    ParFiniteElementSpace* dg_space = new ParFiniteElementSpace(pmesh, dg_fec);
+    // Obtain DOFs indices of mesh that belong in elements with attribute number = 2
+    Array<int> all_dofs, attr2_dofs;
+    for (int iel=0; iel<pmesh->GetNE(); ++iel)
+    {
+        int attr = dg_space->GetAttribute(iel);
+        Array<int> dofs;
+        dg_space->GetElementDofs(iel, dofs);
+        for (auto itm: dofs) {
+            all_dofs.Append(dg_space->GetGlobalTDofNumber(itm));
+        }
 
-    Array<int> dofs;
-    dg_space->GetElementDofs(4, dofs);
-    const Table& el2dof = dg_space->GetElementToDofTable();
-    dofs.Print(cout << "dofs: ");
-    el2dof.Print(cout << "element to dofs:\n");
+        if (attr != 2) continue;
+        Array<int> elem_dofs;
+        dg_space->GetElementDofs(iel, elem_dofs);
+        for (auto itm: elem_dofs) {
+            attr2_dofs.Append(dg_space->GetGlobalTDofNumber(itm));
+        }
+    }
+    attr2_dofs.Sort();
+    attr2_dofs.Unique();
+
+    if (myid == 0) {
+        all_dofs.Print(cout << "All DOFs indices:\n");
+        attr2_dofs.Print(cout << "DOFs indices of mesh that belong in elements with attribute number=2:\n");
+    }
 
     Array<int> null_array;
 
@@ -60,13 +77,21 @@ int main(int argc, char *argv[])
 
         d->SetOperatorType(Operator::PETSC_MATAIJ);
         d->FormSystemMatrix(null_array, D);
+
+        PetscParMatrix tilde_B(B, all_dofs, attr2_dofs);
+        PetscParMatrix tilde_C(C, attr2_dofs, all_dofs);
+        PetscParMatrix tilde_D(D, attr2_dofs, attr2_dofs);
+
+        tilde_B.Print("B");
+        tilde_C.Print("C");
+        tilde_D.Print("D");
     }
 
     ParLinearForm* f = new ParLinearForm(dg_space);
     ParLinearForm* g = new ParLinearForm(dg_space);
 
     delete pmesh;
-    delete dg_fec, dg_space;
+    delete fec, dg_space;
     delete a, b, c, d, f, g;
 
     MFEMFinalizePetsc();
