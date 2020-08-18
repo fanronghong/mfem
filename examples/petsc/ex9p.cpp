@@ -80,6 +80,7 @@ public:
    FE_Evolution(HypreParMatrix &_M, HypreParMatrix &_K, const Vector &_b,
                 bool M_in_lhs);
 
+    // 计算 du/dt = M^-1 (K u + b) 的右端项
    virtual void ExplicitMult(const Vector &x, Vector &y) const;
    virtual void ImplicitMult(const Vector &x, const Vector &xp, Vector &y) const;
    virtual void Mult(const Vector &x, Vector &y) const;
@@ -295,16 +296,27 @@ int main(int argc, char *argv[])
    FunctionCoefficient inflow(inflow_function);
    FunctionCoefficient u0(u0_function);
 
+   // /** A time-dependent operator for the ODE as F(u,du/dt,t) = G(u,t)
+    //    The DG weak form of du/dt = -v.grad(u) is M du/dt = K u + b, where M and K are the mass
+    //    and advection matrices, and b describes the flow on the boundary. This can
+    //    be also written as a general ODE with the right-hand side only as
+    //    du/dt = M^{-1} (K u + b).
+    //    This class is used to evaluate the right-hand side and the left-hand side. */
    ParBilinearForm *m = new ParBilinearForm(fes);
+   // (u, w), u是Trial，w是Test，下同
    m->AddDomainIntegrator(new MassIntegrator);
    ParBilinearForm *k = new ParBilinearForm(fes);
+   // - (v . grad(u), w), v是velocity，下同
    k->AddDomainIntegrator(new ConvectionIntegrator(velocity, -1.0));
+   // 1.0 < rho_v (v.n) {v},[w] > -0.5 < rho_v |v.n| [v],[w] >, rho_v是v的upwind value。
+   // 这一项是由inflow边界引起的左端项，对应的右端项由下面的线性型b产生
    k->AddInteriorFaceIntegrator(
       new TransposeIntegrator(new DGTraceIntegrator(velocity, 1.0, -0.5)));
    k->AddBdrFaceIntegrator(
       new TransposeIntegrator(new DGTraceIntegrator(velocity, 1.0, -0.5)));
 
    ParLinearForm *b = new ParLinearForm(fes);
+   // (-1.0/2) < (v.n) inflow, w > - (-0.5) < |v.n| inflow, w >,
    b->AddBdrFaceIntegrator(
       new BoundaryFlowIntegrator(inflow, velocity, -1.0, -0.5));
 
@@ -323,9 +335,14 @@ int main(int argc, char *argv[])
    //    a file and (optionally) save data in the VisIt format and initialize
    //    GLVis visualization.
    ParGridFunction *u = new ParGridFunction(fes);
+   // 使u满足边界条件
    u->ProjectCoefficient(u0);
     // 在进行线性求解和时间迭代时，都是使用True***, 即纯代数的表现形式
     HypreParVector *U = u->GetTrueDofs();
+//    u->SetTrueVector();
+//    Vector& xxx = u->GetTrueVector();
+//    cout << "l2 norm of U: " << U->Norml2() << endl;
+//    cout << "l2 norm of xxx: " << xxx.Norml2() << endl;//二者l2范数一样
 
    {
       ostringstream mesh_name, sol_name;
@@ -407,6 +424,7 @@ int main(int argc, char *argv[])
    adv->SetTime(t);
    if (use_petsc)
    {
+       // 使用petsc的TS
       pode_solver->Init(*adv,PetscODESolver::ODE_SOLVER_LINEAR);
    }
    else
@@ -516,7 +534,8 @@ FE_Evolution::FE_Evolution(HypreParMatrix &_M, HypreParMatrix &_K,
 // RHS evaluation
 void FE_Evolution::ExplicitMult(const Vector &x, Vector &y) const
 {
-   if (isExplicit())
+    // 计算 du/dt = M^-1 (K u + b) 的右端项
+   if (isExplicit()) // 使用显示方法，则 (u^n - u^n-1)/dt = M^-1 (K u^n-1 + b)，这里x就是u^n-1
    {
       // y = M^{-1} (K x + b)
       K.Mult(x, z);

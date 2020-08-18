@@ -264,7 +264,14 @@ public:
     algebraic equation F(x,k,t) = G(x,t). The functions F and G represent the
     _implicit_ and _explicit_ parts of the operator, respectively. For explicit
     operators, F(x,k,t) = k, so f(x,t) = G(x,t). */
-    // 总的来讲：给定x，t，求k。一般的不含时间的Operator就是：给定x，求k
+/** 例如ex9p.cpp如下：
+    A time-dependent operator for the ODE as F(u,du/dt,t) = G(u,t)
+    The DG weak form of du/dt = -v.grad(u) is M du/dt = K u + b, where M and K are the mass
+    and advection matrices, and b describes the flow on the boundary. This can
+    be also written as a general ODE with the right-hand side only as
+    du/dt = M^{-1} (K u + b).
+    This class is used to evaluate the right-hand side and the left-hand side. */
+// 总的来讲：给定x，t，求k。一般的不含时间的Operator就是：给定x，求k
 class TimeDependentOperator : public Operator
 {
 public:
