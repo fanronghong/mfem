@@ -33,7 +33,7 @@
 #include "mfem.hpp"
 #include <fstream>
 #include <iostream>
-
+#include <petscts.h>
 #ifndef MFEM_USE_PETSC
 #error This example requires that MFEM is built with MFEM_USE_PETSC=YES
 #endif
@@ -422,7 +422,7 @@ int main(int argc, char *argv[])
 
    // 10. Define the time-dependent evolution operator describing the ODE
     //fff注意:这三个参数 M, K, B 都是与时间t无关的
-   FE_Evolution *adv = new FE_Evolution(*M, *K, *B, 1);
+   FE_Evolution *adv = new FE_Evolution(*M, *K, *B, implicit);
 
    double t = 0.0;
    adv->SetTime(t);
@@ -448,6 +448,8 @@ int main(int argc, char *argv[])
          double dt_real = min(dt, t_final - t);
           //这里面并没有重新assemble刚度矩阵. U是上一个时间步(t, 不是t+dt_real)的解(已知)
           // U就是初始值，纯代数的
+          TS ts = (TS)(ode_solver);
+//          TSSetType(ts, TSEULER);
          ode_solver->Step(*U, t, dt_real);
          ti++;
 
@@ -539,6 +541,14 @@ FE_Evolution::FE_Evolution(HypreParMatrix &_M, HypreParMatrix &_K,
    }
 }
 
+void FE_Evolution::Mult(const Vector &x, Vector &y) const
+{
+    // y = M^{-1} (K x + b)
+    K.Mult(x, z);
+    z += b;
+    M_solver.Mult(z, y);
+}
+
 // RHS evaluation
 void FE_Evolution::ExplicitMult(const Vector &x, Vector &y) const
 {
@@ -575,16 +585,8 @@ void FE_Evolution::ImplicitMult(const Vector &x, const Vector &xp,
    }
 }
 
-void FE_Evolution::Mult(const Vector &x, Vector &y) const
-{
-   // y = M^{-1} (K x + b)
-   K.Mult(x, z);
-   z += b;
-   M_solver.Mult(z, y);
-}
-
 // RHS Jacobian
-// F(u,du/dt,t) = G(u,t)，G(u,t) = Ku+b, so G_u = K
+// F(u,du/dt,t) = G(u,t)，G(u,t) = Ku+b, so RHS Jacobian G_u = K
 Operator& FE_Evolution::GetExplicitGradient(const Vector &x) const
 {
    delete rJacobian;
@@ -600,7 +602,7 @@ Operator& FE_Evolution::GetExplicitGradient(const Vector &x) const
 }
 
 // LHS Jacobian, evaluated as shift*F_du/dt + F_u
-// F(u,du/dt,t) = G(u,t), here F_u=0, F_du/dt = M
+// F(u,du/dt,t) = G(u,t), here F_u=0, LHS Jacobian F_du/dt = M
 Operator& FE_Evolution::GetImplicitGradient(const Vector &x, const Vector &xp,
                                             double shift) const
 {

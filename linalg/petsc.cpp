@@ -4173,6 +4173,8 @@ static PetscErrorCode __mfem_snes_monitor(SNES snes, PetscInt it, PetscReal res,
 static PetscErrorCode __mfem_snes_jacobian(SNES snes, Vec x, Mat A, Mat P,
                                            void *ctx)
 {
+    // x是当前Newton迭代步的解，这个函数就是求在当前解x处的Jacobian A
+    // 给定essential bdc最好是通过bchandler
    PetscScalar     *array;
    PetscInt         n;
    PetscErrorCode   ierr;
@@ -4180,6 +4182,7 @@ static PetscErrorCode __mfem_snes_jacobian(SNES snes, Vec x, Mat A, Mat P,
    __mfem_snes_ctx *snes_ctx = (__mfem_snes_ctx*)ctx;
 
    PetscFunctionBeginUser;
+   // 当前解x的data指针（read-only）赋给 array
    ierr = VecGetArrayRead(x,(const PetscScalar**)&array); CHKERRQ(ierr);
    ierr = VecGetLocalSize(x,&n); CHKERRQ(ierr);
    if (!snes_ctx->bchandler)
@@ -4190,13 +4193,19 @@ static PetscErrorCode __mfem_snes_jacobian(SNES snes, Vec x, Mat A, Mat P,
    {
       // make sure we compute a Jacobian with the correct boundary values
       if (!snes_ctx->work) { snes_ctx->work = new mfem::Vector(n); }
+      // array 就是当前解 x，则txx也是当前解
       mfem::Vector txx(array,n);
       mfem::PetscBCHandler *bchandler = snes_ctx->bchandler;
       xx = snes_ctx->work;
+      // 首先把txx赋值给xx，然后把xx中对应的essential dofs设成0.
+      // 当前解 txx 还没有给定 essential bdc，下
+      // 面把essential bdc对应的dof设定为0(一般情况)然后赋值给xx
       bchandler->ApplyBC(txx,*xx);
    }
 
    // Use Operator::GetGradient(x)
+   // 这一步就是得到当前解xx的Jacobian，这个xx已经满足了essential bdc (x 不满足）
+   // 但是Jacobian没有给定essential bdc
    mfem::Operator& J = snes_ctx->op->GetGradient(*xx);
    ierr = VecRestoreArrayRead(x,(const PetscScalar**)&array); CHKERRQ(ierr);
    if (!snes_ctx->bchandler) { delete xx; }
@@ -4214,6 +4223,7 @@ static PetscErrorCode __mfem_snes_jacobian(SNES snes, Vec x, Mat A, Mat P,
    }
 
    // Eliminate essential dofs
+   // 让Jacobian满足essential bdc
    if (snes_ctx->bchandler)
    {
       mfem::PetscBCHandler *bchandler = snes_ctx->bchandler;
@@ -4263,6 +4273,7 @@ static PetscErrorCode __mfem_snes_jacobian(SNES snes, Vec x, Mat A, Mat P,
 
 static PetscErrorCode __mfem_snes_function(SNES snes, Vec x, Vec f, void *ctx)
 {
+    // 给定当前解x，计算残差向量 f
    __mfem_snes_ctx* snes_ctx = (__mfem_snes_ctx*)ctx;
 
    PetscFunctionBeginUser;
@@ -4274,7 +4285,9 @@ static PetscErrorCode __mfem_snes_function(SNES snes, Vec x, Vec f, void *ctx)
       if (!snes_ctx->work) { snes_ctx->work = new mfem::Vector(xx.Size()); }
       mfem::PetscBCHandler *bchandler = snes_ctx->bchandler;
       mfem::Vector* txx = snes_ctx->work;
+      // 首先把xx赋值给txx，然后在bchandler里面保存的essential dofs处把txx设为0
       bchandler->ApplyBC(xx,*txx);
+      // 在满足essential bdc的当前解 txx处计算 Residual
       snes_ctx->op->Mult(*txx,ff);
       // and fix the residual (i.e. f_\partial\Omega = u - g)
       bchandler->FixResidualBC(xx,ff);
@@ -4282,6 +4295,7 @@ static PetscErrorCode __mfem_snes_function(SNES snes, Vec x, Vec f, void *ctx)
    else
    {
       // use the Mult method of the class
+      // 调用Newton::Mult(x,y)计算Residual。snes_ctx->op->GetGradient(*xx)计算Jacobian
       snes_ctx->op->Mult(xx,ff);
    }
    // need to tell PETSc the Vec has been updated

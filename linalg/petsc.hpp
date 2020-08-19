@@ -476,6 +476,7 @@ public:
    /// Boundary conditions evaluation
    /** In the result vector, @a g, only values at the essential dofs need to be
        set. */
+       // t 是时间？
    virtual void Eval(double t, Vector &g)
    { mfem_error("PetscBCHandler::Eval method not overloaded"); }
 
