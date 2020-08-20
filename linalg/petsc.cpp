@@ -3431,6 +3431,7 @@ void PetscNonlinearSolver::Mult(const Vector &b, Vector &x) const
    bool b_nonempty = b.Size();
    if (!B) { B = new PetscParVector(PetscObjectComm(obj), *this, true); }
    if (!X) { X = new PetscParVector(PetscObjectComm(obj), *this, false, false); }
+   // 自动将MFEM的数据类型Vector转换成PetscParVector
    X->PlaceArray(x.GetData());
    if (b_nonempty) { B->PlaceArray(b.GetData()); }
    else { *B = 0.0; }

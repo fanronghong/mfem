@@ -158,7 +158,7 @@ int main(int argc, char *argv[])
    bool binary = false;
    int vis_steps = 5;
    bool use_petsc = true;
-   bool implicit = false;
+   bool implicit = true;
    bool use_step = true;
    const char *petscrc_file = "";
 

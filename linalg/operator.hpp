@@ -379,6 +379,8 @@ public:
        methods and the backward Euler method in particular.
 
        If not re-implemented, this method simply generates an error. */
+       // 把k看成dx/dt,则 dx/dt = f(x + dt dx/dt, t)
+       // 一般情况： F(x + dt dx/dt, dx/dt, t) = G(x + dt dx/dt, t)
    virtual void ImplicitSolve(const double dt, const Vector &x, Vector &k);
 
    /** @brief Return an Operator representing (dF/dk @a shift + dF/dx) at the
