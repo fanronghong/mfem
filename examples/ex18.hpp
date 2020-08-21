@@ -1,5 +1,5 @@
 //                  MFEM Example 18 - Serial/Parallel Shared Code
-
+// 方程的弱形式参考： https://www.theoretical-physics.com/dev/fluid-dynamics/euler.html#d-version-of-the-equations
 #include "mfem.hpp"
 
 using namespace std;

@@ -110,6 +110,8 @@ public:
        a(u,v) defined on different trial (given by u) and test
        (given by v) spaces. The rows in the local matrix correspond
        to the test dofs and the columns -- to the trial dofs. */
+       // MixedBilinearForm 会调用 AssembleElementMatrix2()，
+       // 一般的 BilinearForm 调用 AssembleElementMatrix()
    virtual void AssembleElementMatrix2(const FiniteElement &trial_fe,
                                        const FiniteElement &test_fe,
                                        ElementTransformation &Trans,
