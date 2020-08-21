@@ -1,17 +1,17 @@
 #ifndef _PNP_STEADYSTATE_BOX_GUMMEL_SOLVERS_HPP_
 #define _PNP_STEADYSTATE_BOX_GUMMEL_SOLVERS_HPP_
 
+#include "pnp_box_steadystate.hpp"
 #include <map>
 #include "../utils/EAFE_ModifyStiffnessMatrix.hpp"
 #include "../utils/GradConvection_Integrator.hpp"
 #include "../utils/mfem_utils.hpp"
-//#include "../utils/python_utils.hpp" // not work in computer cluster
 #include "../utils/SUPG_Integrator.hpp"
 #include "../utils/DGSelfTraceIntegrator.hpp"
-#include "pnp_steadystate_box.hpp"
 #include "petsc.h"
 #include "../utils/petsc_utils.hpp"
 #include "../utils/LocalConservation.hpp"
+//#include "../utils/python_utils.hpp" // not work in computer cluster
 
 void DiffusionTensor_K(const Vector &x, DenseMatrix &K) {
     K(0,0) = D_K;

@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include "mfem.hpp"
-#include "./pnp_steadystate_box_solvers.hpp"
+#include "./pnp_box_steadystate_solvers.hpp"
 using namespace std;
 using namespace mfem;
 
@@ -49,31 +49,38 @@ int main(int argc, char *argv[])
             for (int j=0; j<i; ++j) mesh.UniformRefinement();
 
             refine_times = i; // for cout right verbose outputs
-            if (strcmp(Linearize, "gummel") == 0 && strcmp(Discretize, "cg") == 0)
+
+            if (strcmp(Linearize, "gummel") == 0)
             {
-                PNP_CG_Gummel_Solver_par* solver = new PNP_CG_Gummel_Solver_par(mesh);
-                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-                delete solver;
+                if (strcmp(Discretize, "cg") == 0)
+                {
+                    PNP_CG_Gummel_Solver_par* solver = new PNP_CG_Gummel_Solver_par(mesh);
+                    solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+                    delete solver;
+                }
+                else if (strcmp(Discretize, "dg") == 0)
+                {
+                    PNP_DG_Gummel_Solver_par* solver = new PNP_DG_Gummel_Solver_par(mesh);
+                    solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+                    delete solver;
+                }
             }
-            else if (strcmp(Linearize, "gummel") == 0 && strcmp(Discretize, "dg") == 0)
+            else if (strcmp(Linearize, "newton") == 0)
             {
-                PNP_DG_Gummel_Solver_par* solver = new PNP_DG_Gummel_Solver_par(mesh);
-                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-                delete solver;
+                if (strcmp(Discretize, "cg") == 0)
+                {
+                    PNP_CG_Newton_box_Solver_par* solver = new PNP_CG_Newton_box_Solver_par(&mesh);
+                    solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+                    delete solver;
+                }
+                else if (strcmp(Discretize, "dg") == 0)
+                {
+                    PNP_DG_Newton_box_Solver_par* solver = new PNP_DG_Newton_box_Solver_par(mesh);
+                    solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+                    delete solver;
+                }
             }
-            else if (strcmp(Linearize, "newton") == 0 && strcmp(Discretize, "cg") == 0)
-            {
-                PNP_CG_Newton_box_Solver_par* solver = new PNP_CG_Newton_box_Solver_par(&mesh);
-                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-                delete solver;
-            }
-            else if (strcmp(Linearize, "newton") == 0 && strcmp(Discretize, "dg") == 0)
-            {
-                PNP_DG_Newton_box_Solver_par* solver = new PNP_DG_Newton_box_Solver_par(mesh);
-                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-                delete solver;
-            }
-            else MFEM_ABORT("Not OK!");
+
             refine_times = temp_refine_times; // reset real refine_times
         }
 
@@ -98,31 +105,36 @@ int main(int argc, char *argv[])
         Mesh mesh(mesh_file);
         for (int i=0; i<refine_times; i++) mesh.UniformRefinement();
 
-        if (strcmp(Linearize, "gummel") == 0 && strcmp(Discretize, "cg") == 0)
+        if (strcmp(Linearize, "gummel") == 0)
         {
-            PNP_CG_Gummel_Solver_par* solver = new PNP_CG_Gummel_Solver_par(mesh);
-            solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-            delete solver;
+            if (strcmp(Discretize, "cg") == 0)
+            {
+                PNP_CG_Gummel_Solver_par* solver = new PNP_CG_Gummel_Solver_par(mesh);
+                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+                delete solver;
+            }
+            else if (strcmp(Discretize, "dg") == 0)
+            {
+                PNP_DG_Gummel_Solver_par* solver = new PNP_DG_Gummel_Solver_par(mesh);
+                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+                delete solver;
+            }
         }
-        else if (strcmp(Linearize, "gummel") == 0 && strcmp(Discretize, "dg") == 0)
+        else if (strcmp(Linearize, "newton") == 0)
         {
-            PNP_DG_Gummel_Solver_par* solver = new PNP_DG_Gummel_Solver_par(mesh);
-            solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-            delete solver;
+            if (strcmp(Discretize, "cg") == 0)
+            {
+                PNP_CG_Newton_box_Solver_par* solver = new PNP_CG_Newton_box_Solver_par(&mesh);
+                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+                delete solver;
+            }
+            else if (strcmp(Discretize, "dg") == 0)
+            {
+                PNP_DG_Newton_box_Solver_par* solver = new PNP_DG_Newton_box_Solver_par(mesh);
+                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+                delete solver;
+            }
         }
-        else if (strcmp(Linearize, "newton") == 0 && strcmp(Discretize, "cg") == 0)
-        {
-            PNP_CG_Newton_box_Solver_par* solver = new PNP_CG_Newton_box_Solver_par(&mesh);
-            solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-            delete solver;
-        }
-        else if (strcmp(Linearize, "newton") == 0 && strcmp(Discretize, "dg") == 0)
-        {
-            PNP_DG_Newton_box_Solver_par* solver = new PNP_DG_Newton_box_Solver_par(mesh);
-            solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-            delete solver;
-        }
-        else MFEM_ABORT("Not OK!");
     }
 
     MFEMFinalizePetsc();

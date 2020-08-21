@@ -34,11 +34,16 @@ elif SCALE == "Micro":
 else: raise "Not support the computation scale!!!"
 
 
-def SymbolCompute():
+def ComputeSteadyStateSolutions():
     '''
     在验证带蛋白通道的PNP方程的代码的正确性的时候, 利用简化模型, 即不带蛋白的立方体盒子, 来验证.
     这个简化模型矩阵解析解, 下面就是来计算相关的解析表达式.
     计算区域为: [-L/2, L/2]^3, 所有未知量的边界条件都是Dirichlet
+    ref Fan Ronghong PhD thesis
+    Poisson Equation:
+            div( -epsilon_s grad(phi) ) - alpha2 alpha3 \sum_i z_i c_i = 0
+    NP Equation:
+            div( -D_i (grad(c_i) + z_i c_i grad(phi) ) ) = f_i
     '''
     x, y, z = sympy.symbols("x[0] x[1] x[2]")
 
@@ -86,21 +91,22 @@ def SymbolCompute():
     f2 = c2_flux[0].diff(x, 1) + c2_flux[1].diff(y, 1) + c2_flux[2].diff(z, 1)
 
     # 把下面的输出结果复制粘贴到C++源码里面
-    print("\nphi:\nreturn {};".format(sympy.printing.ccode(phi3)))
-    print("\nc1:\nreturn {};".format(sympy.printing.ccode(c1)))
-    print("\nc2:\nreturn {};".format(sympy.printing.ccode(c2)))
-    print("\nf1:\nreturn {};".format(sympy.printing.ccode(f1)))
-    print("\nf2:\nreturn {};".format(sympy.printing.ccode(f2)))
+    print("\n//======> Steady State Analytic Solutions:")
+    print("double phi_exact_(const Vector& x)\n{{\n    return {};\n}}".format(sympy.printing.ccode(phi3)))
+    print("\ndouble c1_exact_(const Vector& x)\n{{\n    return {};\n}}".format(sympy.printing.ccode(c1)))
+    print("\ndouble c2_exact_(const Vector& x)\n{{\n    return {};\n}}".format(sympy.printing.ccode(c2)))
+    print("\ndouble f1_analytic_(const Vector& x)\n{{\n    return {};\n}}".format(sympy.printing.ccode(f1)))
+    print("\ndouble f2_analytic_(const Vector& x)\n{{\n    return {};\n}}".format(sympy.printing.ccode(f2)))
 
-    print("\nphi flux:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(phi_flux[0]), sympy.printing.ccode(phi_flux[1]), sympy.printing.ccode(phi_flux[2])))
-    print("\nc1 flux:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(c1_flux[0]), sympy.printing.ccode(c1_flux[1]), sympy.printing.ccode(c1_flux[2])))
-    print("\nc2 flux:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(c2_flux[0]), sympy.printing.ccode(c2_flux[1]), sympy.printing.ccode(c2_flux[2])))
+    print("\nvoid J_(const Vector& x, Vector& y)\n{{    \ny[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(phi_flux[0]), sympy.printing.ccode(phi_flux[1]), sympy.printing.ccode(phi_flux[2])))
+    print("\nvoid J1_(const Vector& x, Vector& y)\n{{\n    y[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(c1_flux[0]), sympy.printing.ccode(c1_flux[1]), sympy.printing.ccode(c1_flux[2])))
+    print("\nvoid J2_(const Vector& x, Vector& y)\n{{\n    y[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(c2_flux[0]), sympy.printing.ccode(c2_flux[1]), sympy.printing.ccode(c2_flux[2])))
 
-    print("\nexact adv1:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(adv1[0]), sympy.printing.ccode(adv1[1]), sympy.printing.ccode(adv1[2])))
-    print("\nexact adv2:\ny[0] = {};\ny[1] = {};\ny[2] = {};".format(sympy.printing.ccode(adv2[0]), sympy.printing.ccode(adv2[1]), sympy.printing.ccode(adv2[2])))
+    print("\nvoid adv1(const Vector& x, Vector& y)\n{{\n    y[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(adv1[0]), sympy.printing.ccode(adv1[1]), sympy.printing.ccode(adv1[2])))
+    print("\nvoid adv2(const Vector& x, Vector& y)\n{{\n    y[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(adv2[0]), sympy.printing.ccode(adv2[1]), sympy.printing.ccode(adv2[2])))
 
-    print("\nexact div_adv1:\nreturn {};".format(sympy.printing.ccode(div_adv1)))
-    print("\nexact div_adv2:\nreturn {};".format(sympy.printing.ccode(div_adv2)))
+    print("\ndouble div_adv1(const Vector& x)\n{{\n    return {};\n}}".format(sympy.printing.ccode(div_adv1)))
+    print("\ndouble div_adv2(const Vector& x)\n{{\n    return {};\n}}".format(sympy.printing.ccode(div_adv2)))
 
 
 if __name__ == '__main__':
@@ -115,4 +121,4 @@ if __name__ == '__main__':
 
     print("alpha2 * alpha3 * c_bulk * L^2 / (3 * epsilon_s * pi^2): {}".format(alpha2 * alpha3 * c_bulk * L*L / (3 * water_rel_permittivity * pi*pi)))
 
-    SymbolCompute()
+    ComputeSteadyStateSolutions()
