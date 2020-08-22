@@ -422,19 +422,19 @@ private:
         lf->AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_J), Neumann_attr);
         lf->Assemble();
 
-        PetscParMatrix *A = new PetscParMatrix();
-        PetscParVector *x = new PetscParVector(fsp);
-        PetscParVector *b = new PetscParVector(fsp);
-        blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        blf->FormLinearSystem(ess_tdof_list, *phi, *lf, *A, *x, *b);
-
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, "phi_");
+        // 所有并行的离散部分全部在MFEM和Hypre之间完成，PETSc不参与；
+        // PETSc只参与求解线性方程组，且在把矩阵向量传入PETSc的时候，
+        // 不需要自己进行数据类型转换.
+        HypreParMatrix A;
+        Vector x, b;
+        blf->FormLinearSystem(ess_tdof_list, *phi, *lf, A, x, b);
+        PetscLinearSolver* solver = new PetscLinearSolver(A, false, "phi_");
 
         chrono.Clear();
         chrono.Start();
-        solver->Mult(*b, *x);
+        solver->Mult(b, x);
         chrono.Stop();
-        blf->RecoverFEMSolution(*x, *lf, *phi);
+        blf->RecoverFEMSolution(x, *lf, *phi);
 
 #ifdef SELF_VERBOSE
         cout << "l2 norm of phi: " << phi->Norml2() << endl;
