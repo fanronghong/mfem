@@ -300,6 +300,7 @@ public:
 
    //Solve the Backward-Euler equation: k = f(x + dt*k, t), for the unknown k.
    //here vector are block vectors
+   // k 相当于 dx_dt
    virtual void ImplicitSolve(const double dt, const Vector &vx, Vector &k);
 
    //Update problem in AMR case

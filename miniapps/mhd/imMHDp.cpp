@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
    double visc = 1e-3;
    double resi = 1e-3;
    bool visit = false;
-   bool use_petsc = false;
+   bool use_petsc = true;
    bool use_factory = false;
    bool local_refine = false;
    bool useStab = false; //use a stabilized formulation (explicit case only)
@@ -373,6 +373,7 @@ int main(int argc, char *argv[])
       cout << "Number of total scalar unknowns: " << global_size << endl;
    }
 
+   // 只能使用TrueOffeset
    int fe_size = fespace.TrueVSize();
    Array<int> fe_offset(4);
    fe_offset[0] = 0;
@@ -394,6 +395,7 @@ int main(int argc, char *argv[])
    phi.ProjectCoefficient(phiInit);
    phi.SetTrueVector();
 
+   // 给 psi 设初值
    if (icase==1)
    {
         FunctionCoefficient psiInit(InitialPsi);
