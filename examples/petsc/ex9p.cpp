@@ -33,7 +33,7 @@
 #include "mfem.hpp"
 #include <fstream>
 #include <iostream>
-#include <petscts.h>
+
 #ifndef MFEM_USE_PETSC
 #error This example requires that MFEM is built with MFEM_USE_PETSC=YES
 #endif
@@ -80,13 +80,9 @@ public:
    FE_Evolution(HypreParMatrix &_M, HypreParMatrix &_K, const Vector &_b,
                 bool M_in_lhs);
 
-    // 计算 du/dt = M^-1 (K u + b) 的右端项
    virtual void ExplicitMult(const Vector &x, Vector &y) const;
-   // 计算左端项
    virtual void ImplicitMult(const Vector &x, const Vector &xp, Vector &y) const;
-   // 计算右端项
    virtual void Mult(const Vector &x, Vector &y) const;
-
    virtual Operator& GetExplicitGradient(const Vector &x) const;
    virtual Operator& GetImplicitGradient(const Vector &x, const Vector &xp,
                                          double shift) const;
@@ -253,7 +249,6 @@ int main(int argc, char *argv[])
       // When using PETSc, we just create the ODE solver. We use command line
       // customization to select a specific solver.
       MFEMInitializePetsc(NULL, NULL, petscrc_file, NULL);
-      // 涉及到PETSc的TS的使用
       ode_solver = pode_solver = new PetscODESolver(MPI_COMM_WORLD);
    }
 
@@ -299,27 +294,16 @@ int main(int argc, char *argv[])
    FunctionCoefficient inflow(inflow_function);
    FunctionCoefficient u0(u0_function);
 
-   // /** A time-dependent operator for the ODE as F(u,du/dt,t) = G(u,t)
-    //    The DG weak form of du/dt = -v.grad(u) is M du/dt = K u + b, where M and K are the mass
-    //    and advection matrices, and b describes the flow on the boundary. This can
-    //    be also written as a general ODE with the right-hand side only as
-    //    du/dt = M^{-1} (K u + b).
-    //    This class is used to evaluate the right-hand side and the left-hand side. */
    ParBilinearForm *m = new ParBilinearForm(fes);
-   // (u, w), u是Trial，w是Test，下同
    m->AddDomainIntegrator(new MassIntegrator);
    ParBilinearForm *k = new ParBilinearForm(fes);
-   // - (v . grad(u), w), v是velocity，下同
    k->AddDomainIntegrator(new ConvectionIntegrator(velocity, -1.0));
-   // 1.0 < rho_v (v.n) {v},[w] > -0.5 < rho_v |v.n| [v],[w] >, rho_v是v的upwind value。
-   // 这一项是由inflow边界引起的左端项，对应的右端项由下面的线性型b产生
    k->AddInteriorFaceIntegrator(
       new TransposeIntegrator(new DGTraceIntegrator(velocity, 1.0, -0.5)));
    k->AddBdrFaceIntegrator(
       new TransposeIntegrator(new DGTraceIntegrator(velocity, 1.0, -0.5)));
 
    ParLinearForm *b = new ParLinearForm(fes);
-   // (-1.0/2) < (v.n) inflow, w > - (-0.5) < |v.n| inflow, w >,
    b->AddBdrFaceIntegrator(
       new BoundaryFlowIntegrator(inflow, velocity, -1.0, -0.5));
 
@@ -330,6 +314,7 @@ int main(int argc, char *argv[])
    k->Finalize(skip_zeros);
    b->Assemble();
 
+   // M, K, B都与时间无关，所以就直接在ODE外面生成
    HypreParMatrix *M = m->ParallelAssemble();
    HypreParMatrix *K = k->ParallelAssemble();
    HypreParVector *B = b->ParallelAssemble();
@@ -338,14 +323,9 @@ int main(int argc, char *argv[])
    //    a file and (optionally) save data in the VisIt format and initialize
    //    GLVis visualization.
    ParGridFunction *u = new ParGridFunction(fes);
-   // 使u满足边界条件
    u->ProjectCoefficient(u0);
-    // 在进行线性求解和时间迭代时，都是使用True***, 即纯代数的表现形式
-    HypreParVector *U = u->GetTrueDofs();
-//    u->SetTrueVector();
-//    Vector& xxx = u->GetTrueVector();
-//    cout << "l2 norm of U: " << U->Norml2() << endl;
-//    cout << "l2 norm of xxx: " << xxx.Norml2() << endl;//二者l2范数一样
+   // 生成初始解u，以及对应的TrueVector(用来在ODE solver 和 linear solver之间传递数据)
+   HypreParVector *U = u->GetTrueDofs();
 
    {
       ostringstream mesh_name, sol_name;
@@ -421,17 +401,13 @@ int main(int argc, char *argv[])
    }
 
    // 10. Define the time-dependent evolution operator describing the ODE
-    //fff注意:这三个参数 M, K, B 都是与时间t无关的
    FE_Evolution *adv = new FE_Evolution(*M, *K, *B, implicit);
 
    double t = 0.0;
    adv->SetTime(t);
    if (use_petsc)
    {
-       // 使用petsc的TS
-       //adv是跟时间t有关的函数
       pode_solver->Init(*adv,PetscODESolver::ODE_SOLVER_LINEAR);
-//       pode_solver->Init(*adv,PetscODESolver::ODE_SOLVER_GENERAL);
    }
    else
    {
@@ -446,10 +422,7 @@ int main(int argc, char *argv[])
       for (int ti = 0; !done; )
       {
          double dt_real = min(dt, t_final - t);
-          //这里面并没有重新assemble刚度矩阵. U是上一个时间步(t, 不是t+dt_real)的解(已知)
-          // U就是初始值，纯代数的
-          TS ts = (TS)(ode_solver);
-//          TSSetType(ts, TSEULER);
+         cout.precision(14); cout << "l2 norm of U: " << U->Norml2() << endl;
          ode_solver->Step(*U, t, dt_real);
          ti++;
 
@@ -541,20 +514,12 @@ FE_Evolution::FE_Evolution(HypreParMatrix &_M, HypreParMatrix &_K,
    }
 }
 
-void FE_Evolution::Mult(const Vector &x, Vector &y) const
-{
-    // y = M^{-1} (K x + b)
-    K.Mult(x, z);
-    z += b;
-    M_solver.Mult(z, y);
-}
-
 // RHS evaluation
 void FE_Evolution::ExplicitMult(const Vector &x, Vector &y) const
 {
-    // x是当前解
-    // 计算 du/dt = M^-1 (K u + b) 的右端项
-   if (isExplicit()) // 使用显示方法，则 (u^n - u^n-1)/dt = M^-1 (K u^n-1 + b)，这里x就是u^n-1
+    cout.precision(14); cout << "l2 norm of x: " << x.Norml2() << endl;
+    // y 就是 dx_dt, y * dt 就是 dx， x+dx 就是下一个时间步的解
+    if (isExplicit())
    {
       // y = M^{-1} (K x + b)
       K.Mult(x, z);
@@ -573,8 +538,8 @@ void FE_Evolution::ExplicitMult(const Vector &x, Vector &y) const
 void FE_Evolution::ImplicitMult(const Vector &x, const Vector &xp,
                                 Vector &y) const
 {
-    // ref petsc 的 TS的函数 TSSetIFunction(***) 的形参可以知道
-    // ，这里传进来的x,xp,y分别是当前解u，du_dt, F
+    // xp 就是 dx_dt
+    cout.precision(14); cout << "l2 norm of x: " << x.Norml2() << endl;
    if (isImplicit())
    {
       M.Mult(xp, y);
@@ -585,10 +550,18 @@ void FE_Evolution::ImplicitMult(const Vector &x, const Vector &xp,
    }
 }
 
+void FE_Evolution::Mult(const Vector &x, Vector &y) const
+{
+   // y = M^{-1} (K x + b)
+   K.Mult(x, z);
+   z += b;
+   M_solver.Mult(z, y);
+}
+
 // RHS Jacobian
-// F(u,du/dt,t) = G(u,t)，G(u,t) = Ku+b, so RHS Jacobian G_u = K
 Operator& FE_Evolution::GetExplicitGradient(const Vector &x) const
 {
+    cout.precision(14); cout << "l2 norm of x: " << x.Norml2() << endl;
    delete rJacobian;
    if (isImplicit())
    {
@@ -602,10 +575,10 @@ Operator& FE_Evolution::GetExplicitGradient(const Vector &x) const
 }
 
 // LHS Jacobian, evaluated as shift*F_du/dt + F_u
-// F(u,du/dt,t) = G(u,t), here F_u=0, LHS Jacobian F_du/dt = M
 Operator& FE_Evolution::GetImplicitGradient(const Vector &x, const Vector &xp,
                                             double shift) const
 {
+    cout.precision(14); cout << "l2 norm of x: " << x.Norml2() << endl;
    delete iJacobian;
    if (isImplicit())
    {
