@@ -4223,9 +4223,10 @@ static PetscErrorCode __mfem_snes_jacobian(SNES snes, Vec x, Mat A, Mat P,
       delete_pA = true;
    }
 
+   //could I skip it? -QT
    // Eliminate essential dofs
    // 让Jacobian满足essential bdc
-   if (snes_ctx->bchandler)
+   if (snes_ctx->bchandler && false)
    {
       mfem::PetscBCHandler *bchandler = snes_ctx->bchandler;
       mfem::PetscParVector dummy(PetscObjectComm((PetscObject)snes),0);
@@ -4291,7 +4292,8 @@ static PetscErrorCode __mfem_snes_function(SNES snes, Vec x, Vec f, void *ctx)
       // 在满足essential bdc的当前解 txx处计算 Residual
       snes_ctx->op->Mult(*txx,ff);
       // and fix the residual (i.e. f_\partial\Omega = u - g)
-      bchandler->FixResidualBC(xx,ff);
+      // skip this step for now -QT
+      //bchandler->FixResidualBC(xx,ff);
    }
    else
    {
