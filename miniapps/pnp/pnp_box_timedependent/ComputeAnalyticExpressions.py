@@ -34,7 +34,6 @@ elif SCALE == "Micro":
 else: raise "Not support the computation scale!!!"
 
 
-
 def ComputeTimeDependentSolutions():
     '''
     在验证带蛋白通道的PNP方程的代码的正确性的时候, 利用简化模型, 即不带蛋白的立方体盒子, 来验证.
