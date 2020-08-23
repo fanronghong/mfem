@@ -468,7 +468,122 @@ private:
 };
 
 
+/* Poisson Equation:
+ *     div( -epsilon_s grad(phi) ) - alpha2 alpha3 \sum_i z_i c_i = f
+ * NP Equation:
+ *     dc_i / dt = div( -D_i (grad(c_i) + z_i c_i grad(phi) ) ) + f_i
+ * */
 class PNP_Box_Gummel_CG_TimeDependent: public TimeDependentOperator
+{
+private:
+    ParFiniteElementSpace* h1;
+    ParGridFunction* phi_gf;
+
+    HypreParMatrix *A, *M1, *M2, *B1, *B2;
+    PetscLinearSolver *A_solver, *M1_solver, *M2_solver;
+
+    mutable Vector z;
+    mutable HypreParVector *b, *b1, *b2;
+    mutable HypreParMatrix *A1, *A2;
+
+    int true_size;
+    Array<int> true_offset, ess_tdof_list;
+
+public:
+    PNP_Box_Gummel_CG_TimeDependent(HypreParMatrix* A_, HypreParMatrix* M1_, HypreParMatrix* M2_,
+                                    HypreParMatrix* B1_, HypreParMatrix* B2_,
+                                    int size, Array<int>& offset, Array<int>& ess_list,
+                                    ParFiniteElementSpace* fsp)
+        : TimeDependentOperator(3*size, 0.0), A(A_), M1(M1_), M2(M2_),
+          B1(B1_), B2(B2_),
+          true_size(size), true_offset(offset), ess_tdof_list(ess_list), h1(fsp)
+    {
+        phi_gf = new ParGridFunction(h1);
+        A_solver  = new PetscLinearSolver(*A,  false, "phi_");
+        M1_solver = new PetscLinearSolver(*M1, false, "np1_");
+        M2_solver = new PetscLinearSolver(*M2, false, "np2_");
+    }
+    virtual ~PNP_Box_Gummel_CG_TimeDependent()
+    {
+        delete phi_gf, A_solver, M1_solver, M2_solver;
+    }
+
+    virtual void Mult(const Vector &phic1c2, Vector &dphic1c2_dt) const
+    {
+        Vector phi(phic1c2.GetData() + 0*true_size, true_size);
+        Vector c1 (phic1c2.GetData() + 1*true_size, true_size);
+        Vector c2 (phic1c2.GetData() + 2*true_size, true_size);
+        Vector dphi_dt(dphic1c2_dt.GetData() + 0*true_size, true_size);
+        Vector dc1_dt (dphic1c2_dt.GetData() + 1*true_size, true_size);
+        Vector dc2_dt (dphic1c2_dt.GetData() + 2*true_size, true_size);
+
+        // 首先求解Poisson方程
+        ParLinearForm *l = new ParLinearForm(h1);
+        f1_analytic.SetTime(t);
+        l->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+        l->Assemble();
+        b = l->ParallelAssemble();
+
+        B1->Mult(1.0, c1, 1.0, *b); // B1 c1 + b -> b
+        B2->Mult(1.0, c2, 1.0, *b); // B1 c1 + B2 c2 + b -> b
+        A->Mult(-1.0, phi, 1.0, *b); // - A phi + B1 c1 + B2 c2 + b -> b
+        b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
+        A_solver->Mult(*b, dphi_dt);
+        dphi_dt /= dt;
+        
+        delete phi_gf;
+        *phi_gf = phi;
+        phi_gf->Add(dt, dphi_dt);
+        phi_gf->SetTrueVector();
+        phi_gf->SetFromTrueVector(); // 求解NP方程时要用到phi
+
+        // 然后求解NP1方程
+        ParBilinearForm *a22 = new ParBilinearForm(h1);
+        a22->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+        a22->AddDomainIntegrator(new GradConvectionIntegrator(*phi_gf, &D_K_prod_v_K));
+        a22->Assemble();
+        a22->Finalize();
+        A1 = a22->ParallelAssemble();
+        A1->EliminateRowsCols(ess_tdof_list);
+
+        ParLinearForm *l1 = new ParLinearForm(h1);
+        f1_analytic.SetTime(t);
+        l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+        l1->Assemble();
+        b1 = l1->ParallelAssemble();
+        b1->SetSubVector(ess_tdof_list, 0.0);
+
+        A1->Mult(1.0, c1, 1.0, *b1); // A1 c1 + b1 -> b1
+        M1_solver->Mult(*b1, dc1_dt); // solve M1 dc1_dt = A1 c1 + b1
+
+
+        // 然后求解NP2方程
+        ParBilinearForm *a33 = new ParBilinearForm(h1);
+        a33->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
+        a33->AddDomainIntegrator(new GradConvectionIntegrator(*phi_gf, &D_Cl_prod_v_Cl));
+        a33->Assemble();
+        a33->Finalize();
+        A2 = a33->ParallelAssemble();
+        A2->EliminateRowsCols(ess_tdof_list);
+
+        ParLinearForm *l2 = new ParLinearForm(h1);
+        f2_analytic.SetTime(t);
+        l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
+        l2->Assemble();
+        b2 = l2->ParallelAssemble();
+        b2->SetSubVector(ess_tdof_list, 0.0);
+
+        A2->Mult(1.0, c2, 1.0, *b2); // A2 c2 + b2 -> b2
+        M2_solver->Mult(*b2, dc2_dt); // solve M2 dc2_dt = A2 c2 + b2
+    }
+
+    virtual void ImplicitSolve(const double dt, const Vector &c1c2, Vector &dc1c2_dt)
+    {
+
+    }
+};
+
+class PNP_Box_Gummel_CG_TimeDependent_Solver
 {
 private:
     Mesh& mesh;
@@ -478,23 +593,19 @@ private:
 
     ParBilinearForm *a11, *a12, *a13, *m1, *m2;
     HypreParMatrix *A, *B1, *B2, *M1, *M2;
-    mutable ParBilinearForm *a22, *a33;
-    mutable HypreParMatrix *A1, *A2;
-    mutable ParLinearForm *l, *l1, *l2;
-    mutable HypreParVector *b, *b1, *b2;
-    mutable Vector z;
-
-    PetscLinearSolver *A_solver, *M1_solver, *M2_solver;
-    HypreParVector *phi;
-
+    BlockVector* phic1c2;
     ParGridFunction *phi_gf, *c1_gf, *c2_gf;
-    BlockVector* c1c2;
+
+    PNP_Box_Gummel_CG_TimeDependent* oper;
+    double t; // 当前时间
+    Vector init_value;
+    ODESolver *ode_solver;
 
     int true_size; // 有限元空间维数
     Array<int> true_offset, ess_bdr, ess_tdof_list;
 
 public:
-    PNP_Box_Gummel_CG_TimeDependent(Mesh& mesh_): mesh(mesh_)
+    PNP_Box_Gummel_CG_TimeDependent_Solver(Mesh& mesh_, int ode_solver_type): mesh(mesh_)
     {
         pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
         fec   = new H1_FECollection(p_order, mesh.Dimension());
@@ -505,59 +616,22 @@ public:
         h1->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
         true_size = h1->TrueVSize();
-        true_offset.SetSize(3); // 表示 c1，c2的TrueVector
+
+        true_offset.SetSize(3 + 1); // 表示 phi, c1，c2的TrueVector
         true_offset[0] = 0;
         true_offset[1] = true_size;
-        true_offset[2] = 2*true_size;
+        true_offset[2] = true_size * 2;
+        true_offset[3] = true_size * 3;
 
-        t = 0.0;
-        z.SetSize(true_size);
+        t = init_t;
 
-        /*  Poisson Equation:
-                           div( -epsilon_s grad(phi) ) - alpha2 alpha3 \sum_i z_i c_i = f
-                   NP Equation:
-                           dc_i / dt = div( -D_i (grad(c_i) + z_i c_i grad(phi) ) ) + f_i  */
-        phi_gf = new ParGridFunction(h1);
-        phi_exact.SetTime(t);
-        phi_gf->ProjectCoefficient(phi_exact);
-        phi = phi_gf->GetTrueDofs();
-
-        c1_gf = new ParGridFunction(h1);
-        c2_gf = new ParGridFunction(h1);
-
-        c1c2 = new BlockVector(true_offset);
-        c1_gf->MakeRef(h1, *c1c2, true_offset[0]);
-        c2_gf->MakeRef(h1, *c1c2, true_offset[1]);
-
-        c1_exact.SetTime(t);
-        c1_gf->ProjectCoefficient(c1_exact);
-        c1_gf->SetTrueVector();
-
-        c2_exact.SetTime(t);
-        c2_gf->ProjectCoefficient(c2_exact);
-        c2_gf->SetTrueVector();
-
-        c1_gf->SetFromTrueVector(); c2_gf->SetFromTrueVector();
-
-        ConstructConstantData();
-    }
-
-    virtual ~PNP_Box_Gummel_CG_TimeDependent() {}
-
-    Vector& GetInitialValue()
-    {
-        return *c1c2;
-    }
-
-    void ConstructConstantData()
-    {
         a11 = new ParBilinearForm(h1);
         // (epsilon_s grad(phi), grad(psi))
         a11->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water));
         a11->Assemble();
         a11->Finalize();
-        a11->FormSystemMatrix(ess_tdof_list, A);
-        A_solver = new PetscLinearSolver(*A, false, "phi_");
+        A = a11->ParallelAssemble();
+        A->EliminateRowsCols(ess_tdof_list);
 
         a12 = new ParBilinearForm(h1);
         // (alpha2 alpha3 z1 c1, psi)
@@ -578,96 +652,45 @@ public:
         m1->AddDomainIntegrator(new MassIntegrator);
         m1->Assemble();
         m1->Finalize();
-        m1->FormSystemMatrix(ess_tdof_list, M1);
-        M1_solver = new PetscLinearSolver(*M1, false, "np1_");
+        M1 = m1->ParallelAssemble();
+        M1->EliminateRowsCols(ess_tdof_list);
 
         m2 = new ParBilinearForm(h1);
         // (c2, v2)
         m2->AddDomainIntegrator(new MassIntegrator);
         m2->Assemble();
         m2->Finalize();
-        m2->FormSystemMatrix(ess_tdof_list, M2);
-        M2_solver = new PetscLinearSolver(*M2, false, "np2_");
-    }
+        M2 = m2->ParallelAssemble();
+        M2->EliminateRowsCols(ess_tdof_list);
 
-    virtual void Mult(const Vector &c1c2, Vector &dc1c2_dt) const
-    {
-        Vector c1(c1c2.GetData() +         0, true_size);
-        Vector c2(c1c2.GetData() + true_size, true_size);
-        Vector dc1_dt(dc1c2_dt.GetData() +         0, true_size);
-        Vector dc2_dt(dc1c2_dt.GetData() + true_size, true_size);
+        phi_gf = new ParGridFunction(h1);
+        c1_gf  = new ParGridFunction(h1);
+        c2_gf  = new ParGridFunction(h1);
 
-        // 首先求解Poisson方程
-        f1_analytic.SetTime(t);
-        l = new ParLinearForm(h1);
-        l->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
-        l->Assemble();
-        b = l->ParallelAssemble();
+        phic1c2 = new BlockVector(true_offset);
+        phi_gf->MakeRef(h1, *phic1c2, true_offset[0]);
+        c1_gf ->MakeRef(h1, *phic1c2, true_offset[1]);
+        c2_gf ->MakeRef(h1, *phic1c2, true_offset[2]);
 
-        B1->Mult(1.0, c1, 1.0, *b); // B1 c1 + b -> b
-        B2->Mult(1.0, c2, 1.0, *b); // B1 c1 + B2 c2 + b -> b
-        b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
-        A_solver->Mult(*b, *phi);
+        phi_exact.SetTime(t);
+        phi_gf->ProjectCoefficient(phi_exact);
+        phi_gf->SetTrueVector();
 
-        phi_gf->SetFromTrueVector(); // 求解NP方程时要用到phi
+        c1_exact.SetTime(t);
+        c1_gf->ProjectCoefficient(c1_exact);
+        c1_gf->SetTrueVector();
 
-        // 然后求解NP1方程
-        a22 = new ParBilinearForm(h1);
-        a22->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
-        a22->AddDomainIntegrator(new GradConvectionIntegrator(*phi_gf, &D_K_prod_v_K));
-        a22->Assemble();
-        a22->Finalize();
-        a22->FormSystemMatrix(ess_tdof_list, A1);
+        c2_exact.SetTime(t);
+        c2_gf->ProjectCoefficient(c2_exact);
+        c2_gf->SetTrueVector();
 
-        f1_analytic.SetTime(t);
-        l1 = new ParLinearForm(h1);
-        l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
-        l1->Assemble();
-        b1 = l1->ParallelAssemble();
-        b1->SetSubVector(ess_tdof_list, 0.0);
+        phi_gf->SetFromTrueVector();
+        c1_gf ->SetFromTrueVector();
+        c2_gf ->SetFromTrueVector();
 
-        A1->Mult(1.0, c1, 1.0, *b1); // A1 c1 + b1 -> b1
-        M1_solver->Mult(*b1, dc1_dt); // solve M1 dc1_dt = A1 c1 + b1
+        oper = new PNP_Box_Gummel_CG_TimeDependent(A, M1, M2, B1, B2, true_size, true_offset,
+                                            ess_tdof_list, h1);
 
-
-        // 然后求解NP2方程
-        a33 = new ParBilinearForm(h1);
-        a33->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
-        a33->AddDomainIntegrator(new GradConvectionIntegrator(*phi_gf, &D_Cl_prod_v_Cl));
-        a33->Assemble();
-        a33->Finalize();
-        a33->FormSystemMatrix(ess_tdof_list, A2);
-
-        f2_analytic.SetTime(t);
-        l2 = new ParLinearForm(h1);
-        l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
-        l2->Assemble();
-        b2 = l2->ParallelAssemble();
-        b2->SetSubVector(ess_tdof_list, 0.0);
-
-        A2->Mult(1.0, c2, 1.0, *b2); // A2 c2 + b2 -> b2
-        M2_solver->Mult(*b2, dc2_dt); // solve M2 dc2_dt = A2 c2 + b2
-
-    }
-
-    virtual void ImplicitSolve(const double dt, const Vector &c1c2, Vector &dc1c2_dt)
-    {
-
-    }
-
-};
-
-template <class T>
-class TimeDependent_Solver
-{
-private:
-    double t; // 当前时间
-    Vector& init_true_vector;
-    ODESolver *ode_solver;
-
-public:
-    TimeDependent_Solver(T* oper, int ode_solver_type)
-    {
         switch (ode_solver_type)
         {
             // Implicit L-stable methods
@@ -684,15 +707,13 @@ public:
             case 23: ode_solver = new SDIRK23Solver; break;
             case 24: ode_solver = new SDIRK34Solver; break;
             default:
-                MFEM_ABORT("Not support ODE solver.");
+            MFEM_ABORT("Not support ODE solver.");
         }
 
-        t = init_t;
         oper->SetTime(t);
         ode_solver->Init(*oper);
-        init_true_vector = oper->GetInitialValue();
     }
-    ~TimeDependent_Solver() { delete ode_solver; }
+    ~PNP_Box_Gummel_CG_TimeDependent_Solver() { delete ode_solver; }
 
     void Solve()
     {
@@ -701,7 +722,7 @@ public:
         {
             double dt_real = min(dt, t_final - t);
 
-            ode_solver->Step(init_true_vector, t, dt_real);
+            ode_solver->Step(*phic1c2, t, dt_real);
 
             last_step = (t >= t_final - 1e-8*dt);
         }

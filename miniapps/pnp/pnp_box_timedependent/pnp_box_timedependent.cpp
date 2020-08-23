@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
     args.AddOption(&ComputeConvergenceRate, "-rate", "--computerate", "-norate", "--nocomputerate", "Compute convergence rate by using analytic solutions");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.AddOption(&visualize, "-vis", "--visualize", "-novis", "--novisualize", "Plot solution");
-    args.AddOption(&output, "-out", "--output", "File name to save outputs", true);
+    args.AddOption(&output, "-out", "--output", "File name to save outputs", false);
     args.Parse();
     if (!args.Good())
     {
@@ -54,10 +54,9 @@ int main(int argc, char *argv[])
             {
                 if (strcmp(Discretize, "cg") == 0)
                 {
-                    PNP_Box_Gummel_CG_TimeDependent* oper = new PNP_Box_Gummel_CG_TimeDependent(mesh);
-                    TimeDependent_Solver<PNP_Box_Gummel_CG_TimeDependent> solver(oper, 11);
-                    solver.Solve();
-                    delete oper;
+                    PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, 11);
+                    solver->Solve();
+                    delete solver;
                 }
 //                else if (strcmp(Discretize, "dg") == 0)
 //                {
