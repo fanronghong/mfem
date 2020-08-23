@@ -103,7 +103,7 @@ public:
    virtual void Mult(const Vector &vx, Vector &dvx_dt) const;
    /** Solve the Backward-Euler equation: k = f(x + dt*k, t), for the unknown k.
        This is the only requirement for high-order SDIRK implicit integration.*/
-       // 把 k 看成 dx/dt, so dx/dt = f(x+dx,t)
+   // 把 k 看成 dx/dt, so dx/dt = f(x + dx*dx_dt,t)
    virtual void ImplicitSolve(const double dt, const Vector &x, Vector &k);
 
    double ElasticEnergy(const ParGridFunction &x) const;
@@ -199,7 +199,7 @@ int main(int argc, char *argv[])
    int ser_ref_levels = 2;
    int par_ref_levels = 0;
    int order = 2;
-   int ode_solver_type = 1;
+   int ode_solver_type = 11;
    double t_final = 300.0;
    double dt = 3.0;
    double visc = 1e-2;
@@ -281,10 +281,14 @@ int main(int argc, char *argv[])
    switch (ode_solver_type)
    {
       // Implicit L-stable methods
+      // 所有的隐式方法的最重要的就是ODESolver::Step()方法，
+      // 而该方法会调用 TimeDependentOperator::ImplicitSolve()方法，所以最重要的就是我们自己去实现这个方法
       case 1:  ode_solver = new BackwardEulerSolver; break;
       case 2:  ode_solver = new SDIRK23Solver(2); break;
       case 3:  ode_solver = new SDIRK33Solver; break;
       // Explicit methods
+      // 所有的显式方法的最重要的就是ODESolver::Step()方法，
+      // 而该方法会调用 TimeDependentOperator::Mult()方法，所以最重要的就是我们自己去实现这个方法
       case 11: ode_solver = new ForwardEulerSolver; break;
       case 12: ode_solver = new RK2Solver(0.5); break; // midpoint method
       case 13: ode_solver = new RK3SSPSolver; break;
@@ -532,7 +536,7 @@ void ReducedSystemOperator::SetParameters(double dt_, const Vector *v_,
 void ReducedSystemOperator::Mult(const Vector &k, Vector &y) const
 {
     // k就是 dv_dt
-   // compute: y = H(x + dt*(v + dt*k)) + M*k + S*(v + dt*k)
+   // compute: y = H(x + dt*(v + dt*k)) + M*k + S*(v + dt*k), (v + dt*k)就是dx_dt
    add(*v, dt, k, w);
    add(*x, dt, w, z);
    H->Mult(z, y);
