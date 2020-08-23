@@ -23,6 +23,9 @@ bool visualize              = false;
 const char* output          = NULL;
 int max_newton              = 20;
 double relax                = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
+double init_t               = 0.0; // 初始时间，时间步长，最后时间
+double dt                   = 0.01;
+double t_final              = 1.0;
 
 const int bottom_attr       = 1;
 const int top_attr          = 6;
