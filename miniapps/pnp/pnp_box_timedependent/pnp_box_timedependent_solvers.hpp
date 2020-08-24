@@ -530,12 +530,12 @@ public:
         b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
         A_solver->Mult(*b, dphi_dt);
         dphi_dt /= dt;
-        
-        delete phi_gf;
-        *phi_gf = phi;
-        phi_gf->Add(dt, dphi_dt);
-        phi_gf->SetTrueVector();
-        phi_gf->SetFromTrueVector(); // 求解NP方程时要用到phi
+
+        Vector temp;
+        temp.SetSize(true_size);
+        temp = phi;
+        temp.Add(dt, dphi_dt);
+        phi_gf->SetFromTrueDofs(temp);
 
         // 然后求解NP1方程
         ParBilinearForm *a22 = new ParBilinearForm(h1);
@@ -603,6 +603,8 @@ private:
 
     int true_size; // 有限元空间维数
     Array<int> true_offset, ess_bdr, ess_tdof_list;
+    ParaViewDataCollection* pd;
+    VisItDataCollection* dc;
 
 public:
     PNP_Box_Gummel_CG_TimeDependent_Solver(Mesh& mesh_, int ode_solver_type): mesh(mesh_)
@@ -712,6 +714,25 @@ public:
 
         oper->SetTime(t);
         ode_solver->Init(*oper);
+
+        if (1)
+        {
+            pd = new ParaViewDataCollection("PNP_CG_Gummel_Time_Dependent", pmesh);
+            pd->SetPrefixPath("Paraview");
+            pd->RegisterField("phi", phi_gf);
+            pd->RegisterField("c1",   c1_gf);
+            pd->RegisterField("c2",   c2_gf);
+            pd->SetLevelsOfDetail(p_order);
+            pd->SetDataFormat(VTKFormat::BINARY);
+            pd->SetHighOrderOutput(true);
+        }
+        if (1)
+        {
+            dc = new VisItDataCollection("data collection", &mesh);
+            dc->RegisterField("phi", phi_gf);
+            dc->RegisterField("c1",   c1_gf);
+            dc->RegisterField("c2",   c2_gf);
+        }
     }
     ~PNP_Box_Gummel_CG_TimeDependent_Solver() { delete ode_solver; }
 
@@ -725,6 +746,27 @@ public:
             ode_solver->Step(*phic1c2, t, dt_real);
 
             last_step = (t >= t_final - 1e-8*dt);
+
+            if (1)
+            {
+                pd->SetCycle(ti); // 第 i 个时间步
+                pd->SetTime(t); // 第i个时间步所表示的时间
+                pd->Save();
+            }
+
+            if (1)
+            {
+                Visualize(*dc, "phi", "phi_Gummel_CG");
+                Visualize(*dc, "c1", "c1_Gummel_CG");
+                Visualize(*dc, "c2", "c2_Gummel_CG");
+                ofstream results("phi_c1_c2_Gummel_CG.vtk");
+                results.precision(14);
+                int ref = 0;
+                mesh.PrintVTK(results, ref);
+                phi_gf->SaveVTK(results, "phi", ref);
+                c1_gf ->SaveVTK(results, "c1", ref);
+                c2_gf ->SaveVTK(results, "c2", ref);
+            }
         }
     }
 };
