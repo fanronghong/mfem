@@ -488,6 +488,7 @@ private:
 
     int true_size;
     Array<int> true_offset, ess_tdof_list;
+    int num_procs, myid;
 
 public:
     PNP_Box_Gummel_CG_TimeDependent(HypreParMatrix* A_, HypreParMatrix* M1_, HypreParMatrix* M2_,
@@ -498,6 +499,9 @@ public:
           B1(B1_), B2(B2_),
           true_size(size), true_offset(offset), ess_tdof_list(ess_list), h1(fsp)
     {
+        MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+
         phi_gf = new ParGridFunction(h1);
         A_solver  = new PetscLinearSolver(*A,  false, "phi_");
         M1_solver = new PetscLinearSolver(*M1, false, "np1_");
@@ -505,7 +509,10 @@ public:
     }
     virtual ~PNP_Box_Gummel_CG_TimeDependent()
     {
-        delete phi_gf, A_solver, M1_solver, M2_solver;
+        delete phi_gf;
+        delete A_solver;
+        delete M1_solver;
+        delete M2_solver;
     }
 
     virtual void Mult(const Vector &phic1c2, Vector &dphic1c2_dt) const
@@ -577,6 +584,12 @@ public:
 
         A2->Mult(1.0, c2, 1.0, *b2); // A2 c2 + b2 -> b2
         M2_solver->Mult(*b2, dc2_dt); // solve M2 dc2_dt = A2 c2 + b2
+
+        delete l;
+        delete a22;
+        delete l1;
+        delete a33;
+        delete l2;
     }
 
     virtual void ImplicitSolve(const double dt, const Vector &c1c2, Vector &dc1c2_dt)
@@ -606,6 +619,8 @@ private:
     Array<int> true_offset, ess_bdr, ess_tdof_list;
     ParaViewDataCollection* pd;
     VisItDataCollection* dc;
+    int num_procs, myid;
+    StopWatch chrono;
 
 public:
     PNP_Box_Gummel_CG_TimeDependent_Solver(Mesh& mesh_, int ode_solver_type): mesh(mesh_)
@@ -613,6 +628,8 @@ public:
         pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
         fec   = new H1_FECollection(p_order, mesh.Dimension());
         h1    = new ParFiniteElementSpace(pmesh, fec);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
         ess_bdr.SetSize(mesh.bdr_attributes.Max());
         ess_bdr = 1; // 设置所有边界都是essential的
@@ -734,10 +751,33 @@ public:
             dc->RegisterField("c2",   c2_gf);
         }
     }
-    ~PNP_Box_Gummel_CG_TimeDependent_Solver() { delete ode_solver; }
+    ~PNP_Box_Gummel_CG_TimeDependent_Solver()
+    {
+        delete pmesh;
+        delete fec;
+        delete h1;
+        delete a11;
+        delete a12;
+        delete a13;
+        delete m1;
+        delete m2;
+        delete phi_gf;
+        delete c1_gf;
+        delete c2_gf;
+        delete phic1c2;
+        delete oper;
+        delete ode_solver;
+        if (paraview) delete pd;
+        if (visualize) delete dc;
+    }
 
     void Solve()
     {
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        chrono.Clear();
+        chrono.Start();
+
         bool last_step = false;
         for (int ti=1; !last_step; ti++)
         {
@@ -747,7 +787,9 @@ public:
 
             last_step = (t >= t_final - 1e-8*dt);
 
-            {
+            if (myid == 11111110) {
+                MPI_Barrier(MPI_COMM_WORLD);
+
                 phi_exact.SetTime(t);
                 phi_gf->ProjectCoefficient(phi_exact);
                 phi_gf->SetTrueVector();
@@ -797,6 +839,10 @@ public:
 //                c2_gf ->SaveVTK(results, "c2", ref);
             }
         }
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        chrono.Stop();
+        cout << "ODE solver taking " << chrono.RealTime() << " s." << endl;
     }
 };
 #endif
