@@ -94,13 +94,20 @@ def ComputeTimeDependentSolutions():
     print("double phi_exact_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(phi3)))
     print("\ndouble c1_exact_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(c1)))
     print("\ndouble c2_exact_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(c2)))
+
     print("\ndouble f_analytic_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(f)))
     print("\ndouble f1_analytic_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(f1)))
     print("\ndouble f2_analytic_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(f2)))
 
-    print("\nvoid J_time(const Vector& x, double t, Vector& y)\n{{    \ny[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(phi_flux[0]), sympy.printing.ccode(phi_flux[1]), sympy.printing.ccode(phi_flux[2])))
-    print("\nvoid J1_time(const Vector& x, double t, Vector& y)\n{{\n    y[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(c1_flux[0]), sympy.printing.ccode(c1_flux[1]), sympy.printing.ccode(c1_flux[2])))
-    print("\nvoid J2_time(const Vector& x, double t, Vector& y)\n{{\n    y[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(c2_flux[0]), sympy.printing.ccode(c2_flux[1]), sympy.printing.ccode(c2_flux[2])))
+    print("\nvoid J_time(const Vector& x, double t, Vector& y)\n{{    \ny[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(phi_flux[0]),
+                                                                                                                               sympy.printing.ccode(phi_flux[1]),
+                                                                                                                               sympy.printing.ccode(phi_flux[2])))
+    print("\nvoid J1_time(const Vector& x, double t, Vector& y)\n{{\n    y[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(c1_flux[0]),
+                                                                                                                                sympy.printing.ccode(c1_flux[1]),
+                                                                                                                                sympy.printing.ccode(c1_flux[2])))
+    print("\nvoid J2_time(const Vector& x, double t, Vector& y)\n{{\n    y[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(c2_flux[0]),
+                                                                                                                                sympy.printing.ccode(c2_flux[1]),
+                                                                                                                                sympy.printing.ccode(c2_flux[2])))
 
     print("\nvoid adv1_time(const Vector& x, double t, Vector& y)\n{{\n    y[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(adv1[0]), sympy.printing.ccode(adv1[1]), sympy.printing.ccode(adv1[2])))
     print("\nvoid adv2_time(const Vector& x, double t, Vector& y)\n{{\n    y[0] = {};\n    y[1] = {};\n    y[2] = {};\n}}".format(sympy.printing.ccode(adv2[0]), sympy.printing.ccode(adv2[1]), sympy.printing.ccode(adv2[2])))

@@ -6,7 +6,7 @@
 -phi_ksp_atol 1e-20
 -phi_ksp_divtol 1e+5
 #-phi_ksp_monitor_true_residual
--phi_ksp_converged_reason
+#-phi_ksp_converged_reason
 #-phi_ksp_view
 
 -np1_ksp_type cg
@@ -16,7 +16,7 @@
 -np1_ksp_atol 1e-20
 -np1_ksp_divtol 1e+5
 #-np1_ksp_monitor_true_residual
--np1_ksp_converged_reason
+#-np1_ksp_converged_reason
 #-np1_ksp_view
 
 -np2_ksp_type cg
@@ -26,7 +26,7 @@
 -np2_ksp_atol 1e-20
 -np2_ksp_divtol 1e+5
 #-np2_ksp_monitor_true_residual
--np2_ksp_converged_reason
+#-np2_ksp_converged_reason
 #-np2_ksp_view
 
 

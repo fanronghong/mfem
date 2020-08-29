@@ -524,6 +524,8 @@ public:
         l->Assemble();
         b = l->ParallelAssemble();
 
+        // 在求解器求解的外面所使用的Vector，Matrix全部是Hypre类型的，在给PETSc的Krylov求解器传入参数
+        // 时也是传入的Hypre类型的(因为求解器内部会将Hypre的矩阵和向量转化为PETSc的类型)
         B1->Mult(1.0, c1, 1.0, *b); // B1 c1 + b -> b
         B2->Mult(1.0, c2, 1.0, *b); // B1 c1 + B2 c2 + b -> b
         A->Mult(-1.0, phi, 1.0, *b); // - A phi + B1 c1 + B2 c2 + b -> b
@@ -535,7 +537,7 @@ public:
         temp.SetSize(true_size);
         temp = phi;
         temp.Add(dt, dphi_dt);
-        phi_gf->SetFromTrueDofs(temp);
+        phi_gf->SetFromTrueDofs(temp); // fff这样更新phi是否正确
 
         // 然后求解NP1方程
         ParBilinearForm *a22 = new ParBilinearForm(h1);
@@ -582,7 +584,6 @@ public:
 
     }
 };
-
 class PNP_Box_Gummel_CG_TimeDependent_Solver
 {
 private:
@@ -665,33 +666,32 @@ public:
         M2 = m2->ParallelAssemble();
         M2->EliminateRowsCols(ess_tdof_list);
 
-        phi_gf = new ParGridFunction(h1);
-        c1_gf  = new ParGridFunction(h1);
-        c2_gf  = new ParGridFunction(h1);
+        phi_gf = new ParGridFunction(h1); *phi_gf = 0.0;
+        c1_gf  = new ParGridFunction(h1); *c1_gf  = 0.0;
+        c2_gf  = new ParGridFunction(h1); *c2_gf  = 0.0;
 
-        phic1c2 = new BlockVector(true_offset);
-        phi_gf->MakeRef(h1, *phic1c2, true_offset[0]);
-        c1_gf ->MakeRef(h1, *phic1c2, true_offset[1]);
-        c2_gf ->MakeRef(h1, *phic1c2, true_offset[2]);
+        phic1c2 = new BlockVector(true_offset); *phic1c2 = 0.0;
+        phi_gf->MakeTRef(h1, *phic1c2, true_offset[0]);
+        c1_gf ->MakeTRef(h1, *phic1c2, true_offset[1]);
+        c2_gf ->MakeTRef(h1, *phic1c2, true_offset[2]);
 
         phi_exact.SetTime(t);
         phi_gf->ProjectCoefficient(phi_exact);
         phi_gf->SetTrueVector();
+        phi_gf->SetFromTrueVector();
 
         c1_exact.SetTime(t);
         c1_gf->ProjectCoefficient(c1_exact);
         c1_gf->SetTrueVector();
+        c1_gf->SetFromTrueVector();
 
         c2_exact.SetTime(t);
         c2_gf->ProjectCoefficient(c2_exact);
         c2_gf->SetTrueVector();
+        c2_gf->SetFromTrueVector();
 
-        phi_gf->SetFromTrueVector();
-        c1_gf ->SetFromTrueVector();
-        c2_gf ->SetFromTrueVector();
-
-        oper = new PNP_Box_Gummel_CG_TimeDependent(A, M1, M2, B1, B2, true_size, true_offset,
-                                            ess_tdof_list, h1);
+        oper = new PNP_Box_Gummel_CG_TimeDependent(A, M1, M2, B1, B2, true_size,
+                                            true_offset, ess_tdof_list, h1);
 
         switch (ode_solver_type)
         {
@@ -715,18 +715,18 @@ public:
         oper->SetTime(t);
         ode_solver->Init(*oper);
 
-        if (1)
+        if (paraview)
         {
             pd = new ParaViewDataCollection("PNP_CG_Gummel_Time_Dependent", pmesh);
             pd->SetPrefixPath("Paraview");
-            pd->RegisterField("phi", phi_gf);
-            pd->RegisterField("c1",   c1_gf);
-            pd->RegisterField("c2",   c2_gf);
             pd->SetLevelsOfDetail(p_order);
             pd->SetDataFormat(VTKFormat::BINARY);
             pd->SetHighOrderOutput(true);
+            pd->RegisterField("phi", phi_gf);
+            pd->RegisterField("c1",   c1_gf);
+            pd->RegisterField("c2",   c2_gf);
         }
-        if (1)
+        if (visualize)
         {
             dc = new VisItDataCollection("data collection", &mesh);
             dc->RegisterField("phi", phi_gf);
@@ -743,29 +743,58 @@ public:
         {
             double dt_real = min(dt, t_final - t);
 
-            ode_solver->Step(*phic1c2, t, dt_real);
+            ode_solver->Step(*phic1c2, t, dt_real); // 进过这一步之后phic1c2和t都被更新了
 
             last_step = (t >= t_final - 1e-8*dt);
 
-            if (1)
+            {
+                phi_exact.SetTime(t);
+                phi_gf->ProjectCoefficient(phi_exact);
+                phi_gf->SetTrueVector();
+                phi_gf->SetFromTrueVector();
+
+                c1_exact.SetTime(t);
+                c1_gf->ProjectCoefficient(c1_exact);
+                c1_gf->SetTrueVector();
+                c1_gf->SetFromTrueVector();
+
+                c2_exact.SetTime(t);
+                c2_gf->ProjectCoefficient(c2_exact);
+                c2_gf->SetTrueVector();
+                c2_gf->SetFromTrueVector();
+
+                double phiL2err = phi_gf->ComputeL2Error(phi_exact);
+                double c1L2err  = c1_gf ->ComputeL2Error(c1_exact);
+                double c2L2err  = c2_gf ->ComputeL2Error(c2_exact);
+
+                cout << "\nAt time: " << t << '\n'
+                     << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
+                     << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
+                     << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+            }
+
+            if (paraview)
             {
                 pd->SetCycle(ti); // 第 i 个时间步
                 pd->SetTime(t); // 第i个时间步所表示的时间
                 pd->Save();
             }
 
-            if (1)
+            if (visualize)
             {
-                Visualize(*dc, "phi", "phi_Gummel_CG");
-                Visualize(*dc, "c1", "c1_Gummel_CG");
-                Visualize(*dc, "c2", "c2_Gummel_CG");
-                ofstream results("phi_c1_c2_Gummel_CG.vtk");
-                results.precision(14);
-                int ref = 0;
-                mesh.PrintVTK(results, ref);
-                phi_gf->SaveVTK(results, "phi", ref);
-                c1_gf ->SaveVTK(results, "c1", ref);
-                c2_gf ->SaveVTK(results, "c2", ref);
+                string title  = "phi_Gummel_CG, t: " + to_string(t);
+                string title1 = "c1_Gummel_CG, t: " + to_string(t);
+                string title2 = "c2_Gummel_CG, t: " + to_string(t);
+                Visualize(*dc, "phi", title);
+//                Visualize(*dc, "c1", title1);
+//                Visualize(*dc, "c2", title2);
+//                ofstream results("phi_c1_c2_Gummel_CG_final.vtk");
+//                results.precision(14);
+//                int ref = 0;
+//                mesh.PrintVTK(results, ref);
+//                phi_gf->SaveVTK(results, "phi", ref);
+//                c1_gf ->SaveVTK(results, "c1", ref);
+//                c2_gf ->SaveVTK(results, "c2", ref);
             }
         }
     }

@@ -17,15 +17,16 @@ double initTol              = 1e-3; // 为得到非线性迭代的初值所需Gu
 const char* Discretize      = "cg"; // cg, dg
 const char* AdvecStable     = "none"; // none, eafe, supg
 const char* options_src     = "./pnp_box_petsc_opts";
-bool ComputeConvergenceRate = true; // 利用解析解计算误差阶
+bool ComputeConvergenceRate = false; // 利用解析解计算误差阶
 bool local_conservation     = false;
-bool visualize              = false;
+bool visualize              = 0;
+bool paraview               = false;
 const char* output          = NULL;
 int max_newton              = 20;
 double relax                = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
-double init_t               = 0.0; // 初始时间，时间步长，最后时间
-double dt                   = 0.001;
-double t_final              = 0.1;
+double init_t               = 0.0; // 初始时间
+double dt                   = 0.01;// 时间步长
+double t_final              = 0.1; // 最后时间
 
 const int bottom_attr       = 1;
 const int top_attr          = 6;
@@ -122,6 +123,7 @@ double div_adv2_time(const Vector& x, double t)
 {
     return 1.5026472700660527*cos(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
 }
+
 
 FunctionCoefficient phi_exact(phi_exact_time);
 FunctionCoefficient c1_exact(c1_exact_time);

@@ -25,6 +25,7 @@ int main(int argc, char *argv[])
     args.AddOption(&ComputeConvergenceRate, "-rate", "--computerate", "-norate", "--nocomputerate", "Compute convergence rate by using analytic solutions");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.AddOption(&visualize, "-vis", "--visualize", "-novis", "--novisualize", "Plot solution");
+    args.AddOption(&paraview, "-para", "--paraview", "-nopara", "--noparaview", "Save time-dependent results");
     args.AddOption(&output, "-out", "--output", "File name to save outputs", false);
     args.Parse();
     if (!args.Good())
@@ -58,28 +59,7 @@ int main(int argc, char *argv[])
                     solver->Solve();
                     delete solver;
                 }
-//                else if (strcmp(Discretize, "dg") == 0)
-//                {
-//                    PNP_DG_Gummel_Solver_par* solver = new PNP_DG_Gummel_Solver_par(mesh);
-//                    solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-//                    delete solver;
-//                }
             }
-//            else if (strcmp(Linearize, "newton") == 0)
-//            {
-//                if (strcmp(Discretize, "cg") == 0)
-//                {
-//                    PNP_CG_Newton_box_Solver_par* solver = new PNP_CG_Newton_box_Solver_par(&mesh);
-//                    solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-//                    delete solver;
-//                }
-//                else if (strcmp(Discretize, "dg") == 0)
-//                {
-//                    PNP_DG_Newton_box_Solver_par* solver = new PNP_DG_Newton_box_Solver_par(mesh);
-//                    solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-//                    delete solver;
-//                }
-//            }
 
             refine_times = temp_refine_times; // reset real refine_times
         }
@@ -105,36 +85,16 @@ int main(int argc, char *argv[])
         Mesh mesh(mesh_file);
         for (int i=0; i<refine_times; i++) mesh.UniformRefinement();
 
-//        if (strcmp(Linearize, "gummel") == 0)
-//        {
-//            if (strcmp(Discretize, "cg") == 0)
-//            {
-//                PNP_CG_Gummel_Solver_par* solver = new PNP_CG_Gummel_Solver_par(mesh);
-//                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-//                delete solver;
-//            }
-//            else if (strcmp(Discretize, "dg") == 0)
-//            {
-//                PNP_DG_Gummel_Solver_par* solver = new PNP_DG_Gummel_Solver_par(mesh);
-//                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-//                delete solver;
-//            }
-//        }
-//        else if (strcmp(Linearize, "newton") == 0)
-//        {
-//            if (strcmp(Discretize, "cg") == 0)
-//            {
-//                PNP_CG_Newton_box_Solver_par* solver = new PNP_CG_Newton_box_Solver_par(&mesh);
-//                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-//                delete solver;
-//            }
-//            else if (strcmp(Discretize, "dg") == 0)
-//            {
-//                PNP_DG_Newton_box_Solver_par* solver = new PNP_DG_Newton_box_Solver_par(mesh);
-//                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-//                delete solver;
-//            }
-//        }
+        if (strcmp(Linearize, "gummel") == 0)
+        {
+            if (strcmp(Discretize, "cg") == 0)
+            {
+                PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, 11);
+                solver->Solve();
+                delete solver;
+            }
+        }
+
     }
 
     MFEMFinalizePetsc();
