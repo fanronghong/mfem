@@ -477,7 +477,6 @@ class PNP_Box_Gummel_CG_TimeDependent: public TimeDependentOperator
 {
 private:
     ParFiniteElementSpace* h1;
-    ParGridFunction* phi_gf;
 
     HypreParMatrix *A, *M1, *M2, *B1, *B2;
     PetscLinearSolver *A_solver, *M1_solver, *M2_solver;
@@ -502,14 +501,12 @@ public:
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
         MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
-        phi_gf = new ParGridFunction(h1);
         A_solver  = new PetscLinearSolver(*A,  false, "phi_");
         M1_solver = new PetscLinearSolver(*M1, false, "np1_");
         M2_solver = new PetscLinearSolver(*M2, false, "np2_");
     }
     virtual ~PNP_Box_Gummel_CG_TimeDependent()
     {
-        delete phi_gf;
         delete A_solver;
         delete M1_solver;
         delete M2_solver;
@@ -525,6 +522,9 @@ public:
         Vector dc2_dt (dphic1c2_dt.GetData() + 2*true_size, true_size);
 
         // 首先求解Poisson方程
+        ParGridFunction new_phi(h1);
+        new_phi.SetFromTrueDofs(phi); // 让new_phi满足essential bdc
+
         ParLinearForm *l = new ParLinearForm(h1);
         f1_analytic.SetTime(t);
         l->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
@@ -535,21 +535,14 @@ public:
         // 时也是传入的Hypre类型的(因为求解器内部会将Hypre的矩阵和向量转化为PETSc的类型)
         B1->Mult(1.0, c1, 1.0, *b); // B1 c1 + b -> b
         B2->Mult(1.0, c2, 1.0, *b); // B1 c1 + B2 c2 + b -> b
-        A->Mult(-1.0, phi, 1.0, *b); // - A phi + B1 c1 + B2 c2 + b -> b
         b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
-        A_solver->Mult(*b, dphi_dt);
-        dphi_dt /= dt; // fff dt should be dt_real
-
-        Vector temp;
-        temp.SetSize(true_size);
-        temp = phi;
-        temp.Add(dt, dphi_dt);
-        phi_gf->SetFromTrueDofs(temp); // fff这样更新phi是否正确, yes!
+        A_solver->Mult(*b, new_phi);
+        dphi_dt = new_phi - phi;
 
         // 然后求解NP1方程
         ParBilinearForm *a22 = new ParBilinearForm(h1);
         a22->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
-        a22->AddDomainIntegrator(new GradConvectionIntegrator(*phi_gf, &D_K_prod_v_K));
+        a22->AddDomainIntegrator(new GradConvectionIntegrator(new_phi, &D_K_prod_v_K));
         a22->Assemble();
         a22->Finalize();
         A1 = a22->ParallelAssemble();
@@ -569,7 +562,7 @@ public:
         // 然后求解NP2方程
         ParBilinearForm *a33 = new ParBilinearForm(h1);
         a33->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
-        a33->AddDomainIntegrator(new GradConvectionIntegrator(*phi_gf, &D_Cl_prod_v_Cl));
+        a33->AddDomainIntegrator(new GradConvectionIntegrator(new_phi, &D_Cl_prod_v_Cl));
         a33->Assemble();
         a33->Finalize();
         A2 = a33->ParallelAssemble();
@@ -773,6 +766,8 @@ public:
 
     void Solve()
     {
+        int gdb_break = 0;
+        while(gdb_break) {};
 
         MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
@@ -787,28 +782,26 @@ public:
 
             last_step = (t >= t_final - 1e-8*dt);
 
+            phi_exact.SetTime(t);
+            phi_gf->ProjectCoefficient(phi_exact);
+            phi_gf->SetTrueVector();
+            phi_gf->SetFromTrueVector();
+
+            c1_exact.SetTime(t);
+            c1_gf->ProjectCoefficient(c1_exact);
+            c1_gf->SetTrueVector();
+            c1_gf->SetFromTrueVector();
+
+            c2_exact.SetTime(t);
+            c2_gf->ProjectCoefficient(c2_exact);
+            c2_gf->SetTrueVector();
+            c2_gf->SetFromTrueVector();
+
+            double phiL2err = phi_gf->ComputeL2Error(phi_exact);
+            double c1L2err  = c1_gf ->ComputeL2Error(c1_exact);
+            double c2L2err  = c2_gf ->ComputeL2Error(c2_exact);
+
             if (myid == 0) { // fff 并行计算的时候特别慢
-                MPI_Barrier(MPI_COMM_WORLD);
-
-                phi_exact.SetTime(t);
-                phi_gf->ProjectCoefficient(phi_exact);
-                phi_gf->SetTrueVector();
-                phi_gf->SetFromTrueVector();
-
-                c1_exact.SetTime(t);
-                c1_gf->ProjectCoefficient(c1_exact);
-                c1_gf->SetTrueVector();
-                c1_gf->SetFromTrueVector();
-
-                c2_exact.SetTime(t);
-                c2_gf->ProjectCoefficient(c2_exact);
-                c2_gf->SetTrueVector();
-                c2_gf->SetFromTrueVector();
-
-                double phiL2err = phi_gf->ComputeL2Error(phi_exact);
-                double c1L2err  = c1_gf ->ComputeL2Error(c1_exact);
-                double c2L2err  = c2_gf ->ComputeL2Error(c2_exact);
-
                 cout << "\nAt time: " << t << '\n'
                      << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
                      << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
@@ -842,7 +835,9 @@ public:
 
         MPI_Barrier(MPI_COMM_WORLD);
         chrono.Stop();
-        cout << "ODE solver taking " << chrono.RealTime() << " s." << endl;
+        if (myid == 0) {
+            cout << "ODE solver taking " << chrono.RealTime() << " s." << endl;
+        }
     }
 };
 #endif
