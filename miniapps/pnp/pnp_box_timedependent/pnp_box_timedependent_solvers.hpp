@@ -538,13 +538,13 @@ public:
         A->Mult(-1.0, phi, 1.0, *b); // - A phi + B1 c1 + B2 c2 + b -> b
         b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
         A_solver->Mult(*b, dphi_dt);
-        dphi_dt /= dt;
+        dphi_dt /= dt; // fff dt should be dt_real
 
         Vector temp;
         temp.SetSize(true_size);
         temp = phi;
         temp.Add(dt, dphi_dt);
-        phi_gf->SetFromTrueDofs(temp); // fff这样更新phi是否正确
+        phi_gf->SetFromTrueDofs(temp); // fff这样更新phi是否正确, yes!
 
         // 然后求解NP1方程
         ParBilinearForm *a22 = new ParBilinearForm(h1);
@@ -787,7 +787,7 @@ public:
 
             last_step = (t >= t_final - 1e-8*dt);
 
-            if (myid == 11111110) {
+            if (myid == 0) { // fff 并行计算的时候特别慢
                 MPI_Barrier(MPI_COMM_WORLD);
 
                 phi_exact.SetTime(t);
