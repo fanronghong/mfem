@@ -25,7 +25,6 @@ int main(int argc, char *argv[])
     args.AddOption(&ode_type, "-ode", "--ode", "Use ODE Solver");
     args.AddOption(&ComputeConvergenceRate, "-rate", "--computerate", "-norate", "--nocomputerate", "Compute convergence rate by using analytic solutions");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
-    args.AddOption(&visualize, "-vis", "--visualize", "-novis", "--novisualize", "Plot solution");
     args.AddOption(&paraview, "-para", "--paraview", "-nopara", "--noparaview", "Save time-dependent results");
     args.AddOption(&output, "-out", "--output", "File name to save outputs", false);
     args.Parse();

@@ -19,7 +19,6 @@ const char* AdvecStable     = "none"; // none, eafe, supg
 const char* options_src     = "./pnp_box_petsc_opts";
 bool ComputeConvergenceRate = false; // 利用解析解计算误差阶
 bool local_conservation     = false;
-bool visualize              = 0;
 bool paraview               = false;
 const char* output          = NULL;
 int max_newton              = 20;

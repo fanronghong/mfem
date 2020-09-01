@@ -187,36 +187,6 @@ public:
             meshsizes_.Append(totle_size / mesh.GetNE());
         }
 
-        if (visualize)
-        {
-            (*phi) /= alpha1;
-            (*c1)  /= alpha3;
-            (*c2)  /= alpha3;
-            Visualize(*dc, "phi", "phi_Gummel_CG");
-            Visualize(*dc, "c1", "c1_Gummel_CG");
-            Visualize(*dc, "c2", "c2_Gummel_CG");
-            ofstream results("phi_c1_c2_Gummel_CG.vtk");
-            results.precision(14);
-            int ref = 0;
-            mesh.PrintVTK(results, ref);
-            phi->SaveVTK(results, "phi", ref);
-            c1->SaveVTK(results, "c1", ref);
-            c2->SaveVTK(results, "c2", ref);
-            (*phi) *= (alpha1);
-            (*c1)  *= (alpha3);
-            (*c2)  *= (alpha3);
-
-//            phi->ProjectCoefficient(phi_exact);
-//            c1 ->ProjectCoefficient(c1_exact);
-//            c2 ->ProjectCoefficient(c2_exact);
-//            phi->SetTrueVector();
-//            c1 ->SetTrueVector();
-//            c2 ->SetTrueVector();
-//            Visualize(*dc, "phi", "phi_e1");
-//            Visualize(*dc, "c1", "c1_e1");
-//            Visualize(*dc, "c2", "c2_e1");
-        }
-
         if (local_conservation)
         {
             Vector error, error1, error2;
@@ -684,7 +654,6 @@ private:
     int true_size; // 有限元空间维数
     Array<int> true_offset, ess_bdr, ess_tdof_list;
     ParaViewDataCollection* pd;
-    VisItDataCollection* dc;
     int num_procs, myid;
     StopWatch chrono;
 
@@ -809,13 +778,6 @@ public:
             pd->RegisterField("c1",   c1_gf);
             pd->RegisterField("c2",   c2_gf);
         }
-        if (visualize)
-        {
-            dc = new VisItDataCollection("data collection", &mesh);
-            dc->RegisterField("phi", phi_gf);
-            dc->RegisterField("c1",   c1_gf);
-            dc->RegisterField("c2",   c2_gf);
-        }
     }
     ~PNP_Box_Gummel_CG_TimeDependent_Solver()
     {
@@ -834,7 +796,6 @@ public:
         delete oper;
         delete ode_solver;
         if (paraview) delete pd;
-        if (visualize) delete dc;
     }
 
     void Solve()
@@ -855,31 +816,34 @@ public:
 
             last_step = (t >= t_final - 1e-8*dt);
 
-            phi_exact.SetTime(t);
-            phi_gf->ProjectCoefficient(phi_exact);
-            phi_gf->SetTrueVector();
-            phi_gf->SetFromTrueVector();
+            {
+                phi_exact.SetTime(t);
+                phi_gf->ProjectCoefficient(phi_exact);
+                phi_gf->SetTrueVector();
+                phi_gf->SetFromTrueVector();
 
-            c1_exact.SetTime(t);
-            c1_gf->ProjectCoefficient(c1_exact);
-            c1_gf->SetTrueVector();
-            c1_gf->SetFromTrueVector();
+                c1_exact.SetTime(t);
+                c1_gf->ProjectCoefficient(c1_exact);
+                c1_gf->SetTrueVector();
+                c1_gf->SetFromTrueVector();
 
-            c2_exact.SetTime(t);
-            c2_gf->ProjectCoefficient(c2_exact);
-            c2_gf->SetTrueVector();
-            c2_gf->SetFromTrueVector();
+                c2_exact.SetTime(t);
+                c2_gf->ProjectCoefficient(c2_exact);
+                c2_gf->SetTrueVector();
+                c2_gf->SetFromTrueVector();
 
-            double phiL2err = phi_gf->ComputeL2Error(phi_exact);
-            double c1L2err  = c1_gf ->ComputeL2Error(c1_exact);
-            double c2L2err  = c2_gf ->ComputeL2Error(c2_exact);
+                // 计算误差范数只能是在所有进程上都运行，输出误差范数可以只在root进程
+                double phiL2err = phi_gf->ComputeL2Error(phi_exact);
+                double c1L2err = c1_gf->ComputeL2Error(c1_exact);
+                double c2L2err = c2_gf->ComputeL2Error(c2_exact);
 
-            if (myid == 0) { // fff 并行计算的时候特别慢
-                cout.precision(14);
-                cout << "\nAt time: " << t << '\n'
-                     << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
-                     << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
-                     << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+                if (myid == 0) { // fff 并行计算的时候特别慢
+                    cout.precision(14);
+                    cout << "\nAt time: " << t << '\n'
+                         << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
+                         << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
+                         << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+                }
             }
 
             if (paraview)
@@ -887,23 +851,6 @@ public:
                 pd->SetCycle(ti); // 第 i 个时间步
                 pd->SetTime(t); // 第i个时间步所表示的时间
                 pd->Save();
-            }
-
-            if (visualize)
-            {
-                string title  = "phi_Gummel_CG, t: " + to_string(t);
-                string title1 = "c1_Gummel_CG, t: " + to_string(t);
-                string title2 = "c2_Gummel_CG, t: " + to_string(t);
-                Visualize(*dc, "phi", title);
-//                Visualize(*dc, "c1", title1);
-//                Visualize(*dc, "c2", title2);
-//                ofstream results("phi_c1_c2_Gummel_CG_final.vtk");
-//                results.precision(14);
-//                int ref = 0;
-//                mesh.PrintVTK(results, ref);
-//                phi_gf->SaveVTK(results, "phi", ref);
-//                c1_gf ->SaveVTK(results, "c1", ref);
-//                c2_gf ->SaveVTK(results, "c2", ref);
             }
         }
 

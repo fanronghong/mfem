@@ -303,7 +303,7 @@ void AboutVector(ostream &out, const Vector &vec)
 
 
 
-
+// 串行的可视化
 int Wx = 0, Wy = 0;            // window position
 int Ww = 350, Wh = 350;        // window size
 int offx = Ww+5, offy = Wh+25; // window offsets
