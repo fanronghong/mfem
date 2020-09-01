@@ -537,7 +537,7 @@ public:
         B2->Mult(1.0, c2, 1.0, *b); // B1 c1 + B2 c2 + b -> b
         b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
         A_solver->Mult(*b, new_phi);
-        dphi_dt = new_phi - phi;
+        dphi_dt = (new_phi - phi) / dt; // fff应该是dt_real
 
         // 然后求解NP1方程
         ParBilinearForm *a22 = new ParBilinearForm(h1);
