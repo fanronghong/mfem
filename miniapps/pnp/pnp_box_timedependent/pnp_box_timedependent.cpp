@@ -22,6 +22,7 @@ int main(int argc, char *argv[])
     args.AddOption(&initTol, "-initTol", "--initTol", "For obtaining initial value, Gummel iteration to satisfy the Tol");
     args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method.");
     args.AddOption(&AdvecStable, "-stable", "--stable", "Choose stabilization: none, supg, eafe");
+    args.AddOption(&ode_type, "-ode", "--ode", "Use ODE Solver");
     args.AddOption(&ComputeConvergenceRate, "-rate", "--computerate", "-norate", "--nocomputerate", "Compute convergence rate by using analytic solutions");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.AddOption(&visualize, "-vis", "--visualize", "-novis", "--novisualize", "Plot solution");
@@ -55,7 +56,7 @@ int main(int argc, char *argv[])
             {
                 if (strcmp(Discretize, "cg") == 0)
                 {
-                    PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, 11);
+                    PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, ode_type);
                     solver->Solve();
                     delete solver;
                 }
@@ -89,7 +90,7 @@ int main(int argc, char *argv[])
         {
             if (strcmp(Discretize, "cg") == 0)
             {
-                PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, 11);
+                PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, ode_type);
                 solver->Solve();
                 delete solver;
             }

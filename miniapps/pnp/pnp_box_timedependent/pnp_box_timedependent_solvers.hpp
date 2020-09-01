@@ -585,9 +585,82 @@ public:
         delete l2;
     }
 
-    virtual void ImplicitSolve(const double dt, const Vector &c1c2, Vector &dc1c2_dt)
+    virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
     {
+        Vector phi(phic1c2.GetData() + 0*true_size, true_size);
+        Vector c1 (phic1c2.GetData() + 1*true_size, true_size);
+        Vector c2 (phic1c2.GetData() + 2*true_size, true_size);
+        Vector dphi_dt(dphic1c2_dt.GetData() + 0*true_size, true_size);
+        Vector dc1_dt (dphic1c2_dt.GetData() + 1*true_size, true_size);
+        Vector dc2_dt (dphic1c2_dt.GetData() + 2*true_size, true_size);
 
+        // 首先求解Poisson方程
+        ParGridFunction new_phi(h1);
+        new_phi.SetFromTrueDofs(phi); // 让new_phi满足essential bdc
+
+        ParLinearForm *l = new ParLinearForm(h1);
+        f1_analytic.SetTime(t);
+        l->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+        l->Assemble();
+        b = l->ParallelAssemble();
+
+        // 在求解器求解的外面所使用的Vector，Matrix全部是Hypre类型的，在给PETSc的Krylov求解器传入参数
+        // 时也是传入的Hypre类型的(因为求解器内部会将Hypre的矩阵和向量转化为PETSc的类型)
+        B1->Mult(1.0, c1, 1.0, *b); // B1 c1 + b -> b
+        B2->Mult(1.0, c2, 1.0, *b); // B1 c1 + B2 c2 + b -> b
+        b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
+        A_solver->Mult(*b, new_phi);
+        dphi_dt = (new_phi - phi) / dt; // fff应该是dt_real
+
+        // 然后求解NP1方程
+        ParBilinearForm *a22 = new ParBilinearForm(h1);
+        a22->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+        a22->AddDomainIntegrator(new GradConvectionIntegrator(new_phi, &D_K_prod_v_K));
+        a22->Assemble();
+        a22->Finalize();
+        A1 = a22->ParallelAssemble();
+        A1->EliminateRowsCols(ess_tdof_list);
+
+        ParLinearForm *l1 = new ParLinearForm(h1);
+        f1_analytic.SetTime(t);
+        l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+        l1->Assemble();
+        b1 = l1->ParallelAssemble();
+        b1->SetSubVector(ess_tdof_list, 0.0);
+
+        A1->Mult(1.0, c1, 1.0, *b1); // A1 c1 + b1 -> b1
+        HypreParMatrix* temp_A1 = Add(1.0, *M1, -1.0*dt, *A1); // fff M1 and A1 not same sparsity pattern
+        PetscLinearSolver* A1_solver = new PetscLinearSolver(*temp_A1, false, "np1_");
+        A1_solver->Mult(*b1, dc1_dt);
+
+        // 然后求解NP2方程
+        ParBilinearForm *a33 = new ParBilinearForm(h1);
+        a33->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
+        a33->AddDomainIntegrator(new GradConvectionIntegrator(new_phi, &D_Cl_prod_v_Cl));
+        a33->Assemble();
+        a33->Finalize();
+        A2 = a33->ParallelAssemble();
+        A2->EliminateRowsCols(ess_tdof_list);
+
+        ParLinearForm *l2 = new ParLinearForm(h1);
+        f2_analytic.SetTime(t);
+        l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
+        l2->Assemble();
+        b2 = l2->ParallelAssemble();
+        b2->SetSubVector(ess_tdof_list, 0.0);
+
+        A2->Mult(1.0, c2, 1.0, *b2); // A2 c2 + b2 -> b2
+        HypreParMatrix* temp_A2 = Add(1.0, *M2, -1.0*dt, *A2); // fff M2 and A2 not same sparsity pattern
+        PetscLinearSolver* A2_solver = new PetscLinearSolver(*temp_A2, false, "np2_");
+        A2_solver->Mult(*b2, dc2_dt);
+
+        delete l;
+        delete a22;
+        delete l1;
+        delete a33;
+        delete l2;
+        delete temp_A1, temp_A2;
+        delete A1_solver, A2_solver;
     }
 };
 class PNP_Box_Gummel_CG_TimeDependent_Solver
@@ -802,6 +875,7 @@ public:
             double c2L2err  = c2_gf ->ComputeL2Error(c2_exact);
 
             if (myid == 0) { // fff 并行计算的时候特别慢
+                cout.precision(14);
                 cout << "\nAt time: " << t << '\n'
                      << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
                      << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
