@@ -528,10 +528,12 @@ void ReducedSystemOperator::SetParameters(double dt_, const Vector *v_,
 
 void ReducedSystemOperator::Mult(const Vector &k, Vector &y) const
 {
+    // 计算当前解k(TrueVector)的残量
    // compute: y = H(x + dt*(v + dt*k)) + M*k + S*(v + dt*k)
    add(*v, dt, k, w);
    add(*x, dt, w, z);
    H->Mult(z, y);
+   // k是TrueVector，而M，S是ParBilinearForm, 所以要用TrueAddMult(), 而不是AddMult()
    M->TrueAddMult(k, y);
    S->TrueAddMult(w, y);
    y.SetSubVector(ess_tdof_list, 0.0);

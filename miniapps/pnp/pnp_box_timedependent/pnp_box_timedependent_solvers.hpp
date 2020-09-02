@@ -71,7 +71,7 @@ public:
         ParGridFunction new_phi(h1);
         new_phi.SetFromTrueDofs(phi); // 让new_phi满足essential bdc
 
-        cout << "l2 norm of phi: " << phi.Norml2() << endl;
+        if (myid == 0) cout << "l2 norm of phi: " << phi.Norml2() << endl;
 
         ParLinearForm *l = new ParLinearForm(h1);
         f1_analytic.SetTime(t);
@@ -85,8 +85,8 @@ public:
         B2->Mult(1.0, c2, 1.0, *b); // B1 c1 + B2 c2 + b -> b
         b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
         A_solver->Mult(*b, new_phi);
-//        add(1.0, new_phi, -1.0, phi, dphi_dt);
-//        dphi_dt /= dt; // fff应该是dt_real
+        add(1.0, new_phi, -1.0, phi, dphi_dt);
+        dphi_dt /= dt; // fff应该是dt_real
 
         // 然后求解NP1方程
         ParBilinearForm *a22 = new ParBilinearForm(h1);
@@ -380,6 +380,16 @@ public:
     void Solve(Array<double>& phiL2errornorms_, Array<double>& c1L2errornorms_,
                Array<double>& c2L2errornorms_, Array<double>& meshsizes_)
     {
+        if (myid == 0) {
+            cout << '\n';
+            cout << Discretize << ", " << Linearize << ", " << mesh_file << ", refine times: " << refine_times << '\n'
+                 << "p_order: " << p_order << ", " << options_src << '\n'
+                 << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" \
+                                                                       : "wrong type")) << ", " << "time step: " << dt
+                 << endl;
+            cout << "ODE solver taking " << chrono.RealTime() << " s." << endl;
+        }
+
         int gdb_break = 0;
         while(gdb_break) {};
 
@@ -406,15 +416,6 @@ public:
 
         MPI_Barrier(MPI_COMM_WORLD);
         chrono.Stop();
-        if (myid == 0) {
-            cout << '\n';
-            cout << Discretize << ", " << Linearize << ", " << mesh_file << ", refine times: " << refine_times << '\n'
-                 << "p_order: " << p_order << ", petsc option: " << options_src << '\n'
-                 << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" \
-                                                                       : "wrong type")) << ", " << "time step: " << dt
-                 << endl;
-            cout << "ODE solver taking " << chrono.RealTime() << " s." << endl;
-        }
 
         {
             phi_exact.SetTime(t);

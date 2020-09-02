@@ -111,6 +111,7 @@ public:
       {
          int  num_procs, myid;
 
+         // fffX 是TrueVector？下面直接把TrueVector赋值给ParGridFunction没有问题？
          *u = X;
          MPI_Comm_size(pmesh->GetComm(),&num_procs);
          MPI_Comm_rank(pmesh->GetComm(),&myid);
@@ -155,7 +156,7 @@ int main(int argc, char *argv[])
    int vis_steps = 5;
    bool use_petsc = true;
    bool implicit = false;
-   bool use_step = true;
+   bool use_step = false;
    const char *petscrc_file = "";
 
    int precision = 8;
