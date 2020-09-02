@@ -23,6 +23,7 @@ int main(int argc, char *argv[])
     args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method.");
     args.AddOption(&AdvecStable, "-stable", "--stable", "Choose stabilization: none, supg, eafe");
     args.AddOption(&ode_type, "-ode", "--ode", "Use ODE Solver");
+    args.AddOption(&dt, "-dt", "--dt", "Time Step");
     args.AddOption(&ComputeConvergenceRate, "-rate", "--computerate", "-norate", "--nocomputerate", "Compute convergence rate by using analytic solutions");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.AddOption(&paraview, "-para", "--paraview", "-nopara", "--noparaview", "Save time-dependent results");
@@ -56,28 +57,29 @@ int main(int argc, char *argv[])
                 if (strcmp(Discretize, "cg") == 0)
                 {
                     PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, ode_type);
-                    solver->Solve();
+                    solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
                     delete solver;
                 }
             }
-
             refine_times = temp_refine_times; // reset real refine_times
         }
 
-        meshsizes.Print(cout << "\nMesh sizes: \n", meshsizes.Size());
+        if (myid == 0) {
+            meshsizes.Print(cout << "\nMesh sizes: \n", meshsizes.Size());
 
-        phi3L2errornorms.Print(cout << "\nL2 errornorms of |phi3 - phi3_h|: \n", phi3L2errornorms.Size());
-        Array<double> phi3rates = compute_convergence(phi3L2errornorms, meshsizes);
+            phi3L2errornorms.Print(cout << "\nL2 errornorms of |phi3 - phi3_h|: \n", phi3L2errornorms.Size());
+            Array<double> phi3rates = compute_convergence(phi3L2errornorms, meshsizes);
 
-        c1L2errornorms.Print(cout << "\nL2 errornorms of |c1 - c1_h|: \n", c1L2errornorms.Size());
-        Array<double> c1rates = compute_convergence(c1L2errornorms, meshsizes);
+            c1L2errornorms.Print(cout << "\nL2 errornorms of |c1 - c1_h|: \n", c1L2errornorms.Size());
+            Array<double> c1rates = compute_convergence(c1L2errornorms, meshsizes);
 
-        c2L2errornorms.Print(cout << "\nL2 errornorms of |c2 - c2_h|: \n", c2L2errornorms.Size());
-        Array<double> c2rates = compute_convergence(c2L2errornorms, meshsizes);
+            c2L2errornorms.Print(cout << "\nL2 errornorms of |c2 - c2_h|: \n", c2L2errornorms.Size());
+            Array<double> c2rates = compute_convergence(c2L2errornorms, meshsizes);
 
-        phi3rates.Print(cout << "\nphi3 convergence rate: \n", phi3rates.Size());
-        c1rates  .Print(cout << "c1 convergence rate: \n", c1rates.Size());
-        c2rates  .Print(cout << "c2 convergence rate: \n", c2rates.Size());
+            phi3rates.Print(cout << "\nphi3 convergence rate: \n", phi3rates.Size());
+            c1rates  .Print(cout << "c1 convergence rate: \n", c1rates.Size());
+            c2rates  .Print(cout << "c2 convergence rate: \n", c2rates.Size());
+        }
     }
     else
     {
@@ -90,7 +92,7 @@ int main(int argc, char *argv[])
             if (strcmp(Discretize, "cg") == 0)
             {
                 PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, ode_type);
-                solver->Solve();
+                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
                 delete solver;
             }
         }
