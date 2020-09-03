@@ -302,6 +302,7 @@ int main(int argc, char *argv[])
 
    BlockVector vx(true_offset);
    ParGridFunction v_gf, x_gf;
+   // v_gf的TrueVector的data指针和vx的data指针指向同一块内存空间
    v_gf.MakeTRef(&fespace, vx, true_offset[0]);
    x_gf.MakeTRef(&fespace, vx, true_offset[1]);
 
@@ -319,6 +320,8 @@ int main(int argc, char *argv[])
    v_gf.SetTrueVector();
    VectorFunctionCoefficient deform(dim, InitialDeformation);
    x_gf.ProjectCoefficient(deform);
+   // 上面的ProjectCoefficient()改变了x_gf的data指针,但是没有改变TrueVector,
+   // 下面的SetTrueVector()就会计算新的t_vec,从而上面的vx的block 0块也更新了
    x_gf.SetTrueVector();
 
    v_gf.SetFromTrueVector(); x_gf.SetFromTrueVector();

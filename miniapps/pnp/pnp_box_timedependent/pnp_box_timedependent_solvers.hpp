@@ -38,11 +38,10 @@ private:
 public:
     PNP_Box_Gummel_CG_TimeDependent(HypreParMatrix* A_, HypreParMatrix* M1_, HypreParMatrix* M2_,
                                     HypreParMatrix* B1_, HypreParMatrix* B2_,
-                                    int size, Array<int>& offset, Array<int>& ess_list,
-                                    ParFiniteElementSpace* fsp)
-        : TimeDependentOperator(3*size, 0.0), A(A_), M1(M1_), M2(M2_),
-          B1(B1_), B2(B2_),
-          true_size(size), true_offset(offset), ess_tdof_list(ess_list), h1(fsp)
+                                    int truesize, Array<int>& offset, Array<int>& ess_list,
+                                    ParFiniteElementSpace* fsp, double time)
+        : TimeDependentOperator(3*truesize, time), A(A_), M1(M1_), M2(M2_), B1(B1_), B2(B2_),
+          true_size(truesize), true_offset(offset), ess_tdof_list(ess_list), h1(fsp)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
         MPI_Comm_rank(MPI_COMM_WORLD, &myid);
@@ -265,21 +264,21 @@ public:
         a11->Assemble(skip_zero_entries);
         a11->Finalize(skip_zero_entries);
         A = a11->ParallelAssemble();
-        A->EliminateRowsCols(ess_tdof_list);
+        A->EliminateRowsCols(ess_tdof_list); // fff边界条件对吗
 
         a12 = new ParBilinearForm(h1);
         // (alpha2 alpha3 z1 c1, psi)
         a12->AddDomainIntegrator(new MassIntegrator(alpha2_prod_alpha3_prod_v_K));
         a12->Assemble(skip_zero_entries);
         a12->Finalize(skip_zero_entries);
-        B1 = a12->ParallelAssemble();
+        B1 = a12->ParallelAssemble(); // fff不需要设置essential bdc吗
 
         a13 = new ParBilinearForm(h1);
         // (alpha2 alpha3 z2 c2, psi)
         a13->AddDomainIntegrator(new MassIntegrator(alpha2_prod_alpha3_prod_v_Cl));
         a13->Assemble(skip_zero_entries);
         a13->Finalize(skip_zero_entries);
-        B2 = a13->ParallelAssemble();
+        B2 = a13->ParallelAssemble(); // fff不需要设置essential bdc吗
 
         m1 = new ParBilinearForm(h1);
         // (c1, v1)
@@ -287,7 +286,7 @@ public:
         m1->Assemble(skip_zero_entries); // keep sparsity pattern of A1 and M1 the same
         m1->Finalize(skip_zero_entries);
         M1 = m1->ParallelAssemble();
-        M1->EliminateRowsCols(ess_tdof_list);
+        M1->EliminateRowsCols(ess_tdof_list); // fffbdc对吗
 
         m2 = new ParBilinearForm(h1);
         // (c2, v2)
@@ -295,7 +294,7 @@ public:
         m2->Assemble(skip_zero_entries); // keep sparsity pattern of A2 and M2 the same
         m2->Finalize(skip_zero_entries);
         M2 = m2->ParallelAssemble();
-        M2->EliminateRowsCols(ess_tdof_list);
+        M2->EliminateRowsCols(ess_tdof_list); // fffbdc对吗
 
         phi_gf = new ParGridFunction(h1); *phi_gf = 0.0;
         c1_gf  = new ParGridFunction(h1); *c1_gf  = 0.0;
@@ -306,6 +305,7 @@ public:
         c1_gf ->MakeTRef(h1, *phic1c2, true_offset[1]);
         c2_gf ->MakeTRef(h1, *phic1c2, true_offset[2]);
 
+        // 设定初值
         phi_exact.SetTime(t);
         phi_gf->ProjectCoefficient(phi_exact);
         phi_gf->SetTrueVector();
@@ -322,7 +322,7 @@ public:
         c2_gf->SetFromTrueVector();
 
         oper = new PNP_Box_Gummel_CG_TimeDependent(A, M1, M2, B1, B2, true_size,
-                                            true_offset, ess_tdof_list, h1);
+                                            true_offset, ess_tdof_list, h1, t);
 
         switch (ode_solver_type)
         {

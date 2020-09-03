@@ -367,6 +367,7 @@ int main(int argc, char *argv[])
    //    GLVis visualization.
    ParGridFunction *u = new ParGridFunction(fes);
    u->ProjectCoefficient(u0);
+   // U 只能定义为HypreParVector(故下面可以直接*u = *U), 不能是Vector.
    HypreParVector *U = u->GetTrueDofs();
 
    {
