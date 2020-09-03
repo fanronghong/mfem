@@ -418,7 +418,7 @@ endif()
 add_subdirectory(config)
 set(MASTER_HEADERS
   ${PROJECT_SOURCE_DIR}/mfem.hpp
-  ${PROJECT_SOURCE_DIR}/mfem-performance.hpp)
+  ${PROJECT_SOURCE_DIR}/mfem-performance.hpp examples/petsc/ts_tutorial_ex1.cpp examples/petsc/ts_tutorial_ex2.cpp examples/petsc/ts_tutorial_ex3.cpp examples/petsc/ts_tutorial_ex4.cpp)
 
 set(_lib_path "${CMAKE_INSTALL_PREFIX}/lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH ON CACHE BOOL "")

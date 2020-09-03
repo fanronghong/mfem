@@ -155,8 +155,8 @@ int main(int argc, char *argv[])
    bool binary = false;
    int vis_steps = 5;
    bool use_petsc = true;
-   bool implicit = false;
-   bool use_step = false;
+   bool implicit = true;
+   bool use_step = true;
    const char *petscrc_file = "";
 
    int precision = 8;
@@ -315,6 +315,7 @@ int main(int argc, char *argv[])
    k->Finalize(skip_zeros);
    b->Assemble();
 
+   // M, K, B都与时间无关，所以就直接在ODE外面生成
    HypreParMatrix *M = m->ParallelAssemble();
    HypreParMatrix *K = k->ParallelAssemble();
    HypreParVector *B = b->ParallelAssemble();
@@ -324,6 +325,7 @@ int main(int argc, char *argv[])
    //    GLVis visualization.
    ParGridFunction *u = new ParGridFunction(fes);
    u->ProjectCoefficient(u0);
+   // 生成初始解u，以及对应的TrueVector(用来在ODE solver 和 linear solver之间传递数据)
    HypreParVector *U = u->GetTrueDofs();
 
    {
@@ -421,6 +423,7 @@ int main(int argc, char *argv[])
       for (int ti = 0; !done; )
       {
          double dt_real = min(dt, t_final - t);
+         cout.precision(14); cout << "l2 norm of U: " << U->Norml2() << endl;
          ode_solver->Step(*U, t, dt_real);
          ti++;
 
@@ -515,7 +518,9 @@ FE_Evolution::FE_Evolution(HypreParMatrix &_M, HypreParMatrix &_K,
 // RHS evaluation
 void FE_Evolution::ExplicitMult(const Vector &x, Vector &y) const
 {
-   if (isExplicit())
+    cout.precision(14); cout << "l2 norm of x: " << x.Norml2() << endl;
+    // y 就是 dx_dt, y * dt 就是 dx， x+dx 就是下一个时间步的解
+    if (isExplicit())
    {
       // y = M^{-1} (K x + b)
       K.Mult(x, z);
@@ -534,6 +539,8 @@ void FE_Evolution::ExplicitMult(const Vector &x, Vector &y) const
 void FE_Evolution::ImplicitMult(const Vector &x, const Vector &xp,
                                 Vector &y) const
 {
+    // xp 就是 dx_dt
+    cout.precision(14); cout << "l2 norm of x: " << x.Norml2() << endl;
    if (isImplicit())
    {
       M.Mult(xp, y);
@@ -555,6 +562,7 @@ void FE_Evolution::Mult(const Vector &x, Vector &y) const
 // RHS Jacobian
 Operator& FE_Evolution::GetExplicitGradient(const Vector &x) const
 {
+    cout.precision(14); cout << "l2 norm of x: " << x.Norml2() << endl;
    delete rJacobian;
    if (isImplicit())
    {
@@ -571,6 +579,7 @@ Operator& FE_Evolution::GetExplicitGradient(const Vector &x) const
 Operator& FE_Evolution::GetImplicitGradient(const Vector &x, const Vector &xp,
                                             double shift) const
 {
+    cout.precision(14); cout << "l2 norm of x: " << x.Norml2() << endl;
    delete iJacobian;
    if (isImplicit())
    {

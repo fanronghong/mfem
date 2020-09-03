@@ -38,6 +38,25 @@
 using namespace std;
 using namespace mfem;
 
+/* 整个求解过程如下:
+ * RubberOperator::Solve(Vector& xp)
+ *        --> newton_solver.Mult(zero, xp)
+ *            ______________________________
+ *           |
+ *        -->| 1. oper.Mult(xp, r); // 计算在当前解xp处的残量. 这个oper就是RubberOperator这个非线性算子
+ *           |          -> Hform.Mult(xp, r);
+ *           |
+ *           | 2. oper.GetGradient(xp); // 计算在当前解处的Jacobian
+ *           |          -> Hform.GetGradient(xp);
+ *           |
+ *           | 3. prec.SetOperator(Jacobian_at_xp); // 这个prec一般就是gmres, cg等迭代法, 用来求解每个Newton迭代步的Jacobi代数系统
+ *           |
+ *           | 4. prec.Mult(r, c); // 求 J*c = r, 即 c = J^-1 r
+ *           |________________________________
+ *
+ * */
+
+
 class GeneralResidualMonitor : public IterativeSolverMonitor
 {
 public:

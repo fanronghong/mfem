@@ -101,7 +101,7 @@ int main(int argc, char *argv[])
    int ser_ref_levels = 2;
    int par_ref_levels = 1;
    int order = 2;
-   int ode_solver_type = 3;
+   int ode_solver_type = 1;
    double t_final = 0.5;
    double dt = 1.0e-2;
    double alpha = 1.0e-2;
@@ -353,6 +353,7 @@ int main(int argc, char *argv[])
          }
 #endif
       }
+      // 重新生成新的刚度矩阵 K (它跟时间相关)
       oper.SetParameters(u);
    }
 
@@ -392,6 +393,7 @@ ConductionOperator::ConductionOperator(ParFiniteElementSpace &f, double al,
 
    M = new ParBilinearForm(&fespace);
    M->AddDomainIntegrator(new MassIntegrator());
+   // 为什么skip_zeros=0就能保持相同的sparsity pattern？
    M->Assemble(0); // keep sparsity pattern of M and K the same
    M->FormSystemMatrix(ess_tdof_list, Mmat);
 

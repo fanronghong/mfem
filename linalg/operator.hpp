@@ -264,12 +264,21 @@ public:
     algebraic equation F(x,k,t) = G(x,t). The functions F and G represent the
     _implicit_ and _explicit_ parts of the operator, respectively. For explicit
     operators, F(x,k,t) = k, so f(x,t) = G(x,t). */
+/** 例如ex9p.cpp如下：
+    A time-dependent operator for the ODE as F(u,du/dt,t) = G(u,t)
+    The DG weak form of du/dt = -v.grad(u) is M du/dt = K u + b, where M and K are the mass
+    and advection matrices, and b describes the flow on the boundary. This can
+    be also written as a general ODE with the right-hand side only as
+    du/dt = M^{-1} (K u + b).
+    This class is used to evaluate the right-hand side and the left-hand side. */
+// 总的来讲：给定x，t，求k。一般的不含时间的Operator就是：给定x，求k
 class TimeDependentOperator : public Operator
 {
 public:
    enum Type
    {
       EXPLICIT,   ///< This type assumes F(x,k,t) = k, i.e. k = f(x,t) = G(x,t).
+      // 给定t之后，就是一个不含时的方形算子（类似矩阵A）： Ax -> k
       IMPLICIT,   ///< This is the most general type, no assumptions on F and G.
       HOMOGENEOUS ///< This type assumes that G(x,t) = 0.
    };
@@ -295,6 +304,7 @@ protected:
 public:
    /** @brief Construct a "square" TimeDependentOperator y = f(x,t), where x and
        y have the same dimension @a n. */
+       // 这个TimeDependentOperator相当于一个方形矩阵A，给定时间t，Ax->y. x,y都是一样的dimension，所以是“方形的”
    explicit TimeDependentOperator(int n = 0, double t_ = 0.0,
                                   Type type_ = EXPLICIT)
       : Operator(n) { t = t_; type = type_; eval_mode = NORMAL; }
@@ -369,6 +379,8 @@ public:
        methods and the backward Euler method in particular.
 
        If not re-implemented, this method simply generates an error. */
+       // 把k看成dx/dt,则 dx/dt = f(x + dt dx/dt, t)
+       // 一般情况： F(x + dt dx/dt, dx/dt, t) = G(x + dt dx/dt, t)
    virtual void ImplicitSolve(const double dt, const Vector &x, Vector &k);
 
    /** @brief Return an Operator representing (dF/dk @a shift + dF/dx) at the

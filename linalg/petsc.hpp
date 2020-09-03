@@ -476,6 +476,7 @@ public:
    /// Boundary conditions evaluation
    /** In the result vector, @a g, only values at the essential dofs need to be
        set. */
+       // t 是时间？
    virtual void Eval(double t, Vector &g)
    { mfem_error("PetscBCHandler::Eval method not overloaded"); }
 
@@ -506,7 +507,7 @@ public:
    /// y = x on ess_tdof_list_c and y = 0 on ess_tdof_list
    void ZeroBC(const Vector &x, Vector &y);
 
-private:
+protected:
    enum Type bctype;
    bool setup;
 
@@ -547,6 +548,7 @@ protected:
    PetscClassId cid;
 
    /// Right-hand side and solution vector
+   // 对子类PetscODESolver X 是当前时间步的解向量
    mutable PetscParVector *B, *X;
 
    /// Handler for boundary conditions

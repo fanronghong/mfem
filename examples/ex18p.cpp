@@ -37,7 +37,7 @@
 //
 //               We recommend viewing examples 9, 14 and 17 before viewing this
 //               example.
-
+// 方程的弱形式参考：https://www.theoretical-physics.com/dev/fluid-dynamics/euler.html#d-version-of-the-equations
 #include "mfem.hpp"
 #include <fstream>
 #include <sstream>
@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
    MPI_Session mpi(argc, argv);
 
    // 2. Parse command-line options.
-   problem = 1;
+   problem = 2;
    const char *mesh_file = "../data/periodic-square.mesh";
    int ser_ref_levels = 0;
    int par_ref_levels = 1;
@@ -166,6 +166,7 @@ int main(int argc, char *argv[])
    // Finite element space for a mesh-dim vector quantity (momentum) 动量(是个向量)
    ParFiniteElementSpace dfes(&pmesh, &fec, dim, Ordering::byNODES);
    // Finite element space for all variables together (total thermodynamic state)
+   // 方程个数就是未知量个数
    ParFiniteElementSpace vfes(&pmesh, &fec, num_equation, Ordering::byNODES);
 
    // This example depends on this ordering of the space.
@@ -183,6 +184,8 @@ int main(int argc, char *argv[])
 
    // The solution u has components {density, x-momentum, y-momentum, energy}.
    // These are stored contiguously in the BlockVector u_block.
+    // The solution u has components {density, x-momentum, y-momentum, energy},
+    // 所以必须用 Ordering::byNODES
    Array<int> offsets(num_equation + 1);
    for (int k = 0; k <= num_equation; k++) { offsets[k] = k * vfes.GetNDofs(); }
    BlockVector u_block(offsets);
@@ -191,9 +194,13 @@ int main(int argc, char *argv[])
    ParGridFunction mom(&dfes, u_block.GetData() + offsets[1]); // 第二个参数只是给定了data指针的起始地址，具体偏移多少由第一个参数确定
 
    // Initialize the state.
+    // 包括所有的未知量的初始条件：密度，动量，能量
    VectorFunctionCoefficient u0(num_equation, InitialCondition); // 多少个方程就对应多少个变量
    ParGridFunction sol(&vfes, u_block.GetData()); // sol是有限元的表现形式，u_block是纯代数的表现形式，二者等价
    sol.ProjectCoefficient(u0);
+    // 首先定义包含所有要解的未知量的 TrueVector，即 u_block，
+    // 在求解线性方程组时都是 u_block 在作为数据的载体在各个solver之间传递数据;
+    // 然后定义包含所有未知量的 GridFunction，即 sol, 并将 sol 和 u_block 相连接。
 
    // Output the initial solution.
    {

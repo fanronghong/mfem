@@ -29,9 +29,14 @@ void ForwardEulerSolver::Init(TimeDependentOperator &_f)
 
 void ForwardEulerSolver::Step(Vector &x, double &t, double &dt)
 {
+    //t是上一时刻, 对应的解就是x, 下面要求的就是下一个时刻t+dt的解
    f->SetTime(t);
+    //ffff利用f里面的信息, 给定x, 计算出dxdt, dxdt相当于对当前解的矫正. 可以看出:f->Mult(x, dxdt)要求的始终都是增量dxdt,
+    // 对比BackwardEulerSolver::Step()里面的f->ImplicitSolve(dt, x, k), 也是求的增量k
    f->Mult(x, dxdt);
+    // x+dt*dxdt => x, 更新当前解
    x.Add(dt, dxdt);
+    // t+dt => t, 更新当前时间
    t += dt;
 }
 
@@ -541,13 +546,17 @@ const double AM4Solver::a[] =
 void BackwardEulerSolver::Init(TimeDependentOperator &_f)
 {
    ODESolver::Init(_f);
+    //为Vector k分配内存空间
    k.SetSize(f->Width(), mem_type);
 }
 
 void BackwardEulerSolver::Step(Vector &x, double &t, double &dt)
 {
+    // f是一个TimeDenpendentOperator, 此处跟ForwardEulerSolver()不一样
    f->SetTime(t + dt);
+    // solve for k: k = f(x + dt*k, t + dt), k即是 dx_dt. 可以看出:f->Mult(x, dxdt)要求的始终都是增量dxdt, 对比ForwardEulerSolver::Step()里面的f->Mult(x, dxdt), 也是求的增量k
    f->ImplicitSolve(dt, x, k); // solve for k: k = f(x + dt*k, t + dt)
+    // 更容易理解: x + dt*dx_dt -> x
    x.Add(dt, k);
    t += dt;
 }

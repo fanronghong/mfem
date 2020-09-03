@@ -180,6 +180,9 @@ protected:
    double total_fraction;
    double local_err_goal;
    long   max_elements;
+   long   amr_levels;
+   bool   yRange;
+   double ymin, ymax;
 
    double threshold;
    long num_marked_elements;
@@ -228,6 +231,10 @@ public:
        the input mesh has num_elements >= max_elem. The default value is
        LONG_MAX. */
    void SetMaxElements(long max_elem) { max_elements = max_elem; }
+
+   void SetYRange(double ymin_, double ymax_) { yRange=true; ymin=ymin_; ymax=ymax_; }
+
+   void SetMaximumRefinementLevel(long levels) { amr_levels = levels; }
 
    /// Use nonconforming refinement, if possible (triangles, quads, hexes).
    void PreferNonconformingRefinement() { non_conforming = 1; }
