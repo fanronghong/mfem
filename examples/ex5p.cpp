@@ -358,8 +358,10 @@ int main(int argc, char *argv[])
    //     L2 error norms.
    ParGridFunction *u(new ParGridFunction);
    ParGridFunction *p(new ParGridFunction);
+   // 在Vector层面操作 ParGridFunction u的data指针
    u->MakeRef(R_space, x.GetBlock(0), 0);
    p->MakeRef(W_space, x.GetBlock(1), 0);
+   // 利用prolongation matrix 和 t_vec 相乘得到的向量去操作u的data指针
    u->Distribute(&(trueX.GetBlock(0)));
    p->Distribute(&(trueX.GetBlock(1)));
 
