@@ -129,6 +129,13 @@ void ParGridFunction::MakeRef(ParFiniteElementSpace *f, Vector &v, int v_offset)
    pfes = f;
 }
 
+// prolongation matrix就相当于把一个较短的向量tv拉长成data指针所指的长向量
+// 这也是这个函数被叫做 Distribute的原因,就像把一个短的向量tv分发到各个进程,
+// 由于各个进程要通信,所以实际上分发到各个进程的向量变长了. 实际上prolongation
+// matrix一般是一个长矩阵(行数大于列数), 作用是(Given "true" i.e. globally unique
+// degrees of freedom, it computes the local degrees of freedom,
+// which could be just communicating values in parallel,
+// or actual interpolation with AMR.)
 void ParGridFunction::Distribute(const Vector *tv)
 {
    const Operator *prolong = pfes->GetProlongationMatrix();

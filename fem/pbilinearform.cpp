@@ -130,6 +130,7 @@ void ParBilinearForm::ParallelAssemble(OperatorHandle &A, SparseMatrix *A_local)
 
    OperatorHandle dA(A.Type()), Ph(A.Type()), hdA;
 
+   // 由 A_local 生成 dA
    if (fbfi.Size() == 0)
    {
       // construct a parallel block-diagonal matrix 'A' based on 'a'
@@ -176,11 +177,13 @@ void ParBilinearForm::ParallelAssemble(OperatorHandle &A, SparseMatrix *A_local)
    // const Operator, so we cannot store it in OperatorHandle. We need a const
    // version of class OperatorHandle, e.g. ConstOperatorHandle.
 
+   // 一定要自己delete A
    A.MakePtAP(dA, Ph);
 }
 
 HypreParMatrix *ParBilinearForm::ParallelAssemble(SparseMatrix *m)
 {
+    // 新生成了一个 Mh, 记得 delete
    OperatorHandle Mh(Operator::Hypre_ParCSR);
    ParallelAssemble(Mh, m);
    Mh.SetOperatorOwner(false);

@@ -76,7 +76,7 @@ public:
         f1_analytic.SetTime(t);
         l->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
         l->Assemble();
-        b = l->ParallelAssemble();
+        b = l->ParallelAssemble(); // 一定要自己delete b
 
         // 在求解器求解的外面所使用的Vector，Matrix全部是Hypre类型的，在给PETSc的Krylov求解器传入参数
         // 时也是传入的Hypre类型的(因为求解器内部会将Hypre的矩阵和向量转化为PETSc的类型)
@@ -93,14 +93,14 @@ public:
         a22->AddDomainIntegrator(new GradConvectionIntegrator(new_phi, &D_K_prod_v_K));
         a22->Assemble(skip_zero_entries);
         a22->Finalize(skip_zero_entries);
-        A1 = a22->ParallelAssemble();
+        A1 = a22->ParallelAssemble(); // 一定要自己delete A1
         A1->EliminateRowsCols(ess_tdof_list);
 
         ParLinearForm *l1 = new ParLinearForm(h1);
         f1_analytic.SetTime(t);
         l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
         l1->Assemble();
-        b1 = l1->ParallelAssemble();
+        b1 = l1->ParallelAssemble(); // 一定要自己delete b1
         b1->SetSubVector(ess_tdof_list, 0.0);
 
         A1->Mult(1.0, c1, 1.0, *b1); // A1 c1 + b1 -> b1
@@ -113,14 +113,14 @@ public:
         a33->AddDomainIntegrator(new GradConvectionIntegrator(new_phi, &D_Cl_prod_v_Cl));
         a33->Assemble(skip_zero_entries);
         a33->Finalize(skip_zero_entries);
-        A2 = a33->ParallelAssemble();
+        A2 = a33->ParallelAssemble(); // 一定要自己delete A2
         A2->EliminateRowsCols(ess_tdof_list);
 
         ParLinearForm *l2 = new ParLinearForm(h1);
         f2_analytic.SetTime(t);
         l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
         l2->Assemble();
-        b2 = l2->ParallelAssemble();
+        b2 = l2->ParallelAssemble(); // 一定要自己delete b2
         b2->SetSubVector(ess_tdof_list, 0.0);
 
         A2->Mult(1.0, c2, 1.0, *b2); // A2 c2 + b2 -> b2
@@ -131,6 +131,11 @@ public:
         delete l1;
         delete a33;
         delete l2;
+        delete b;
+        delete A1;
+        delete b1;
+        delete A2;
+        delete b2;
     }
 
     virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
@@ -238,6 +243,8 @@ private:
 public:
     PNP_Box_Gummel_CG_TimeDependent_Solver(Mesh& mesh_, int ode_solver_type): mesh(mesh_)
     {
+        t = init_t;
+
         pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
         fec   = new H1_FECollection(p_order, mesh.Dimension());
         h1    = new ParFiniteElementSpace(pmesh, fec);
@@ -247,16 +254,6 @@ public:
         ess_bdr.SetSize(mesh.bdr_attributes.Max());
         ess_bdr = 1; // 设置所有边界都是essential的
         h1->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
-
-        true_size = h1->TrueVSize();
-
-        true_offset.SetSize(3 + 1); // 表示 phi, c1，c2的TrueVector
-        true_offset[0] = 0;
-        true_offset[1] = true_size;
-        true_offset[2] = true_size * 2;
-        true_offset[3] = true_size * 3;
-
-        t = init_t;
 
         a11 = new ParBilinearForm(h1);
         // (epsilon_s grad(phi), grad(psi))
@@ -299,6 +296,13 @@ public:
         phi_gf = new ParGridFunction(h1); *phi_gf = 0.0;
         c1_gf  = new ParGridFunction(h1); *c1_gf  = 0.0;
         c2_gf  = new ParGridFunction(h1); *c2_gf  = 0.0;
+
+        true_size = h1->TrueVSize();
+        true_offset.SetSize(3 + 1); // 表示 phi, c1，c2的TrueVector
+        true_offset[0] = 0;
+        true_offset[1] = true_size;
+        true_offset[2] = true_size * 2;
+        true_offset[3] = true_size * 3;
 
         phic1c2 = new BlockVector(true_offset); *phic1c2 = 0.0;
         phi_gf->MakeTRef(h1, *phic1c2, true_offset[0]);

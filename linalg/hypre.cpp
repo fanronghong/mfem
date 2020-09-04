@@ -1657,6 +1657,7 @@ HypreParMatrix * RAP(const HypreParMatrix *A, const HypreParMatrix *P)
       hypre_ParCSRMatrixSetColStartsOwner(*P, 1);
    }
 
+   // 一定要 delete
    return new HypreParMatrix(rap);
 }
 
