@@ -116,10 +116,12 @@ FE_Evolution::FE_Evolution(FiniteElementSpace &_vfes,
    const int dof = vfes.GetFE(0)->GetDof();
    DenseMatrix Me(dof);
    DenseMatrixInverse inv(&Me);
+   // 手动生成单元刚度矩阵: 只需要Integrator, 不需要BilinearForm
    MassIntegrator mi;
    for (int i = 0; i < vfes.GetNE(); i++)
    {
       mi.AssembleElementMatrix(*vfes.GetFE(i), *vfes.GetElementTransformation(i), Me);
+      // 手动LU分解, 并返回逆矩阵
       inv.Factor();
       inv.GetInverseMatrix(Me_inv(i));
    }

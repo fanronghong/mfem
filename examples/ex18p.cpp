@@ -47,7 +47,8 @@
 // shared between the serial and parallel version of the example.
 #include "ex18.hpp"
 
-// Choice for the problem setup. See InitialCondition in ex18.hpp.取值：1-fast vortex，2-slow vortex
+// Choice for the problem setup. See InitialCondition in ex18.hpp.
+// 取值：1-fast vortex，2-slow vortex
 int problem;
 
 // Equation constant parameters.
@@ -69,7 +70,7 @@ int main(int argc, char *argv[])
    int ser_ref_levels = 0;
    int par_ref_levels = 1;
    int order = 3;
-   int ode_solver_type = 4;
+   int ode_solver_type = 1;
    double t_final = 2.0;
    double dt = -0.01;
    double cfl = 0.3;
@@ -191,12 +192,15 @@ int main(int argc, char *argv[])
    BlockVector u_block(offsets);
 
    // Momentum grid function on dfes for visualization.
-   ParGridFunction mom(&dfes, u_block.GetData() + offsets[1]); // 第二个参数只是给定了data指针的起始地址，具体偏移多少由第一个参数确定
+    // 第二个参数 只 是给定了data指针的起始地址，具体偏移多少由第一个参数确定
+   ParGridFunction mom(&dfes, u_block.GetData() + offsets[1]);
 
    // Initialize the state.
     // 包括所有的未知量的初始条件：密度，动量，能量
-   VectorFunctionCoefficient u0(num_equation, InitialCondition); // 多少个方程就对应多少个变量
-   ParGridFunction sol(&vfes, u_block.GetData()); // sol是有限元的表现形式，u_block是纯代数的表现形式，二者等价
+    // 多少个方程就对应多少个变量
+   VectorFunctionCoefficient u0(num_equation, InitialCondition);
+    // sol是有限元的表现形式，u_block是纯代数的表现形式，二者可以进行转换
+   ParGridFunction sol(&vfes, u_block.GetData());
    sol.ProjectCoefficient(u0);
     // 首先定义包含所有要解的未知量的 TrueVector，即 u_block，
     // 在求解线性方程组时都是 u_block 在作为数据的载体在各个solver之间传递数据;
@@ -298,6 +302,7 @@ int main(int argc, char *argv[])
       // maximum char speed at all quadrature points on all faces.
       max_char_speed = 0.;
       Vector z(sol.Size());
+      // 内部会修改 max_char_speed
       A.Mult(sol, z);
       // Reduce to find the global maximum wave speed
       {
