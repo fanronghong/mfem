@@ -23,6 +23,8 @@ class ODESolver
 {
 protected:
    /// Pointer to the associated TimeDependentOperator.
+   // 即系统dx/dt = f(x,t)中不带时间导数的其余所有项
+   // 给定时间t后f就是一个方形的Operator，类似一个方阵
    TimeDependentOperator *f;  // f(.,t) : R^n --> R^n
    MemoryType mem_type;
 
@@ -113,6 +115,7 @@ public:
 
 
 /// The classical forward Euler method
+/// 最简单的具体的ODESolver, 下面的BackwardEulerSolver也要重点掌握
 class ForwardEulerSolver : public ODESolver
 {
 private:
@@ -121,6 +124,7 @@ private:
 public:
    void Init(TimeDependentOperator &_f) override;
 
+    // 重点是这一步
    void Step(Vector &x, double &t, double &dt) override;
 };
 
@@ -389,6 +393,7 @@ public:
 class BackwardEulerSolver : public ODESolver
 {
 protected:
+    //解向量fff
    Vector k;
 
 public:
