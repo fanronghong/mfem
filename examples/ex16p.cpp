@@ -450,7 +450,11 @@ void ConductionOperator::ImplicitSolve(const double dt,
 void ConductionOperator::SetParameters(const Vector &u)
 {
    ParGridFunction u_alpha_gf(&fespace);
+   // u 是TrueVector(true dofs), 所以这里要使用SetFromTrueDofs(),
+   // 是对其内部的t_vec进行操作
    u_alpha_gf.SetFromTrueDofs(u);
+   // 下面对u_alpha_gf的每个元素进行操作, 是把u_alpha_gf当成Vector,
+   // 是对其data指针操作, 而不是true dofs
    for (int i = 0; i < u_alpha_gf.Size(); i++)
    {
       u_alpha_gf(i) = kappa + alpha*u_alpha_gf(i);
