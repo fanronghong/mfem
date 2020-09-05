@@ -1017,7 +1017,9 @@ void BilinearForm::EliminateEssentialBCFromDofsDiag (const Array<int> &ess_dofs,
 void BilinearForm::EliminateVDofsInRHS(
    const Array<int> &vdofs, const Vector &x, Vector &b)
 {
+    // 修改非essential bc部分自由度对应的b的部分. vdofs一般就是ess_tdof_list, x,b分别就是Ax=b中的.
    mat_e->AddMult(x, b, -1.);
+   // 把 b 对应vdofs中的部分赋值成对应在x中的部分
    mat->PartMult(vdofs, x, b);
 }
 
