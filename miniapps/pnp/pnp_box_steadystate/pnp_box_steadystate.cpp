@@ -139,6 +139,5 @@ int main(int argc, char *argv[])
 
     MFEMFinalizePetsc();
     MPI_Finalize();
-    cout << "------------------------------ All Good! -------------------------\n\n" << endl;
 }
 

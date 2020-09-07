@@ -143,8 +143,10 @@ private:
 public:
     PNP_CG_Gummel_Solver_par(Mesh& mesh_) : mesh(mesh_)
     {
-        pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
+        pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
         fec = new H1_FECollection(p_order, mesh.Dimension());
         fsp = new ParFiniteElementSpace(pmesh, fec);
 
@@ -161,14 +163,7 @@ public:
         Dirichlet_attr.SetSize(bdr_size);
         {
             Neumann_attr = 0;
-//            Neumann_attr[front_attr - 1] = 1;
-//            Neumann_attr[back_attr  - 1] = 1;
-//            Neumann_attr[left_attr  - 1] = 1;
-//            Neumann_attr[right_attr - 1] = 1;
-
             Dirichlet_attr = 1;
-//            Dirichlet_attr[top_attr    - 1] = 1;
-//            Dirichlet_attr[bottom_attr - 1] = 1;
         }
         fsp->GetEssentialTrueDofs(Dirichlet_attr, ess_tdof_list);
 
@@ -195,15 +190,28 @@ public:
     }
     ~PNP_CG_Gummel_Solver_par()
     {
-        delete fsp, phi, c1, c2, phi_n, c1_n, c2_n, dc, fec;
+        delete fsp;
+        delete phi;
+        delete c1;
+        delete c2;
+        delete phi_n;
+        delete c1_n;
+        delete c2_n;
+        delete dc;
+        delete fec;
     }
 
     // 把下面的5个求解过程串联起来
     void Solve(Array<double>& phiL2errornorms_, Array<double>& c1L2errornorms_,
                Array<double>& c2L2errornorms_, Array<double>& meshsizes_)
     {
-        cout << "\nGummel, CG" << p_order << ", box, parallel"
-             << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
+        if (myid == 0) {
+            cout << '\n';
+            cout << Discretize << p_order << ", " << Linearize << ", " << mesh_file << ", refine times: " << refine_times
+                 << ", " << options_src << '\n'
+                 << endl;
+        }
+
         int iter = 1;
         while (iter < Gummel_max_iters)
         {
@@ -228,53 +236,73 @@ public:
             else MFEM_ABORT("Not support stabilization.");
             (*c2_n) = (*c2);
 
-            cout << "===> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
+            if (myid == 0) {
+                cout << "===> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
+            }
             if (tol < Gummel_rel_tol)
             {
-                cout << "------> Gummel iteration converge: " << iter << " times." << endl;
+                if (myid == 0) {
+                    cout << "------> Gummel iteration converge: " << iter << " times." << endl;
+                }
                 break;
             }
-            if (tol < Gummel_rel_tol) break;
             iter++;
-            cout << endl;
+
+            if (myid == 0) {
+                cout << endl;
+            }
         }
+
         if (iter == Gummel_max_iters) MFEM_ABORT("------> Gummel iteration Failed!!!");
-
-        out1["poisson_iter"] = poisson_iter;
-        out1["poisson_time"] = poisson_time;
-        out1["np1_iter"] = np1_iter;
-        out1["np1_time"] = np1_time;
-        out1["np2_iter"] = np2_iter;
-        out1["np2_time"] = np2_time;
-
-        linearize_iter = iter;
-        total_time = poisson_time.Sum() + np1_time.Sum() + np2_time.Sum();
-        ndofs = fsp->GetVSize() * 3;
-        out2["linearize_iter"] = linearize_iter;
-        out2["total_time"] = total_time;
-        out2["ndofs"] = ndofs;
-        poisson_avg_iter = (poisson_iter.Sum() / poisson_iter.Size());
-        poisson_avg_time = poisson_time.Sum() / poisson_time.Size();
-        out2["poisson_avg_iter"] = poisson_avg_iter;
-        out2["poisson_avg_time"] = poisson_avg_time;
-        np1_avg_iter     = (np1_iter.Sum() / np1_iter.Size());
-        np1_avg_time     = np1_time.Sum() / np1_iter.Size();
-        out2["np1_avg_iter"] = np1_avg_iter;
-        out2["np1_avg_time"] = np1_avg_time;
-        np2_avg_iter     = (np2_iter.Sum() / np2_iter.Size());
-        np2_avg_time     = np2_time.Sum() / np2_iter.Size();
-        out2["np2_avg_iter"] = np2_avg_iter;
-        out2["np2_avg_time"] = np2_avg_time;
 
         cout.precision(14);
         double phiL2err = phi->ComputeL2Error(phi_exact);
         double c1L2err = c1->ComputeL2Error(c1_exact);
         double c2L2err = c2->ComputeL2Error(c2_exact);
 
-        cout << "\n======>Box, " << Linearize << ", " << Discretize << p_order << ", refine " << refine_times << " for " << mesh_file << ", " << options_src << ", -rate: " << ComputeConvergenceRate << endl;
-        cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
-             << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
-             << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+        if (myid == 0) {
+            cout << "\n======>Box, " << Linearize << ", " << Discretize << p_order << ", refine " << refine_times
+                 << " for " << mesh_file << ", " << options_src << ", -rate: " << ComputeConvergenceRate << endl;
+            cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
+                 << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
+                 << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+        }
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (myid == 0) {
+            out1["poisson_iter"] = poisson_iter;
+            out1["poisson_time"] = poisson_time;
+            out1["np1_iter"] = np1_iter;
+            out1["np1_time"] = np1_time;
+            out1["np2_iter"] = np2_iter;
+            out1["np2_time"] = np2_time;
+
+            linearize_iter = iter;
+            total_time = poisson_time.Sum() + np1_time.Sum() + np2_time.Sum();
+            ndofs = fsp->GetVSize() * 3;
+            out2["linearize_iter"] = linearize_iter;
+            out2["total_time"] = total_time;
+            out2["ndofs"] = ndofs;
+            poisson_avg_iter = (poisson_iter.Sum() / poisson_iter.Size());
+            poisson_avg_time = poisson_time.Sum() / poisson_time.Size();
+            out2["poisson_avg_iter"] = poisson_avg_iter;
+            out2["poisson_avg_time"] = poisson_avg_time;
+            np1_avg_iter = (np1_iter.Sum() / np1_iter.Size());
+            np1_avg_time = np1_time.Sum() / np1_iter.Size();
+            out2["np1_avg_iter"] = np1_avg_iter;
+            out2["np1_avg_time"] = np1_avg_time;
+            np2_avg_iter = (np2_iter.Sum() / np2_iter.Size());
+            np2_avg_time = np2_time.Sum() / np2_iter.Size();
+            out2["np2_avg_iter"] = np2_avg_iter;
+            out2["np2_avg_time"] = np2_avg_time;
+
+            map<string, Array<double>>::iterator it1;
+            for (it1=out1.begin(); it1!=out1.end(); ++it1)
+                (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
+            map<string, double>::iterator it2;
+            for (it2=out2.begin(); it2!=out2.end(); ++it2)
+                cout << (*it2).first << ": " << (*it2).second << endl;
+        }
 
         if (ComputeConvergenceRate)
         {
@@ -307,16 +335,6 @@ public:
             (*phi) *= (alpha1);
             (*c1)  *= (alpha3);
             (*c2)  *= (alpha3);
-
-//            phi->ProjectCoefficient(phi_exact);
-//            c1 ->ProjectCoefficient(c1_exact);
-//            c2 ->ProjectCoefficient(c2_exact);
-//            phi->SetTrueVector();
-//            c1 ->SetTrueVector();
-//            c2 ->SetTrueVector();
-//            Visualize(*dc, "phi", "phi_e1");
-//            Visualize(*dc, "c1", "c1_e1");
-//            Visualize(*dc, "c2", "c2_e1");
         }
 
         if (local_conservation)
@@ -339,14 +357,9 @@ public:
             }
         }
 
-        map<string, Array<double>>::iterator it1;
-        for (it1=out1.begin(); it1!=out1.end(); ++it1)
-            (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
-        map<string, double>::iterator it2;
-        for (it2=out2.begin(); it2!=out2.end(); ++it2)
-            cout << (*it2).first << ": " << (*it2).second << endl;
-
-        cout << "approximate mesh scale h: " << pow(fsp->GetTrueVSize(), -1.0/3) << endl;
+        if (myid == 0) {
+            cout << "------------------------------ All Good! -------------------------\n\n" << endl;
+        }
     }
 
     void Solve(BlockVector& vec, Array<int>& offsets, double initTol)
@@ -430,6 +443,7 @@ private:
         blf->FormLinearSystem(ess_tdof_list, *phi, *lf, A, x, b);
         PetscLinearSolver* solver = new PetscLinearSolver(A, false, "phi_");
 
+        MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
         chrono.Start();
         solver->Mult(b, x);
@@ -443,9 +457,11 @@ private:
         else if (solver->GetConverged() != 1)
             cerr << "phi solver: Not Converge, taking " << chrono.RealTime() << " s." << endl;
 #endif
-
-        poisson_iter.Append(solver->GetNumIterations());
-        poisson_time.Append(chrono.RealTime());
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (myid == 0) {
+            poisson_iter.Append(solver->GetNumIterations());
+            poisson_time.Append(chrono.RealTime());
+        }
 
 //        cout << "L2 error norm of |phi_h - phi_e|: " << phi->ComputeL2Error(phi_exact) << endl;
 //        MFEM_ABORT("Stop here for testing Poisson convergence rate in PNP_CG_Gummel_Solver_par!");
@@ -461,6 +477,7 @@ private:
         delete c1_n_coeff;
         delete c2_n_coeff;
     }
+
 
     // 4.求解耦合的方程NP1方程
     void Solve_NP1()
@@ -498,22 +515,7 @@ private:
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
 
-        if (use_np1spd)
-        {
-            ParBilinearForm* p_blf = new ParBilinearForm(fsp);
-            p_blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
-            p_blf->Assemble(0);
-            p_blf->Finalize(0);
-
-            PetscParMatrix* P = new PetscParMatrix();
-            p_blf->SetOperatorType(Operator::PETSC_MATAIJ);
-            p_blf->FormSystemMatrix(ess_tdof_list, *P);
-
-            PetscLinearSolver* pc = new PetscLinearSolver(*P, "np1spdpc_");
-            PetscPreconditioner* pc_ = new PetscPreconditioner(*P, "np1spdpc_");
-            solver->SetPreconditioner(*pc_);
-        }
-
+        MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
         chrono.Start();
         solver->Mult(*b, *x);
@@ -527,9 +529,11 @@ private:
             cerr << "np1 solver: Not Converge, taking " << chrono.RealTime() << " s." << endl;
 #endif
 
-        np1_iter.Append(solver->GetNumIterations());
-        np1_time.Append(chrono.RealTime());
-
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (myid == 0) {
+            np1_iter.Append(solver->GetNumIterations());
+            np1_time.Append(chrono.RealTime());
+        }
 //        cout << "L2 error norm of | c1_h - c1_e |: " << c1->ComputeL2Error(c1_exact) << endl;
 //        MFEM_ABORT("Stop here for test NP1 convergence rate in PNP_CG_Gummel_Solver_par!");
 
@@ -538,7 +542,9 @@ private:
         (*c1)   += (*c1_n); // 利用松弛方法更新c1
         (*c1_n) /= relax; // 还原c1_n.避免松弛因子为0的情况造成除0
 
-        delete lf, blf, solver;
+        delete lf;
+        delete blf;
+        delete solver;
     }
     void Solve_NP1_EAFE()
     {
@@ -677,6 +683,7 @@ private:
         delete lf, blf, solver;
     }
 
+
     // 5.求解耦合的方程NP2方程
     void Solve_NP2()
     {
@@ -706,21 +713,7 @@ private:
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
 
-        if (use_np2spd)
-        {
-            ParBilinearForm* p = new ParBilinearForm(fsp);
-            p->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
-            p->Assemble(0);
-            p->Finalize(0);
-
-            PetscParMatrix* P = new PetscParMatrix();
-            p->SetOperatorType(Operator::PETSC_MATAIJ);
-            p->FormSystemMatrix(ess_tdof_list, *P);
-
-            PetscLinearSolver* pc = new PetscLinearSolver(*P, "np2spdpc_");
-            solver->SetPreconditioner(*pc);
-        }
-
+        MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
         chrono.Start();
         solver->Mult(*b, *x);
@@ -734,8 +727,11 @@ private:
             cerr << "np2 solver: Not Converge, taking " << chrono.RealTime() << " s." << endl;
 #endif
 
-        np2_iter.Append(solver->GetNumIterations());
-        np2_time.Append(chrono.RealTime());
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (myid == 0) {
+            np2_iter.Append(solver->GetNumIterations());
+            np2_time.Append(chrono.RealTime());
+        }
 
 //        cout << "L2 error norm of | c2_h - c2_e |: " << c2->ComputeL2Error(c2_exact) << endl;
 //        MFEM_ABORT("Stop here for test convergence rate in PNP_CG_Gummel_Solver_par!");
@@ -745,7 +741,9 @@ private:
         (*c2)   += (*c2_n); // 利用松弛方法更新c2
         (*c2_n) /= relax+TOL; // 还原c2_n.避免松弛因子为0的情况造成除0
 
-        delete lf, blf, solver;
+        delete lf;
+        delete blf;
+        delete solver;
     }
     void Solve_NP2_EAFE()
     {
@@ -776,6 +774,7 @@ private:
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
 
+        MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
         chrono.Start();
         solver->Mult(*lf, *x);

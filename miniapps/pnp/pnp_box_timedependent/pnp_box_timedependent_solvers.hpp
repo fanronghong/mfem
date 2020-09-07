@@ -386,12 +386,11 @@ public:
     {
         if (myid == 0) {
             cout << '\n';
-            cout << Discretize << ", " << Linearize << ", " << mesh_file << ", refine times: " << refine_times << '\n'
-                 << "p_order: " << p_order << ", " << options_src << '\n'
+            cout << Discretize << p_order << ", " << Linearize << ", " << mesh_file << ", refine times: " << refine_times << '\n'
+                 << ", " << options_src << '\n'
                  << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" \
                                                                        : "wrong type")) << ", " << "time step: " << dt
                  << endl;
-            cout << "ODE solver taking " << chrono.RealTime() << " s." << endl;
         }
 
         int gdb_break = 0;
@@ -437,6 +436,7 @@ public:
             double c2L2err = c2_gf->ComputeL2Error(c2_exact);
 
             if (myid == 0) {
+                cout << "ODE solver taking " << chrono.RealTime() << " s." << endl;
                 cout.precision(14);
                 cout << "At final time: " << t << '\n'
                      << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"

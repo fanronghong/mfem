@@ -22,7 +22,7 @@ bool local_conservation     = false;
 bool visualize              = false;
 const char* output          = NULL;
 int max_newton              = 20;
-double relax                = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
+double relax                = 0.02; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 
 const int bottom_attr       = 1;
 const int top_attr          = 6;
