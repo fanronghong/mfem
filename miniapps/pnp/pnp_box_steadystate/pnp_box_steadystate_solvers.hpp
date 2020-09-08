@@ -951,6 +951,8 @@ public:
         while (iter < Gummel_max_iters)
         {
             Solve_NP1();
+            MPI_Barrier(MPI_COMM_WORLD);
+            cout << "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" << endl;
             Solve_Poisson();
 
             Vector diff(fsp->GetNDofs());
@@ -1219,6 +1221,7 @@ private:
     {
 //        phi_n->ProjectCoefficient(phi_exact); // test convergence rate
 
+        MPI_Barrier(MPI_COMM_WORLD);
 cout << "111" << endl;
         ParBilinearForm *blf = new ParBilinearForm(fsp);
         ProductCoefficient neg_D_K_v_K(neg, D_K_prod_v_K);
@@ -1234,11 +1237,10 @@ cout << "111" << endl;
 //        blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n));
 //        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n), Dirichlet);
 //        // sigma <[c1], {D1 z1 v1 grad(phi^k).n}>
-        blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi_n));
+        blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(one, *phi_n));
 //        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi_n), Dirichlet);
-//        int gdb_break = 1;
-//        while(gdb_break) {};
-//
+        int gdb_break = 1;
+        while(gdb_break) {};
         blf->Assemble(0);
         blf->Finalize(0);
         MPI_Barrier(MPI_COMM_WORLD);

@@ -174,13 +174,17 @@ bool StateIsPhysical(const Vector &state, const int dim);
 // Pressure (EOS) computation
 inline double ComputePressure(const Vector &state, int dim)
 {
+    // state 就是 (rho, u1, u2, E)? u1,u2是速度的两个分量, rho是密度, E是能量
+    // 压强p = (kappa - 1.0) * (E - 0.5 * rho * (u1^2 + u2^2)), kappa 就是specific heat ratio. ref: https://www.theoretical-physics.com/dev/fluid-dynamics/euler.html#introduction
+    // 这里计算的是 rho*u1 和 rho*u2, 所以 p = (kappa - 1.0) * ( rho * E - 0.5 * ((rho * u1)^2 + (rho * u2)^2)) ) / rho
    const double den = state(0);
    const Vector den_vel(state.GetData() + 1, dim);
    const double den_energy = state(1 + dim);
 
    double den_vel2 = 0;
    for (int d = 0; d < dim; d++) { den_vel2 += den_vel(d) * den_vel(d); }
-   den_vel2 /= den;
+   den_vel2 /= den; // 原本是除, 但这里计算的就是 rho*u1 和 rho*u2, ref: https://www.theoretical-physics.com/dev/fluid-dynamics/euler.html#d-version-of-the-equations
+   // 最终 den_vel2 = rho * (u1^2 + u2^2)
 
    return (specific_heat_ratio - 1.0) * (den_energy - 0.5 * den_vel2);
 }
@@ -196,9 +200,9 @@ void ComputeFlux(const Vector &state, int dim, DenseMatrix &flux)
 
    const double pres = ComputePressure(state, dim);
 
-   for (int d = 0; d < dim; d++)
+   for (int d = 0; d < dim; d++) // dim 应该为 2
    {
-      flux(0, d) = den_vel(d);
+      flux(0, d) = den_vel(d); // rho*ui
       for (int i = 0; i < dim; i++)
       {
          flux(1+i, d) = den_vel(i) * den_vel(d) / den;
@@ -211,6 +215,7 @@ void ComputeFlux(const Vector &state, int dim, DenseMatrix &flux)
    {
       flux(1+dim, d) = den_vel(d) * H;
    }
+   // 最终 flux 就是 (f_x, f_y) 组成的4*2的矩阵, ref: https://www.theoretical-physics.com/dev/fluid-dynamics/euler.html#d-version-of-the-equations
 }
 
 // Compute the scalar F(u).n
