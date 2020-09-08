@@ -29,6 +29,7 @@ void CopyDBFIntegrators(ParBilinearForm *src, ParBilinearForm *dst)
 NavierSolver::NavierSolver(ParMesh *mesh, int order, double kin_vis)
    : pmesh(mesh), order(order), kin_vis(kin_vis)
 {
+    // v means velocity, p means pressure
    vfec = new H1_FECollection(order, pmesh->Dimension());
    pfec = new H1_FECollection(order);
    vfes = new ParFiniteElementSpace(pmesh, vfec, pmesh->Dimension());
@@ -876,6 +877,7 @@ double NavierSolver::ComputeCFL(ParGridFunction &u, double dt)
 
 void NavierSolver::AddVelDirichletBC(VectorCoefficient *coeff, Array<int> &attr)
 {
+    // emplace_back() 就相当于 vector::push_back()
    vel_dbcs.emplace_back(attr, coeff);
 
    if (verbose && pmesh->GetMyRank() == 0)

@@ -21,10 +21,11 @@ struct s_NavierContext
 {
    int order = 4;
    double kin_vis = 0.001;
-   double t_final = 8.0;
+   double t_final = 10;
    double dt = 1e-3;
 } ctx;
 
+// vel 应该就是真解?不, 应该只是初值
 void vel(const Vector &x, double t, Vector &u)
 {
    double xi = x(0);
@@ -67,7 +68,13 @@ int main(int argc, char *argv[])
    auto *pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
    delete mesh;
 
-   // Create the flow solver.
+    if (mpi.Root())
+    {
+        // 和上面的 mesh->GetNE() 不一样的
+        std::cout << "Number of elements: " << pmesh->GetNE() << std::endl;
+    }
+
+    // Create the flow solver.
    NavierSolver flowsolver(pmesh, ctx.order, ctx.kin_vis);
    flowsolver.EnablePA(true);
 
