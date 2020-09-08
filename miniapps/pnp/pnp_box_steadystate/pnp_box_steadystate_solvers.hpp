@@ -501,26 +501,17 @@ private:
         lf->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
         lf->Assemble();
 
-        PetscParMatrix *A = new PetscParMatrix();
-        PetscParVector *x = new PetscParVector(fsp);
-        PetscParVector *b = new PetscParVector(fsp);
-        blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
-
-        {
-//            Mat A_mat = Mat(*A);
-//            Write_Mat(A_mat, "./A_matlab.txt");
-//            MFEM_ABORT("output matrix A.");
-        }
-
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
+        HypreParMatrix A;
+        Vector x, b;
+        blf->FormLinearSystem(ess_tdof_list, *phi, *lf, A, x, b);
+        PetscLinearSolver* solver = new PetscLinearSolver(A, false, "np1_");
 
         MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
         chrono.Start();
-        solver->Mult(*b, *x);
+        solver->Mult(b, x);
         chrono.Stop();
-        blf->RecoverFEMSolution(*x, *lf, *c1);
+        blf->RecoverFEMSolution(x, *lf, *c1);
 
 #ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1)
@@ -705,20 +696,17 @@ private:
         lf->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
         lf->Assemble();
 
-        PetscParMatrix *A = new PetscParMatrix();
-        PetscParVector *x = new PetscParVector(fsp);
-        PetscParVector *b = new PetscParVector(fsp);
-        blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        blf->FormLinearSystem(ess_tdof_list, *c2, *lf, *A, *x, *b);
-
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
+        HypreParMatrix A;
+        Vector x, b;
+        blf->FormLinearSystem(ess_tdof_list, *phi, *lf, A, x, b);
+        PetscLinearSolver* solver = new PetscLinearSolver(A, false, "np2_");
 
         MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
         chrono.Start();
-        solver->Mult(*b, *x);
+        solver->Mult(b, x);
         chrono.Stop();
-        blf->RecoverFEMSolution(*x, *lf, *c2);
+        blf->RecoverFEMSolution(x, *lf, *c2);
 
 #ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1)
@@ -902,6 +890,9 @@ private:
 public:
     PNP_DG_Gummel_Solver_par(Mesh& mesh_): mesh(mesh_)
     {
+        MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+
         pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
         fec   = new DG_FECollection(p_order, mesh.Dimension());
         fsp   = new ParFiniteElementSpace(pmesh, fec);
@@ -949,12 +940,17 @@ public:
     void Solve(Array<double>& phiL2errornorms_, Array<double>& c1L2errornorms_,
                Array<double>& c2L2errornorms_, Array<double>& meshsizes_)
     {
-        cout << "\nGummel, DG" << p_order << ", box, parallel"
-             << ", sigma: " << sigma << ", kappa: " << kappa
-             << ", mesh: " << mesh_file << ", refine times: " << refine_times << endl;
+        if (myid == 0) {
+            cout << '\n';
+            cout << Discretize << p_order << ", " << Linearize << ", " << mesh_file << ", refine times: " << refine_times
+                 << ", " << options_src << ", sigma: " << sigma << ", kappa: " << kappa
+                 << endl;
+        }
+
         int iter = 1;
         while (iter < Gummel_max_iters)
         {
+            Solve_NP1();
             Solve_Poisson();
 
             Vector diff(fsp->GetNDofs());
@@ -964,54 +960,78 @@ public:
             double tol = diff.Norml2() / phi->Norml2(); // 相对误差
             (*phi_n) = (*phi);
 
-            Solve_NP1();
             (*c1_n) = (*c1);
 
             Solve_NP2();
             (*c2_n) = (*c2);
 
-            cout << "======> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
-            if (tol < Gummel_rel_tol) break;
+            if (myid == 0) {
+                cout << "===> " << iter << "-th Gummel iteration, phi relative tolerance: " << tol << endl;
+            }
+            if (tol < Gummel_rel_tol)
+            {
+                if (myid == 0) {
+                    cout << "------> Gummel iteration converge: " << iter << " times." << endl;
+                }
+                break;
+            }
+
             iter++;
-            cout << endl;
+
+            if (myid == 0) {
+                cout << endl;
+            }
         }
         if (iter == Gummel_max_iters) MFEM_ABORT("------> Gummel iteration Failed!!!");
-
-        out1["poisson_iter"] = poisson_iter;
-        out1["poisson_time"] = poisson_time;
-        out1["np1_iter"] = np1_iter;
-        out1["np1_time"] = np1_time;
-        out1["np2_iter"] = np2_iter;
-        out1["np2_time"] = np2_time;
-
-        linearize_iter = iter;
-        total_time = poisson_time.Sum() + np1_time.Sum() + np2_time.Sum();
-        ndofs = fsp->GetVSize() * 3;
-        out2["linearize_iter"] = linearize_iter;
-        out2["total_time"] = total_time;
-        out2["ndofs"] = ndofs;
-        poisson_avg_iter = (poisson_iter.Sum() / poisson_iter.Size());
-        poisson_avg_time = poisson_time.Sum() / poisson_time.Size();
-        out2["poisson_avg_iter"] = poisson_avg_iter;
-        out2["poisson_avg_time"] = poisson_avg_time;
-        np1_avg_iter     = (np1_iter.Sum() / np1_iter.Size());
-        np1_avg_time     = np1_time.Sum() / np1_iter.Size();
-        out2["np1_avg_iter"] = np1_avg_iter;
-        out2["np1_avg_time"] = np1_avg_time;
-        np2_avg_iter     = (np2_iter.Sum() / np2_iter.Size());
-        np2_avg_time     = np2_time.Sum() / np2_iter.Size();
-        out2["np2_avg_iter"] = np2_avg_iter;
-        out2["np2_avg_time"] = np2_avg_time;
 
         cout.precision(14);
         double phiL2err = phi->ComputeL2Error(phi_exact);
         double c1L2err = c1->ComputeL2Error(c1_exact);
         double c2L2err = c2->ComputeL2Error(c2_exact);
 
-        cout << "\n======>Box, " << Linearize << ", " << Discretize << p_order << ", refine " << refine_times << " for " << mesh_file << ", " << options_src << ", -rate: " << ComputeConvergenceRate << endl;
-        cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
-             << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
-             << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+        if (myid == 0) {
+            cout << "\n======>Box, " << Linearize << ", " << Discretize << p_order << ", refine " << refine_times
+                 << " for " << mesh_file << ", " << options_src << ", -rate: " << ComputeConvergenceRate << endl;
+            cout << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << ", \n"
+                 << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << ", \n"
+                 << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+        }
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (myid == 0) {
+            out1["poisson_iter"] = poisson_iter;
+            out1["poisson_time"] = poisson_time;
+            out1["np1_iter"] = np1_iter;
+            out1["np1_time"] = np1_time;
+            out1["np2_iter"] = np2_iter;
+            out1["np2_time"] = np2_time;
+
+            linearize_iter = iter;
+            total_time = poisson_time.Sum() + np1_time.Sum() + np2_time.Sum();
+            ndofs = fsp->GetVSize() * 3;
+            out2["linearize_iter"] = linearize_iter;
+            out2["total_time"] = total_time;
+            out2["ndofs"] = ndofs;
+            poisson_avg_iter = (poisson_iter.Sum() / poisson_iter.Size());
+            poisson_avg_time = poisson_time.Sum() / poisson_time.Size();
+            out2["poisson_avg_iter"] = poisson_avg_iter;
+            out2["poisson_avg_time"] = poisson_avg_time;
+            np1_avg_iter = (np1_iter.Sum() / np1_iter.Size());
+            np1_avg_time = np1_time.Sum() / np1_iter.Size();
+            out2["np1_avg_iter"] = np1_avg_iter;
+            out2["np1_avg_time"] = np1_avg_time;
+            np2_avg_iter = (np2_iter.Sum() / np2_iter.Size());
+            np2_avg_time = np2_time.Sum() / np2_iter.Size();
+            out2["np2_avg_iter"] = np2_avg_iter;
+            out2["np2_avg_time"] = np2_avg_time;
+
+            map<string, Array<double>>::iterator it1;
+            for (it1=out1.begin(); it1!=out1.end(); ++it1)
+                (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
+            map<string, double>::iterator it2;
+            for (it2=out2.begin(); it2!=out2.end(); ++it2)
+                cout << (*it2).first << ": " << (*it2).second << endl;
+        }
 
         if (ComputeConvergenceRate)
         {
@@ -1066,14 +1086,9 @@ public:
             }
         }
 
-        map<string, Array<double>>::iterator it1;
-        for (it1=out1.begin(); it1!=out1.end(); ++it1)
-            (*it1).second.Print(cout << (*it1).first << ": ", (*it1).second.Size());
-        map<string, double>::iterator it2;
-        for (it2=out2.begin(); it2!=out2.end(); ++it2)
-            cout << (*it2).first << ": " << (*it2).second << endl;
-
-        cout << "approximate mesh scale h: " << pow(fsp->GetTrueVSize(), -1.0/3) << endl;
+        if (myid == 0) {
+            cout << "------------------------------ All Good! -------------------------\n\n" << endl;
+        }
     }
 
     void Solve(BlockVector& vec, Array<int>& offsets, double initTol)
@@ -1166,19 +1181,18 @@ private:
         lf->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, epsilon_water, sigma, kappa), Dirichlet); // 用真解构造Dirichlet边界条件
         lf->Assemble();
 
-        PetscParMatrix *A = new PetscParMatrix();
-        PetscParVector *x = new PetscParVector(fsp);
-        PetscParVector *b = new PetscParVector(fsp);
-        blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        blf->FormLinearSystem(ess_tdof_list, *phi, *lf, *A, *x, *b);
+        HypreParMatrix A;
+        Vector x, b;
+        blf->FormLinearSystem(ess_tdof_list, *phi, *lf, A, x, b);
 
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, "phi_");
+        PetscLinearSolver* solver = new PetscLinearSolver(A, "phi_");
 
+        MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
         chrono.Start();
-        solver->Mult(*b, *x);
+        solver->Mult(b, x);
         chrono.Stop();
-        blf->RecoverFEMSolution(*x, *lf, *phi);
+        blf->RecoverFEMSolution(x, *lf, *phi);
 
 #ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1 && myid == 0)
@@ -1187,8 +1201,11 @@ private:
             cerr << "phi solver: failed to converged" << endl;
 #endif
 
-        poisson_iter.Append(solver->GetNumIterations());
-        poisson_time.Append(chrono.RealTime());
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (myid == 0) {
+            poisson_iter.Append(solver->GetNumIterations());
+            poisson_time.Append(chrono.RealTime());
+        }
 
 //        cout << "L2 error norm of |phi_h - phi_e|: " << phi->ComputeL2Error(phi_exact) << endl;
 //        MFEM_ABORT("Stop here for testing Poisson convergence rate in PNP_DG_Gummel_Solver_par!");
@@ -1196,33 +1213,36 @@ private:
         delete blf;
         delete lf;
         delete solver;
-        delete A;
-        delete x;
-        delete b;
     }
 
     void Solve_NP1()
     {
 //        phi_n->ProjectCoefficient(phi_exact); // test convergence rate
 
+cout << "111" << endl;
         ParBilinearForm *blf = new ParBilinearForm(fsp);
         ProductCoefficient neg_D_K_v_K(neg, D_K_prod_v_K);
         ProductCoefficient sigma_D_K_v_K(sigma_coeff, D_K_prod_v_K);
-        // D1 (grad(c1), grad(v1))
-        blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
-        // D1 z1 (c1 grad(phi^k), grad(v1))
-        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_K_prod_v_K));
-        // -<{D1 grad(c1).n}, [v1]> + sigma <[c1], {D1 grad(v1).n}> + kappa <{h^{-1} D1} [c1], [v1]>
-        blf->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
-        blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa), Dirichlet);
+//        // D1 (grad(c1), grad(v1))
+//        blf->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+//        // D1 z1 (c1 grad(phi^k), grad(v1))
+//        blf->AddDomainIntegrator(new GradConvectionIntegrator(*phi_n, &D_K_prod_v_K));
+//        // -<{D1 grad(c1).n}, [v1]> + sigma <[c1], {D1 grad(v1).n}> + kappa <{h^{-1} D1} [c1], [v1]>
+//        blf->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa));
+//        blf->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, sigma, kappa), Dirichlet);
         // -D1 z1 <{c1 grad(phi^k).n}, [v1]>
-        blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n));
-        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n), Dirichlet);
-        // sigma <[c1], {D1 z1 v1 grad(phi^k).n}>
+//        blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n));
+//        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, *phi_n), Dirichlet);
+//        // sigma <[c1], {D1 z1 v1 grad(phi^k).n}>
         blf->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi_n));
-        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi_n), Dirichlet);
+//        blf->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, *phi_n), Dirichlet);
+//        int gdb_break = 1;
+//        while(gdb_break) {};
+//
         blf->Assemble(0);
         blf->Finalize(0);
+        MPI_Barrier(MPI_COMM_WORLD);
+cout << "2222" << endl;
 
         ParLinearForm *lf = new ParLinearForm(fsp); //NP1方程的右端项
         // D1 <(grad(c1_e) + z1 c1_e grad(phi_e)) . n, v1>, c1_flux = J1 = -D1 (grad(c1_e) + z1 c1_e grad(phi_e))
@@ -1236,25 +1256,17 @@ private:
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_K_v_K, &c1_exact, phi_n));
         lf->Assemble();
 
-        PetscParMatrix *A = new PetscParMatrix();
-        PetscParVector *x = new PetscParVector(fsp);
-        PetscParVector *b = new PetscParVector(fsp);
-        blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        blf->FormLinearSystem(ess_tdof_list, *c1, *lf, *A, *x, *b);
+        HypreParMatrix A;
+        Vector x, b;
+        blf->FormLinearSystem(ess_tdof_list, *phi, *lf, A, x, b);
+        PetscLinearSolver* solver = new PetscLinearSolver(A, false, "np1_");
 
-        {
-//            Mat A_mat = Mat(*A);
-//            Write_Mat(A_mat, "./A_matlab.txt");
-//            MFEM_ABORT("output matrix A.");
-        }
-
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, "np1_");
-
+        MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
         chrono.Start();
-        solver->Mult(*b, *x);
+        solver->Mult(b, x);
         chrono.Stop();
-        blf->RecoverFEMSolution(*x, *lf, *c1);
+        blf->RecoverFEMSolution(x, *lf, *c1);
 
 #ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1 && myid == 0)
@@ -1263,18 +1275,15 @@ private:
             cerr << "np1 solver : failed to converged" << endl;
 #endif
 
-        np1_iter.Append(solver->GetNumIterations());
-        np1_time.Append(chrono.RealTime());
-
-//        cout << "L2 error norm of | c1_h - c1_e |: " << c1->ComputeL2Error(c1_exact) << endl;
-//        MFEM_ABORT("Stop here for test NP1 convergence rate in PNP_DG_Gummel_Solver_par!");
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (myid == 0) {
+            np1_iter.Append(solver->GetNumIterations());
+            np1_time.Append(chrono.RealTime());
+        }
 
         delete blf;
         delete lf;
         delete solver;
-        delete A;
-        delete x;
-        delete b;
     }
 
     void Solve_NP2()
@@ -1312,19 +1321,17 @@ private:
         lf->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&sigma_D_Cl_v_Cl, &c2_exact, phi_n));
         lf->Assemble();
 
-        PetscParMatrix *A = new PetscParMatrix();
-        PetscParVector *x = new PetscParVector(fsp);
-        PetscParVector *b = new PetscParVector(fsp);
-        blf->SetOperatorType(Operator::PETSC_MATAIJ);
-        blf->FormLinearSystem(ess_tdof_list, *c2, *lf, *A, *x, *b);
+        HypreParMatrix A;
+        Vector x, b;
+        blf->FormLinearSystem(ess_tdof_list, *phi, *lf, A, x, b);
+        PetscLinearSolver* solver = new PetscLinearSolver(A, false, "np2_");
 
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, "np2_");
-
+        MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
         chrono.Start();
-        solver->Mult(*b, *x);
+        solver->Mult(b, x);
         chrono.Stop();
-        blf->RecoverFEMSolution(*x, *lf, *c2);
+        blf->RecoverFEMSolution(x, *lf, *c2);
 
 #ifdef SELF_VERBOSE
         if (solver->GetConverged() == 1 && myid == 0)
@@ -1333,18 +1340,15 @@ private:
             cerr << "np2 solver : failed to converged" << endl;
 #endif
 
-        np2_iter.Append(solver->GetNumIterations());
-        np2_time.Append(chrono.RealTime());
-
-//        cout << "L2 error norm of | c2_h - c2_e |: " << c2->ComputeL2Error(c2_exact) << endl;
-//        MFEM_ABORT("Stop here for test NP2 convergence rate in PNP_DG_Gummel_Solver_par!");
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (myid == 0) {
+            np2_iter.Append(solver->GetNumIterations());
+            np2_time.Append(chrono.RealTime());
+        }
 
         delete blf;
         delete lf;
         delete solver;
-        delete A;
-        delete x;
-        delete b;
     }
 };
 
