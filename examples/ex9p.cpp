@@ -487,6 +487,7 @@ int main(int argc, char *argv[])
    for (int ti = 0; !done; )
    {
       double dt_real = min(dt, t_final - t);
+      // 保证在解法器中流动的数据是TrueVector, 而不是GridFunction
       ode_solver->Step(*U, t, dt_real);
       ti++;
 
@@ -501,6 +502,7 @@ int main(int argc, char *argv[])
 
          // 11. Extract the parallel grid function corresponding to the finite
          //     element approximation U (the local solution on each processor).
+         // 重新将TrueVector(i.e., true dofs)赋值给GridFunction
          *u = *U;
 
          if (visualization)
