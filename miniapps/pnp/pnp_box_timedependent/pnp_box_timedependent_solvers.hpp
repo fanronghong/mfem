@@ -85,7 +85,7 @@ public:
         b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
         A_solver->Mult(*b, new_phi);
         add(1.0, new_phi, -1.0, phi, dphi_dt);
-        dphi_dt /= dt; // fff应该是dt_real
+        dphi_dt /= t_stepsize; // fff应该是dt_real
 
         // 然后求解NP1方程
         ParBilinearForm *a22 = new ParBilinearForm(h1);
@@ -163,7 +163,7 @@ public:
         B2->Mult(1.0, c2, 1.0, *b); // B1 c1 + B2 c2 + b -> b
         b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
         A_solver->Mult(*b, new_phi);
-        dphi_dt = (new_phi - phi) / dt; // fff应该是dt_real
+        dphi_dt = (new_phi - phi) / t_stepsize; // fff应该是dt_real
 
         // 然后求解NP1方程
         ParBilinearForm *a22 = new ParBilinearForm(h1);
@@ -182,7 +182,7 @@ public:
         b1->SetSubVector(ess_tdof_list, 0.0);
 
         A1->Mult(1.0, c1, 1.0, *b1); // A1 c1 + b1 -> b1
-        HypreParMatrix* temp_A1 = Add(1.0, *M1, -1.0*dt, *A1); // gurantee M1 and A1 with same sparsity pattern
+        HypreParMatrix* temp_A1 = Add(1.0, *M1, -1.0*t_stepsize, *A1); // gurantee M1 and A1 with same sparsity pattern
         PetscLinearSolver* A1_solver = new PetscLinearSolver(*temp_A1, false, "np1_");
         A1_solver->Mult(*b1, dc1_dt);
 
@@ -203,7 +203,7 @@ public:
         b2->SetSubVector(ess_tdof_list, 0.0);
 
         A2->Mult(1.0, c2, 1.0, *b2); // A2 c2 + b2 -> b2
-        HypreParMatrix* temp_A2 = Add(1.0, *M2, -1.0*dt, *A2); // guarantee M2 and A2 with same sparsity pattern
+        HypreParMatrix* temp_A2 = Add(1.0, *M2, -1.0*t_stepsize, *A2); // guarantee M2 and A2 with same sparsity pattern
         PetscLinearSolver* A2_solver = new PetscLinearSolver(*temp_A2, false, "np2_");
         A2_solver->Mult(*b2, dc2_dt);
 
@@ -243,7 +243,7 @@ private:
 public:
     PNP_Box_Gummel_CG_TimeDependent_Solver(Mesh& mesh_, int ode_solver_type): mesh(mesh_)
     {
-        t = init_t;
+        t = t_init;
 
         pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
         fec   = new H1_FECollection(p_order, mesh.Dimension());
@@ -389,7 +389,7 @@ public:
             cout << Discretize << p_order << ", " << Linearize << ", " << mesh_file << ", refine times: " << refine_times << '\n'
                  << ", " << options_src << '\n'
                  << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" \
-                                                                       : "wrong type")) << ", " << "time step: " << dt
+                                                                       : "wrong type")) << ", " << "time step: " << t_stepsize
                  << endl;
         }
 
@@ -403,11 +403,11 @@ public:
         bool last_step = false;
         for (int ti=1; !last_step; ti++)
         {
-            double dt_real = min(dt, t_final - t);
+            double dt_real = min(t_stepsize, t_final - t);
 
             ode_solver->Step(*phic1c2, t, dt_real); // 进过这一步之后phic1c2和t都被更新了
 
-            last_step = (t >= t_final - 1e-8*dt);
+            last_step = (t >= t_final - 1e-8*t_stepsize);
 
             if (paraview)
             {
@@ -454,6 +454,183 @@ public:
                 phiL2errornorms_.Append(phiL2err);
                 c1L2errornorms_.Append(c1L2err);
                 c2L2errornorms_.Append(c2L2err);
+            }
+        }
+    }
+};
+
+
+class PNP_Box_Gummel_CG_TimeDependent_ForwardEuler
+{
+private:
+    Mesh& mesh;
+    ParMesh* pmesh;
+    H1_FECollection* fec;
+    ParFiniteElementSpace* h1;
+
+    ParBilinearForm *a11, *a12, *a13, *m1, *m2;
+    HypreParMatrix *A, *B1, *B2, *M1, *M2;
+    BlockVector* phic1c2;
+    ParGridFunction *phi_gf, *c1_gf, *c2_gf;
+
+    double current_t;
+    mutable Vector z;
+    mutable HypreParVector *b, *b1, *b2;
+    mutable HypreParMatrix *A1, *A2;
+    PetscLinearSolver *A_solver, *M1_solver, *M2_solver;
+
+    int true_size; // 有限元空间维数
+    Array<int> true_offset, ess_bdr, ess_tdof_list;
+    ParaViewDataCollection* pd;
+    int num_procs, myid;
+    StopWatch chrono;
+
+public:
+    PNP_Box_Gummel_CG_TimeDependent_ForwardEuler(Mesh& mesh_): mesh(mesh_)
+    {
+        pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
+        fec   = new H1_FECollection(p_order, mesh.Dimension());
+        h1    = new ParFiniteElementSpace(pmesh, fec);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+
+        ess_bdr.SetSize(mesh.bdr_attributes.Max());
+        ess_bdr = 1; // 设置所有边界都是essential的
+        h1->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+
+        a11 = new ParBilinearForm(h1);
+        // (epsilon_s grad(phi), grad(psi))
+        a11->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water));
+        a11->Assemble(skip_zero_entries);
+        a11->Finalize(skip_zero_entries);
+        A = a11->ParallelAssemble();
+        A->EliminateRowsCols(ess_tdof_list);
+        A_solver  = new PetscLinearSolver(*A,  false, "phi_");
+
+        a12 = new ParBilinearForm(h1);
+        // (alpha2 alpha3 z1 c1, psi)
+        a12->AddDomainIntegrator(new MassIntegrator(alpha2_prod_alpha3_prod_v_K));
+        a12->Assemble(skip_zero_entries);
+        a12->Finalize(skip_zero_entries);
+        B1 = a12->ParallelAssemble();
+
+        a13 = new ParBilinearForm(h1);
+        // (alpha2 alpha3 z2 c2, psi)
+        a13->AddDomainIntegrator(new MassIntegrator(alpha2_prod_alpha3_prod_v_Cl));
+        a13->Assemble(skip_zero_entries);
+        a13->Finalize(skip_zero_entries);
+        B2 = a13->ParallelAssemble();
+
+        m1 = new ParBilinearForm(h1);
+        // (c1, v1)
+        m1->AddDomainIntegrator(new MassIntegrator);
+        m1->Assemble(skip_zero_entries); // keep sparsity pattern of A1 and M1 the same
+        m1->Finalize(skip_zero_entries);
+        M1 = m1->ParallelAssemble();
+        M1->EliminateRowsCols(ess_tdof_list);
+        M1_solver = new PetscLinearSolver(*M1, false, "np1_");
+
+        m2 = new ParBilinearForm(h1);
+        // (c2, v2)
+        m2->AddDomainIntegrator(new MassIntegrator);
+        m2->Assemble(skip_zero_entries); // keep sparsity pattern of A2 and M2 the same
+        m2->Finalize(skip_zero_entries);
+        M2 = m2->ParallelAssemble();
+        M2->EliminateRowsCols(ess_tdof_list);
+        M2_solver = new PetscLinearSolver(*M2, false, "np2_");
+
+        phi_gf = new ParGridFunction(h1); *phi_gf = 0.0;
+        c1_gf  = new ParGridFunction(h1); *c1_gf  = 0.0;
+        c2_gf  = new ParGridFunction(h1); *c2_gf  = 0.0;
+
+        true_size = h1->TrueVSize();
+        true_offset.SetSize(3 + 1); // 表示 phi, c1，c2的TrueVector
+        true_offset[0] = 0;
+        true_offset[1] = true_size;
+        true_offset[2] = true_size * 2;
+        true_offset[3] = true_size * 3;
+
+        phic1c2 = new BlockVector(true_offset); *phic1c2 = 0.0;
+        phi_gf->MakeTRef(h1, *phic1c2, true_offset[0]);
+        c1_gf ->MakeTRef(h1, *phic1c2, true_offset[1]);
+        c2_gf ->MakeTRef(h1, *phic1c2, true_offset[2]);
+
+        // 设定初始条件，同时满足了边界条件
+        current_t = t_init;
+        phi_exact.SetTime(current_t);
+        phi_gf->ProjectCoefficient(phi_exact);
+        phi_gf->SetTrueVector();
+        phi_gf->SetFromTrueVector();
+
+        c1_exact.SetTime(current_t);
+        c1_gf->ProjectCoefficient(c1_exact);
+        c1_gf->SetTrueVector();
+        c1_gf->SetFromTrueVector();
+
+        c2_exact.SetTime(current_t);
+        c2_gf->ProjectCoefficient(c2_exact);
+        c2_gf->SetTrueVector();
+        c2_gf->SetFromTrueVector();
+
+        if (paraview)
+        {
+            pd = new ParaViewDataCollection("PNP_Box_Gummel_CG_TimeDependent_ForwardEuler", pmesh);
+            pd->SetPrefixPath("Paraview");
+            pd->SetLevelsOfDetail(p_order);
+            pd->SetDataFormat(VTKFormat::BINARY32);
+            pd->SetHighOrderOutput(true);
+            pd->RegisterField("phi", phi_gf);
+            pd->RegisterField("c1",   c1_gf);
+            pd->RegisterField("c2",   c2_gf);
+
+            pd->SetCycle(0);
+            pd->SetTime(current_t);
+            pd->Save();
+        }
+    }
+
+    void Step()
+    {
+        current_t += t_stepsize; // 更新时间：即将求的下一个时刻的物理量
+
+        // 获得已知的上一时刻的解的TrueVector
+        Vector phi(phic1c2->GetData() + 0*true_size, true_size);
+        Vector c1 (phic1c2->GetData() + 1*true_size, true_size);
+        Vector c2 (phic1c2->GetData() + 2*true_size, true_size);
+
+        // 下一时刻的Poisson方程的右端项
+        ParLinearForm *l = new ParLinearForm(h1);
+        f1_analytic.SetTime(current_t);
+        l->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+        l->Assemble();
+        b = l->ParallelAssemble();
+
+        // 在求解器求解的外面所使用的Vector，Matrix全部是Hypre类型的，在给PETSc的Krylov求解器传入参数
+        // 时也是传入的Hypre类型的(因为求解器内部会将Hypre的矩阵和向量转化为PETSc的类型)
+        B1->Mult(1.0, c1, 1.0, *b); // B1 c1 + b -> b
+        B2->Mult(1.0, c2, 1.0, *b); // B1 c1 + B2 c2 + b -> b
+        b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
+        A_solver->Mult(*b, phi);
+
+        ParGridFunction new_phi(h1);
+        new_phi.SetFromTrueDofs(phi);
+
+    }
+
+    void Solve()
+    {
+        bool last_step = false;
+        for (int step=1; !last_step; ++step)
+        {
+            if (current_t + t_stepsize >= t_final - t_stepsize/2) last_step = true;
+
+            Step(); // 这里面要更新时间、解向量TrueVector
+
+            if (paraview)
+            {
+                pd->SetCycle(step);
+                pd->SetTime(current_t);
+                pd->Save();
             }
         }
     }
