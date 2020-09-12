@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
     args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method.");
     args.AddOption(&AdvecStable, "-stable", "--stable", "Choose stabilization: none, supg, eafe");
     args.AddOption(&ode_type, "-ode", "--ode", "Use ODE Solver");
-    args.AddOption(&dt, "-dt", "--dt", "Time Step");
+    args.AddOption(&t_stepsize, "-dt", "--dt", "Time Step");
     args.AddOption(&ComputeConvergenceRate, "-rate", "--computerate", "-norate", "--nocomputerate", "Compute convergence rate by using analytic solutions");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.AddOption(&paraview, "-para", "--paraview", "-nopara", "--noparaview", "Save time-dependent results");
@@ -91,8 +91,11 @@ int main(int argc, char *argv[])
         {
             if (strcmp(Discretize, "cg") == 0)
             {
-                PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, ode_type);
-                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+//                PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, ode_type);
+//                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+
+                PNP_Box_Gummel_CG_TimeDependent_ForwardEuler* solver = new PNP_Box_Gummel_CG_TimeDependent_ForwardEuler(mesh);
+                solver->Solve();
                 delete solver;
             }
         }

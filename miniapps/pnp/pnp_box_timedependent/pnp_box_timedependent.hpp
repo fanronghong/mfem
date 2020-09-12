@@ -19,14 +19,15 @@ const char* AdvecStable     = "none"; // none, eafe, supg
 const char* options_src     = "./pnp_box_petsc_opts";
 bool ComputeConvergenceRate = false; // 利用解析解计算误差阶
 bool local_conservation     = false;
+bool visualization          = false;
 bool paraview               = false;
 const char* output          = NULL;
 int max_newton              = 20;
 double relax                = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 int ode_type                = 11; // 1: backward Euler; 11: forward Euler
 double t_init               = 0.0; // 初始时间
-double t_stepsize           = 0.03;// 时间步长
-double t_final              = 0.1; // 最后时间
+double t_stepsize           = 0.01;// 时间步长
+double t_final              = 0.06; // 最后时间
 const int skip_zero_entries = 0; // 为了保证某些矩阵的sparsity pattern一致
 int mpi_debug               = 0;
 
