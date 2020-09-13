@@ -27,7 +27,7 @@ double relax                = 0.2; //松弛因子: relax * phi^{k-1} + (1 - rela
 int ode_type                = 11; // 1: backward Euler; 11: forward Euler
 double t_init               = 0.0; // 初始时间
 double t_stepsize           = 0.01;// 时间步长
-double t_final              = 0.06; // 最后时间
+double t_final              = 0.03; // 最后时间
 const int skip_zero_entries = 0; // 为了保证某些矩阵的sparsity pattern一致
 int mpi_debug               = 0;
 
