@@ -96,6 +96,13 @@ MagneticDiffusionEOperator::MagneticDiffusionEOperator(
    B1 = new Vector;
    B2 = new Vector;
    B3 = new Vector;
+   /* 参考joule.cpp文件开头的方程介绍.
+    * a0 Phi_gf = v0 => A0 X0 = B0, 对应Poisson方程 Div sigma Grad Phi = 0
+    * a1 J_gf = v1 => A1 X1 = B1, 对应方程为 fff
+    *
+    *
+    * 注: v0, v1 and v2 are temporary work vectors
+    * */
 }
 
 void MagneticDiffusionEOperator::Init(Vector &X)
@@ -194,6 +201,7 @@ void MagneticDiffusionEOperator::Mult(const Vector &X, Vector &dX_dt) const
    B.MakeRef(&HDivFESpace, *xptr,true_offset[4]);
    W.MakeRef(&L2FESpace,   *xptr,true_offset[5]);
 
+   // 简记 d*_dt 为 d*
    ParGridFunction dE, dB, dT, dF, dW, dP;
    dT.MakeRef(&L2FESpace,   dX_dt,true_offset[0]);
    dF.MakeRef(&HDivFESpace, dX_dt,true_offset[1]);
@@ -203,6 +211,7 @@ void MagneticDiffusionEOperator::Mult(const Vector &X, Vector &dX_dt) const
    dW.MakeRef(&L2FESpace,   dX_dt,true_offset[5]);
 
    // db = - Curl E
+   // 如果记要求的时刻是 n+1, 已知时刻为 n, 则这里用 E^n 来计算 dB_dt.
    curl->Mult(E, dB);
    dB *= -1.0;
 
@@ -218,6 +227,7 @@ void MagneticDiffusionEOperator::Mult(const Vector &X, Vector &dX_dt) const
    // Phi_gf.ProjectBdrCoefficient(voltage,poisson_ess_bdr);
 
    // this is a hack to get around the above issue
+   // 使得 Phi_gf 满足essential bc
    Phi_gf.ProjectCoefficient(voltage);
    // end of hack
 
@@ -245,10 +255,12 @@ void MagneticDiffusionEOperator::Mult(const Vector &X, Vector &dX_dt) const
    // "undo" the static condensation using dP as a temporary variable, dP stores
    // Pnew
    a0->RecoverFEMSolution(*X0,*v0,P);
+   // fff dP就直接设成0? 上面事实上已经算出了新的 P(即下一时刻的P)
    dP = 0.0;
 
    // v1 = <1/mu v, curl u> B
    // B is a grid function but weakCurl is not parallel assembled so is OK
+   // 这里的B其实是 B^n
    weakCurl->MultTranspose(B, *v1);
 
    // now add Grad dPhi/dt term
@@ -256,6 +268,7 @@ void MagneticDiffusionEOperator::Mult(const Vector &X, Vector &dX_dt) const
    // v1 = curl 1/mu B + M1 * Grad P
    // note: these two steps could be replaced by one step if we have the
    // bilinear form <sigma gradP, E>
+   // 这里的P是 P^n+1
    grad->Mult(P,E);
    m1->AddMult(E,*v1,1.0);
 
@@ -401,6 +414,7 @@ corrected for.
 void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
                                                const Vector &X, Vector &dX_dt)
 {
+    // X 就是 ode_solver->Step(F, t, dt) 中的 F
    if ( A2 == NULL || fabs(dt-dt_A2) > 1.0e-12*dt )
    {
       this->buildA2(*InvTcond, *InvTcap, dt);
@@ -434,6 +448,10 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
    true_offset[5] = true_offset[4] + Vsize_rt;
    true_offset[6] = true_offset[5] + Vsize_l2;
 
+   // 这里X是dofs(有冗余), 而不是TrueVector. 相应的dX_dt也是有冗余的
+   // 这里的X是const Vector, 但是通过转换成Vector* xptr之后, 事实上可
+   // 以修改X的值(data指针), 后面修改E, B, T, F, W, P同时也修改了xptr,
+   // 进而修改了X的data指针所指向的内存块ffff
    Vector* xptr  = (Vector*) &X;
    ParGridFunction E, B, T, F, W, P;
    T.MakeRef(&L2FESpace,   *xptr,true_offset[0]);
@@ -463,6 +481,7 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
    // Phi_gf.ProjectBdrCoefficient(voltage,poisson_ess_bdr);
 
    // this is a hack to get around the above issue
+   // 使得 Phi_gf 满足bdc
    Phi_gf.ProjectCoefficient(voltage);
    // end of hack
 
@@ -488,6 +507,7 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
    pcg_a0->Mult(*B0, *X0);
 
    // "undo" the static condensation saving result in grid function dP
+   // 利用X0(TrueVector)形成P(冗余的dofs), 注意: 这里用的是P, 而不是Phi_gf
    a0->RecoverFEMSolution(*X0,*v0,P);
    dP = 0.0;
 
@@ -499,6 +519,7 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
    // use E as a temporary, E = Grad P
    // v1 = curl 1/mu B + M1 * Grad P
    grad->Mult(P,E);
+   // v1 + 1.0 * m1 E => v1
    m1->AddMult(E,*v1,1.0);
 
    ParGridFunction J_gf(&HCurlFESpace);
@@ -516,6 +537,8 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
    Array<int> ess_tdof_list;
    HCurlFESpace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
+   // fffJ_gf 代表哪个变量? 应该是电场E, 参考下面的a1->RecoverFEMSolution(*X1,*v1,E).
+   // 下面这个组装的是对应哪个方程?
    a1->FormLinearSystem(ess_tdof_list,J_gf,*v1,*A1,*X1,*B1);
 
    // We only need to create the solver and preconditioner once
@@ -548,6 +571,7 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
    grad->AddMult(P,E,-1.0);
 
    // Compute dB/dt = -Curl(E_{n+1})
+   // 从这里也可以看出用的隐身的时间离散格式
    // note curl maps GF to GF
    curl->Mult(E, dB);
    dB *= -1.0;
@@ -756,6 +780,7 @@ void MagneticDiffusionEOperator::buildCurl(double muInv)
    if ( curl != NULL ) { delete curl; }
    if ( weakCurl != NULL ) { delete weakCurl; }
 
+   // fff curl 和 weakCurl 的区别
    curl = new ParDiscreteLinearOperator(&HCurlFESpace, &HDivFESpace);
    curl->AddDomainInterpolator(new CurlInterpolator);
    curl->Assemble();
@@ -934,6 +959,7 @@ double MeshDependentCoefficient::Eval(ElementTransformation &T,
 {
    // given the attribute, extract the coefficient value from the map
    std::map<int, double>::iterator it;
+   // 网格单元element的attribute
    int thisAtt = T.Attribute;
    double value;
    it = materialMap->find(thisAtt);

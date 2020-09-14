@@ -251,6 +251,11 @@ int main(int argc, char *argv[])
    if (strcmp(problem,"rod")==0 || strcmp(problem,"coil")==0)
    {
 
+       // mesh中的element的attribute有1,2,3. 下面就是在不同的attribute处相应
+       // 的参数取值不同. 例如下面的sigmaMap会传递给
+       // MagneticDiffusionEOperator::MagneticDiffusionEOperator()中的sigma,
+       // 然后调用this->buildA0(*sigma),
+       // 再调用a0->AddDomainIntegrator(new DiffusionIntegrator(Sigma)).
       sigmaMap.insert(pair<int, double>(1, sigma));
       sigmaMap.insert(pair<int, double>(2, sigmaAir));
       sigmaMap.insert(pair<int, double>(3, sigmaAir));
@@ -463,6 +468,7 @@ int main(int argc, char *argv[])
       cout << "Number of Electrostatic unknowns:     " << glob_size_h1 << endl;
    }
 
+   // 下面用的都是GetVSize(), 而不是TrueVSize(). 故后面使用的MakeRef(), 而不是MakeTRef()
    int Vsize_l2 = L2FESpace.GetVSize();
    int Vsize_nd = HCurlFESpace.GetVSize();
    int Vsize_rt = HDivFESpace.GetVSize();
@@ -596,6 +602,7 @@ int main(int argc, char *argv[])
 
       // F is the vector of dofs, t is the current time, and dt is the time step
       // to advance.
+      // F不是TrueVector, 而是dofs(有冗余), 所以在后面的所有计算中都是用的dofs, 不是TrueVector
       ode_solver->Step(F, t, dt);
 
       if (debug == 1)
@@ -761,6 +768,7 @@ double p_bc(const Vector &x, double t)
 {
    // the value
    double T;
+   // 计算区域是3D
    if (x[2] < 0.0)
    {
       T = 1.0;

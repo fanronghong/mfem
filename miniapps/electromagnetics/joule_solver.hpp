@@ -148,10 +148,13 @@ protected:
    mutable HypreSolver * dsp_m2;
    mutable HyprePCG    * pcg_m2;
 
+    // 所有外边界的标记: 1, 2, 3
    mutable Array<int> ess_bdr;
    mutable Array<int> ess_bdr_vdofs;
+   // 应该是 thermal flux的essential bdr: 1, 2
    mutable Array<int> thermal_ess_bdr;
    mutable Array<int> thermal_ess_bdr_vdofs;
+   // 电势phi的essential bdr: 1, 2
    mutable Array<int> poisson_ess_bdr;
    mutable Array<int> poisson_ess_bdr_vdofs;
 
