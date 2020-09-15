@@ -255,7 +255,7 @@ void MagneticDiffusionEOperator::Mult(const Vector &X, Vector &dX_dt) const
    // "undo" the static condensation using dP as a temporary variable, dP stores
    // Pnew
    a0->RecoverFEMSolution(*X0,*v0,P);
-   // fff dP就直接设成0? 上面事实上已经算出了新的 P(即下一时刻的P)
+   // fff dP就直接设成0? 上面事实上已经算出了新的 P(即下一时刻的P), 所以直接赋值为0.0
    dP = 0.0;
 
    // v1 = <1/mu v, curl u> B
@@ -424,6 +424,7 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
       this->buildA1(1.0/mu, *sigma, dt);
    }
 
+   // 保证了下面的某些d* 不需要赋值为0.0
    dX_dt = 0.0;
 
    // The big BlockVector stores the fields as follows:
@@ -581,7 +582,7 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
 
    // Compute Energy Deposition
    this->GetJouleHeating(E,W);
-   // fff不需要 dW = 0.0?
+   // 不需要 dW = 0.0? 经过测试, 加上dW = 0.0之后的计算结果一样
 
    // v2 = Div^T * W, where W is the Joule heating computed above, and
    // Div is the matrix <div u, v>
@@ -625,7 +626,7 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
 
    // this is required because of static condensation
    a2->RecoverFEMSolution(*X2,*v2,F);
-   // 不需要设定dF_dt为0fff
+   // 不需要设定dF_dt为0? 经过测试加上之后计算结果一样
 
    // c dT = [W - div F]
    //
