@@ -491,6 +491,8 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
    HGradFESpace.GetEssentialTrueDofs(poisson_ess_bdr, poisson_ess_tdof_list);
 
    *v0 = 0.0;
+   // Phi_gf 在标记为1,2的地方是essential bd(poisson_ess_bdr为[1,1,0]),
+   // 标记为3的地方应该是zero Neumann bd(所以右端项v0为0).
    a0->FormLinearSystem(poisson_ess_tdof_list,Phi_gf,*v0,*A0,*X0,*B0);
 
    if (amg_a0 == NULL) { amg_a0 = new HypreBoomerAMG(*A0); }
@@ -509,6 +511,7 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
    // "undo" the static condensation saving result in grid function dP
    // 利用X0(TrueVector)形成P(冗余的dofs), 注意: 这里用的是P, 而不是Phi_gf
    a0->RecoverFEMSolution(*X0,*v0,P);
+   // 现在P就是 P^n+1(满足边界条件), 所以 dP_dt 就直接设为0, 不需要在ODE中更新
    dP = 0.0;
 
    // v1 = <1/mu v, curl u> B
@@ -518,6 +521,7 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
    // now add Grad dPhi/dt term
    // use E as a temporary, E = Grad P
    // v1 = curl 1/mu B + M1 * Grad P
+   // E应该等于-Grad P
    grad->Mult(P,E);
    // v1 + 1.0 * m1 E => v1
    m1->AddMult(E,*v1,1.0);
@@ -537,8 +541,7 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
    Array<int> ess_tdof_list;
    HCurlFESpace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
-   // fffJ_gf 代表哪个变量? 应该是电场E, 参考下面的a1->RecoverFEMSolution(*X1,*v1,E).
-   // 下面这个组装的是对应哪个方程?
+   // fffJ_gf 代表电场E, 参考下面的a1->RecoverFEMSolution(*X1,*v1,E).
    a1->FormLinearSystem(ess_tdof_list,J_gf,*v1,*A1,*X1,*B1);
 
    // We only need to create the solver and preconditioner once
@@ -578,6 +581,7 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
 
    // Compute Energy Deposition
    this->GetJouleHeating(E,W);
+   // fff不需要 dW = 0.0?
 
    // v2 = Div^T * W, where W is the Joule heating computed above, and
    // Div is the matrix <div u, v>
@@ -621,6 +625,7 @@ void MagneticDiffusionEOperator::ImplicitSolve(const double dt,
 
    // this is required because of static condensation
    a2->RecoverFEMSolution(*X2,*v2,F);
+   // 不需要设定dF_dt为0fff
 
    // c dT = [W - div F]
    //
