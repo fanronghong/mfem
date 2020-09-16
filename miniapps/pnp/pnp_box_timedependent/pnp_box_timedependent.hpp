@@ -24,12 +24,13 @@ bool paraview               = false;
 const char* output          = NULL;
 int max_newton              = 20;
 double relax                = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
-int ode_type                = 11; // 1: backward Euler; 11: forward Euler
+int ode_type                = 1; // 1: backward Euler; 11: forward Euler
 double t_init               = 0.0; // 初始时间
-double t_stepsize           = 0.01;// 时间步长
-double t_final              = 0.03; // 最后时间
+double t_stepsize           = 0.001;// 时间步长
+double t_final              = 0.1; // 最后时间
 const int skip_zero_entries = 0; // 为了保证某些矩阵的sparsity pattern一致
 int mpi_debug               = 0;
+int verbose                 = 1; // 数字越大输出越多: 0, 1,2
 
 const int bottom_attr       = 1;
 const int top_attr          = 6;
@@ -131,6 +132,7 @@ double div_adv2_time(const Vector& x, double t)
 FunctionCoefficient phi_exact(phi_exact_time);
 FunctionCoefficient c1_exact(c1_exact_time);
 FunctionCoefficient c2_exact(c2_exact_time);
+FunctionCoefficient f_analytic(f_analytic_time);
 FunctionCoefficient f1_analytic(f1_analytic_time);
 FunctionCoefficient f2_analytic(f2_analytic_time);
 VectorFunctionCoefficient J (3, J_time);

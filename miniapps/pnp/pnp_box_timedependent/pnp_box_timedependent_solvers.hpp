@@ -24,196 +24,236 @@ class PNP_Box_Gummel_CG_TimeDependent: public TimeDependentOperator
 private:
     ParFiniteElementSpace* h1;
 
-    HypreParMatrix *A, *M1, *M2, *B1, *B2;
+    mutable ParBilinearForm *a0, *a1, *a2, *b1, *b2, *m0;
+    HypreParMatrix *A0, *A1, *A2, *M0;
+    Vector *X0, *B0, *X1, *B1, *X2, *B2;
     PetscLinearSolver *A_solver, *M1_solver, *M2_solver;
 
-    mutable Vector z;
-    mutable HypreParVector *b, *b1, *b2;
-    mutable HypreParMatrix *A1, *A2;
-
-    int true_size;
-    Array<int> true_offset, ess_tdof_list;
+    int vsize;
+    Array<int> &offsets, &ess_tdof_list, &ess_bdr;
     int num_procs, myid;
 
 public:
-    PNP_Box_Gummel_CG_TimeDependent(HypreParMatrix* A_, HypreParMatrix* M1_, HypreParMatrix* M2_,
-                                    HypreParMatrix* B1_, HypreParMatrix* B2_,
-                                    int truesize, Array<int>& offset, Array<int>& ess_list,
+    PNP_Box_Gummel_CG_TimeDependent(Array<int>& offset, Array<int>& ess_bdr_, Array<int>& ess_list,
                                     ParFiniteElementSpace* fsp, double time)
-        : TimeDependentOperator(3*truesize, time), A(A_), M1(M1_), M2(M2_), B1(B1_), B2(B2_),
-          true_size(truesize), true_offset(offset), ess_tdof_list(ess_list), h1(fsp)
+        : TimeDependentOperator(offset.Last(), time), vsize(fsp->GetVSize()),
+          offsets(offset), ess_bdr(ess_bdr_), ess_tdof_list(ess_list), h1(fsp),
+          a0(NULL), a1(NULL), a2(NULL), b1(NULL), b2(NULL), m0(NULL),
+          A0(NULL), A1(NULL), A2(NULL), B1(NULL), B2(NULL), M0(NULL)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
         MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
-        A_solver  = new PetscLinearSolver(*A,  false, "phi_");
-        M1_solver = new PetscLinearSolver(*M1, false, "np1_");
-        M2_solver = new PetscLinearSolver(*M2, false, "np2_");
+        A0 = new HypreParMatrix;
+        M0 = new HypreParMatrix;
+        X0 = new Vector;
+        X1 = new Vector;
+        X2 = new Vector;
+        B0 = new Vector;
+        B1 = new Vector;
+        B2 = new Vector;
+
     }
     virtual ~PNP_Box_Gummel_CG_TimeDependent()
     {
-        delete A_solver;
-        delete M1_solver;
-        delete M2_solver;
-    }
-
-    virtual void Mult(const Vector &phic1c2, Vector &dphic1c2_dt) const
-    {
-        Vector phi(phic1c2.GetData() + 0*true_size, true_size);
-        Vector c1 (phic1c2.GetData() + 1*true_size, true_size);
-        Vector c2 (phic1c2.GetData() + 2*true_size, true_size);
-        Vector dphi_dt(dphic1c2_dt.GetData() + 0*true_size, true_size);
-        Vector dc1_dt (dphic1c2_dt.GetData() + 1*true_size, true_size);
-        Vector dc2_dt (dphic1c2_dt.GetData() + 2*true_size, true_size);
-
-        // 首先求解Poisson方程
-        ParGridFunction new_phi(h1);
-        new_phi.SetFromTrueDofs(phi); // 让new_phi满足essential bdc
-
-        if (myid == 0) cout << "l2 norm of phi: " << phi.Norml2() << endl;
-
-        ParLinearForm *l = new ParLinearForm(h1);
-        f1_analytic.SetTime(t);
-        l->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
-        l->Assemble();
-        b = l->ParallelAssemble(); // 一定要自己delete b
-
-        // 在求解器求解的外面所使用的Vector，Matrix全部是Hypre类型的，在给PETSc的Krylov求解器传入参数
-        // 时也是传入的Hypre类型的(因为求解器内部会将Hypre的矩阵和向量转化为PETSc的类型)
-        B1->Mult(1.0, c1, 1.0, *b); // B1 c1 + b -> b
-        B2->Mult(1.0, c2, 1.0, *b); // B1 c1 + B2 c2 + b -> b
-        b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
-        A_solver->Mult(*b, new_phi);
-        add(1.0, new_phi, -1.0, phi, dphi_dt);
-        dphi_dt /= t_stepsize; // fff应该是dt_real
-
-        // 然后求解NP1方程
-        ParBilinearForm *a22 = new ParBilinearForm(h1);
-        a22->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
-        a22->AddDomainIntegrator(new GradConvectionIntegrator(new_phi, &D_K_prod_v_K));
-        a22->Assemble(skip_zero_entries);
-        a22->Finalize(skip_zero_entries);
-        A1 = a22->ParallelAssemble(); // 一定要自己delete A1
-        A1->EliminateRowsCols(ess_tdof_list);
-
-        ParLinearForm *l1 = new ParLinearForm(h1);
-        f1_analytic.SetTime(t);
-        l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
-        l1->Assemble();
-        b1 = l1->ParallelAssemble(); // 一定要自己delete b1
-        b1->SetSubVector(ess_tdof_list, 0.0);
-
-        A1->Mult(1.0, c1, 1.0, *b1); // A1 c1 + b1 -> b1
-        M1_solver->Mult(*b1, dc1_dt); // solve M1 dc1_dt = A1 c1 + b1
-
-
-        // 然后求解NP2方程
-        ParBilinearForm *a33 = new ParBilinearForm(h1);
-        a33->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
-        a33->AddDomainIntegrator(new GradConvectionIntegrator(new_phi, &D_Cl_prod_v_Cl));
-        a33->Assemble(skip_zero_entries);
-        a33->Finalize(skip_zero_entries);
-        A2 = a33->ParallelAssemble(); // 一定要自己delete A2
-        A2->EliminateRowsCols(ess_tdof_list);
-
-        ParLinearForm *l2 = new ParLinearForm(h1);
-        f2_analytic.SetTime(t);
-        l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
-        l2->Assemble();
-        b2 = l2->ParallelAssemble(); // 一定要自己delete b2
-        b2->SetSubVector(ess_tdof_list, 0.0);
-
-        A2->Mult(1.0, c2, 1.0, *b2); // A2 c2 + b2 -> b2
-        M2_solver->Mult(*b2, dc2_dt); // solve M2 dc2_dt = A2 c2 + b2
-
-        delete l;
-        delete a22;
-        delete l1;
-        delete a33;
-        delete l2;
-        delete b;
-        delete A1;
+        delete a0;
+        delete a1;
+        delete a2;
         delete b1;
-        delete A2;
         delete b2;
+        delete m0;
+
+        delete A0;
+        delete M0;
+        delete X0;
+        delete X1;
+        delete X2;
+        delete B0;
+        delete B1;
+        delete B2;
     }
+
+    virtual void Mult(const Vector &phic1c2, Vector &dphic1c2_dt) const {}
 
     virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
     {
-        Vector phi(phic1c2.GetData() + 0*true_size, true_size);
-        Vector c1 (phic1c2.GetData() + 1*true_size, true_size);
-        Vector c2 (phic1c2.GetData() + 2*true_size, true_size);
-        Vector dphi_dt(dphic1c2_dt.GetData() + 0*true_size, true_size);
-        Vector dc1_dt (dphic1c2_dt.GetData() + 1*true_size, true_size);
-        Vector dc2_dt (dphic1c2_dt.GetData() + 2*true_size, true_size);
+        dphic1c2_dt = 0.0;
 
-        // 首先求解Poisson方程
-        ParGridFunction new_phi(h1);
-        new_phi.SetFromTrueDofs(phi); // 让new_phi满足essential bdc
+        // 下面就可以通过修改 phic1c2_ 从而达到修改 phic1c2 的目的
+        Vector* phic1c2_ = (Vector*) &phic1c2;
+        ParGridFunction phi_gf, c1_gf, c2_gf;
+        phi_gf.MakeRef(h1, *phic1c2_, offsets[0]);
+        c1_gf .MakeRef(h1, *phic1c2_, offsets[1]);
+        c2_gf .MakeRef(h1, *phic1c2_, offsets[2]);
 
-        ParLinearForm *l = new ParLinearForm(h1);
-        f1_analytic.SetTime(t);
-        l->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
-        l->Assemble();
-        b = l->ParallelAssemble();
+        // 开始Gummel线性化(即Gummel迭代), Gummel迭代的初值为0
+        ParGridFunction phi_Gummel_gf(h1), c1_Gummel_gf(h1), c2_Gummel_gf(h1);
+        phi_Gummel_gf = 0.0;
+        c1_Gummel_gf  = 0.0;
+        c2_Gummel_gf  = 0.0;
+        phi_exact.SetTime(t);
+        c1_exact .SetTime(t);
+        c2_exact .SetTime(t);
+        phi_Gummel_gf.ProjectBdrCoefficient(phi_exact, ess_bdr); // 需要满足下一时刻的边界条件
+        c1_Gummel_gf .ProjectBdrCoefficient( c1_exact, ess_bdr);
+        c2_Gummel_gf .ProjectBdrCoefficient( c2_exact, ess_bdr);
 
-        // 在求解器求解的外面所使用的Vector，Matrix全部是Hypre类型的，在给PETSc的Krylov求解器传入参数
-        // 时也是传入的Hypre类型的(因为求解器内部会将Hypre的矩阵和向量转化为PETSc的类型)
-        B1->Mult(1.0, c1, 1.0, *b); // B1 c1 + b -> b
-        B2->Mult(1.0, c2, 1.0, *b); // B1 c1 + B2 c2 + b -> b
-        b->SetSubVector(ess_tdof_list, 0.0); // 给定essential bdc
-        A_solver->Mult(*b, new_phi);
-        dphi_dt = (new_phi - phi) / t_stepsize; // fff应该是dt_real
+        Vector diff(h1->GetVSize());
+        bool last_gummel_step = false;
+        for (int gummel_step=1; !last_gummel_step; ++gummel_step)
+        {
+            cout.precision(14);
+            diff = 0.0; // 为了计算Gummel迭代的Tol
+            diff += phi_Gummel_gf;
 
-        // 然后求解NP1方程
-        ParBilinearForm *a22 = new ParBilinearForm(h1);
-        a22->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
-        a22->AddDomainIntegrator(new GradConvectionIntegrator(new_phi, &D_K_prod_v_K));
-        a22->Assemble(skip_zero_entries); // keep sparsity pattern of A1 and M1 the same
-        a22->Finalize(skip_zero_entries);
-        A1 = a22->ParallelAssemble();
-        A1->EliminateRowsCols(ess_tdof_list);
+            // ----------------------- 求解Poisson -----------------------
+            ParLinearForm l0(h1);
+            // alpha2 alpha3 (z1 c1 + z2 c2, psi)
+            GridFunctionCoefficient c1_Gummel_coeff(&c1_Gummel_gf);
+            GridFunctionCoefficient c2_Gummel_coeff(&c2_Gummel_gf);
+            ProductCoefficient alpha2_alpha3_z1_c1(alpha2_prod_alpha3_prod_v_K,  c1_Gummel_coeff);
+            ProductCoefficient alpha2_alpha3_z2_c2(alpha2_prod_alpha3_prod_v_Cl, c2_Gummel_coeff);
+            l0.AddDomainIntegrator(new DomainLFIntegrator(alpha2_alpha3_z1_c1));
+            l0.AddDomainIntegrator(new DomainLFIntegrator(alpha2_alpha3_z2_c2));
+            // (f, psi)
+            f_analytic.SetTime(t);
+            l0.AddDomainIntegrator(new DomainLFIntegrator(f_analytic));
+            l0.Assemble();
 
-        ParLinearForm *l1 = new ParLinearForm(h1);
-        f1_analytic.SetTime(t);
-        l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
-        l1->Assemble();
-        b1 = l1->ParallelAssemble();
-        b1->SetSubVector(ess_tdof_list, 0.0);
+            this->buildA0();
+            a0->FormLinearSystem(ess_tdof_list, phi_Gummel_gf, l0, *A0, *X0, *B0);
+            PetscLinearSolver poisson(*A0, false, "phi_");
+            poisson.Mult(*B0, *X0);
+            a0->RecoverFEMSolution(*X0, l0, phi_Gummel_gf); // 得到下一个Gummel迭代步的解
 
-        A1->Mult(1.0, c1, 1.0, *b1); // A1 c1 + b1 -> b1
-        HypreParMatrix* temp_A1 = Add(1.0, *M1, -1.0*t_stepsize, *A1); // gurantee M1 and A1 with same sparsity pattern
-        PetscLinearSolver* A1_solver = new PetscLinearSolver(*temp_A1, false, "np1_");
-        A1_solver->Mult(*b1, dc1_dt);
+            diff -= phi_Gummel_gf;
+            double tol = diff.Norml2() / phi_Gummel_gf.Norml2();
+            if (tol < Gummel_rel_tol) { // Gummel迭代停止
+                last_gummel_step = true;
+            }
+            if (myid == 0 && verbose >= 2) {
+                cout << "Gummel step: " << gummel_step << ", Relative Tol: " << tol << endl;
+            }
 
-        // 然后求解NP2方程
-        ParBilinearForm *a33 = new ParBilinearForm(h1);
-        a33->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
-        a33->AddDomainIntegrator(new GradConvectionIntegrator(new_phi, &D_Cl_prod_v_Cl));
-        a33->Assemble(skip_zero_entries); // keep sparsity pattern of A2 and M2 the same
-        a33->Finalize(skip_zero_entries);
-        A2 = a33->ParallelAssemble();
-        A2->EliminateRowsCols(ess_tdof_list);
 
-        ParLinearForm *l2 = new ParLinearForm(h1);
-        f2_analytic.SetTime(t);
-        l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
-        l2->Assemble();
-        b2 = l2->ParallelAssemble();
-        b2->SetSubVector(ess_tdof_list, 0.0);
+            // ----------------------- 求解NP1 -----------------------
+            ParLinearForm l1(h1);
+            // dt (f1, v1)
+            f1_analytic.SetTime(t);
+            l1.AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+            l1.Assemble();
+            l1 *= dt;
 
-        A2->Mult(1.0, c2, 1.0, *b2); // A2 c2 + b2 -> b2
-        HypreParMatrix* temp_A2 = Add(1.0, *M2, -1.0*t_stepsize, *A2); // guarantee M2 and A2 with same sparsity pattern
-        PetscLinearSolver* A2_solver = new PetscLinearSolver(*temp_A2, false, "np2_");
-        A2_solver->Mult(*b2, dc2_dt);
+            // l1 = (f1, v1) + (c1^n, v1), c1^n为上一个时间步的解
+            this->buildM0();
+            m0->AddMult(c1_gf, l1); // c1_gf表示上一个时间步的解
+            // l1 = (f1, v1) + (c1^n, v1) + dt D1 (grad(c1) + z1 c1 grad(phi), grad(v1))
+            this->bulidA1(D_K_, phi_Gummel_gf, v_K_coeff, t_stepsize);
+            a1->AddMult(c1_Gummel_gf, l1);
 
-        delete l;
-        delete a22;
-        delete l1;
-        delete a33;
-        delete l2;
-        delete temp_A1, temp_A2;
-        delete A1_solver, A2_solver;
+            this->buildM0();
+            m0->FormLinearSystem(ess_tdof_list, c1_Gummel_gf, l1, *M0, *X1, *B1);
+            PetscLinearSolver np1(*M0, false, "np1_");
+            np1.Mult(*B1, *X1);
+            m0->RecoverFEMSolution(*X1, l1, c1_Gummel_gf);
+
+
+            // ----------------------- 求解NP2 -----------------------
+            ParLinearForm l2(h1);
+            // dt (f2, v2)
+            f2_analytic.SetTime(t);
+            l2.AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
+            l2.Assemble();
+            l2 *= dt;
+
+            // l2 = (f2, v2) + (c2^n, v2), c2^n为上一个时间步的解
+            this->buildM0();
+            m0->AddMult(c2_gf, l2); // c2_gf表示上一个时间步的解
+            // l2 = (f2, v2) + (c2^n, v2) + dt D2 (grad(c2) + z2 c2 grad(phi), grad(v2))
+            this->bulidA2(D_Cl_, phi_Gummel_gf, v_Cl_coeff, t_stepsize);
+            a2->AddMult(c2_Gummel_gf, l2);
+
+            this->buildM0();
+            m0->FormLinearSystem(ess_tdof_list, c2_Gummel_gf, l2, *M0, *X2, *B2);
+            PetscLinearSolver np2(*M0, false, "np2_");
+            np2.Mult(*B2, *X2);
+            m0->RecoverFEMSolution(*X2, l2, c2_Gummel_gf);
+        }
+
+        phi_gf = phi_Gummel_gf; // 更新下一个时间步的解
+        c1_gf = c1_Gummel_gf;
+        c2_gf = c2_Gummel_gf;
+
+        {
+            phi_exact.SetTime(t);
+            c1_exact.SetTime(t);
+            c2_exact.SetTime(t);
+            double phiL2errornorm = phi_gf.ComputeL2Error(phi_exact);
+            double  c1L2errornorm =  c1_gf.ComputeL2Error(c1_exact);
+            double  c2L2errornorm =  c2_gf.ComputeL2Error(c2_exact);
+            if (myid == 0 && verbose >= 1) {
+                cout << "current time: " << t << '\n'
+                     << "phi L2 errornorm: " << phiL2errornorm << '\n'
+                     << " c1 L2 errornorm: " <<  c1L2errornorm << '\n'
+                     << " c2 L2 errornorm: " <<  c2L2errornorm << '\n' << endl;
+            }
+        }
+    }
+
+    void buildA0() const
+    {
+        // epsilon_s (grad(phi), grad(psi))
+        if (a0 != NULL) { delete a0; }
+        a0 = new ParBilinearForm(h1);
+        a0->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water));
+        a0->Assemble(skip_zero_entries);
+    }
+    void bulidA1(Coefficient& D1, ParGridFunction& phi, Coefficient& z1, double dt) const
+    {
+        // dt D1 ( grad(c1) + z1 c1 grad(phi), grad(v1) )
+        ProductCoefficient dt_D1(dt, D1);
+        ProductCoefficient dt_D1_z1(dt_D1, z1);
+
+        if (a1 != NULL) { delete a1; }
+        a1 = new ParBilinearForm(h1);
+        a1->AddDomainIntegrator(new DiffusionIntegrator(dt_D1));
+        a1->AddDomainIntegrator(new GradConvectionIntegrator(phi, &dt_D1_z1));
+        a1->Assemble(skip_zero_entries);
+    }
+    void bulidA2(Coefficient& D2, ParGridFunction& phi, Coefficient& z2, double dt) const
+    {
+        // dt D2 ( grad(c2) + z2 c2 grad(phi), grad(v2) )
+        ProductCoefficient dt_D2(dt, D2);
+        ProductCoefficient dt_D2_z2(dt_D2, z2);
+
+        if (a2 != NULL) { delete a2; }
+        a2 = new ParBilinearForm(h1);
+        a2->AddDomainIntegrator(new DiffusionIntegrator(dt_D2));
+        a2->AddDomainIntegrator(new GradConvectionIntegrator(phi, &dt_D2_z2));
+        a2->Assemble(skip_zero_entries);
+    }
+    void buildB1(Coefficient& alpha2_alpha3_z1) const
+    {
+        // alpha2_alpha3_z1 (c1, psi)
+        if (b1 != NULL) { delete b1; }
+        b1 = new ParBilinearForm(h1);
+        b1->AddDomainIntegrator(new MassIntegrator(alpha2_alpha3_z1));
+        b1->Assemble(skip_zero_entries);
+    }
+    void buildB2(Coefficient& alpha2_alpha3_z2) const
+    {
+        // alpha2_alpha3_z2 (c2, psi)
+        if (b2 != NULL) { delete b2; }
+        b2 = new ParBilinearForm(h1);
+        b2->AddDomainIntegrator(new MassIntegrator(alpha2_alpha3_z2));
+        b2->Assemble(skip_zero_entries);
+    }
+    void buildM0() const
+    {
+        if (m0 != NULL) { delete m0; }
+        m0 = new ParBilinearForm(h1);
+        m0->AddDomainIntegrator(new MassIntegrator);
+        m0->Assemble(skip_zero_entries);
     }
 };
 class PNP_Box_Gummel_CG_TimeDependent_Solver
@@ -224,18 +264,16 @@ private:
     H1_FECollection* fec;
     ParFiniteElementSpace* h1;
 
-    ParBilinearForm *a11, *a12, *a13, *m1, *m2;
-    HypreParMatrix *A, *B1, *B2, *M1, *M2;
+    int vsize; // 有限元空间维数
+    double t; // 当前时间
+
     BlockVector* phic1c2;
     ParGridFunction *phi_gf, *c1_gf, *c2_gf;
 
     PNP_Box_Gummel_CG_TimeDependent* oper;
-    double t; // 当前时间
-    Vector init_value;
     ODESolver *ode_solver;
 
-    int true_size; // 有限元空间维数
-    Array<int> true_offset, ess_bdr, ess_tdof_list;
+    Array<int> offsets, ess_bdr, ess_tdof_list;
     ParaViewDataCollection* pd;
     int num_procs, myid;
     StopWatch chrono;
@@ -243,106 +281,68 @@ private:
 public:
     PNP_Box_Gummel_CG_TimeDependent_Solver(Mesh& mesh_, int ode_solver_type): mesh(mesh_)
     {
-        t = t_init;
+        MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
         pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
         fec   = new H1_FECollection(p_order, mesh.Dimension());
         h1    = new ParFiniteElementSpace(pmesh, fec);
-        MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
         ess_bdr.SetSize(mesh.bdr_attributes.Max());
         ess_bdr = 1; // 设置所有边界都是essential的
         h1->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
-        a11 = new ParBilinearForm(h1);
-        // (epsilon_s grad(phi), grad(psi))
-        a11->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water));
-        a11->Assemble(skip_zero_entries);
-        a11->Finalize(skip_zero_entries);
-        A = a11->ParallelAssemble();
-        A->EliminateRowsCols(ess_tdof_list); // fff边界条件对吗
+        vsize = h1->GetVSize();
+        offsets.SetSize(3 + 1); // 表示 phi, c1，c2的TrueVector
+        offsets[0] = 0;
+        offsets[1] = vsize;
+        offsets[2] = vsize * 2;
+        offsets[3] = vsize * 3;
 
-        a12 = new ParBilinearForm(h1);
-        // (alpha2 alpha3 z1 c1, psi)
-        a12->AddDomainIntegrator(new MassIntegrator(alpha2_prod_alpha3_prod_v_K));
-        a12->Assemble(skip_zero_entries);
-        a12->Finalize(skip_zero_entries);
-        B1 = a12->ParallelAssemble(); // fff不需要设置essential bdc吗
+        phic1c2 = new BlockVector(offsets);
+        *phic1c2 = 0.0;
 
-        a13 = new ParBilinearForm(h1);
-        // (alpha2 alpha3 z2 c2, psi)
-        a13->AddDomainIntegrator(new MassIntegrator(alpha2_prod_alpha3_prod_v_Cl));
-        a13->Assemble(skip_zero_entries);
-        a13->Finalize(skip_zero_entries);
-        B2 = a13->ParallelAssemble(); // fff不需要设置essential bdc吗
-
-        m1 = new ParBilinearForm(h1);
-        // (c1, v1)
-        m1->AddDomainIntegrator(new MassIntegrator);
-        m1->Assemble(skip_zero_entries); // keep sparsity pattern of A1 and M1 the same
-        m1->Finalize(skip_zero_entries);
-        M1 = m1->ParallelAssemble();
-        M1->EliminateRowsCols(ess_tdof_list); // fffbdc对吗
-
-        m2 = new ParBilinearForm(h1);
-        // (c2, v2)
-        m2->AddDomainIntegrator(new MassIntegrator);
-        m2->Assemble(skip_zero_entries); // keep sparsity pattern of A2 and M2 the same
-        m2->Finalize(skip_zero_entries);
-        M2 = m2->ParallelAssemble();
-        M2->EliminateRowsCols(ess_tdof_list); // fffbdc对吗
-
-        phi_gf = new ParGridFunction(h1); *phi_gf = 0.0;
-        c1_gf  = new ParGridFunction(h1); *c1_gf  = 0.0;
-        c2_gf  = new ParGridFunction(h1); *c2_gf  = 0.0;
-
-        true_size = h1->TrueVSize();
-        true_offset.SetSize(3 + 1); // 表示 phi, c1，c2的TrueVector
-        true_offset[0] = 0;
-        true_offset[1] = true_size;
-        true_offset[2] = true_size * 2;
-        true_offset[3] = true_size * 3;
-
-        phic1c2 = new BlockVector(true_offset); *phic1c2 = 0.0;
-        phi_gf->MakeTRef(h1, *phic1c2, true_offset[0]);
-        c1_gf ->MakeTRef(h1, *phic1c2, true_offset[1]);
-        c2_gf ->MakeTRef(h1, *phic1c2, true_offset[2]);
+        phi_gf  = new ParGridFunction(h1);
+        c1_gf   = new ParGridFunction(h1);
+        c2_gf   = new ParGridFunction(h1);
+        phi_gf->MakeRef(h1, *phic1c2, offsets[0]);
+        c1_gf ->MakeRef(h1, *phic1c2, offsets[1]);
+        c2_gf ->MakeRef(h1, *phic1c2, offsets[2]);
 
         // 设定初值
-        phi_exact.SetTime(t);
-        phi_gf->ProjectCoefficient(phi_exact);
-        phi_gf->SetTrueVector();
-        phi_gf->SetFromTrueVector();
+        {
+            t = t_init;
 
-        c1_exact.SetTime(t);
-        c1_gf->ProjectCoefficient(c1_exact);
-        c1_gf->SetTrueVector();
-        c1_gf->SetFromTrueVector();
+            phi_exact.SetTime(t);
+            phi_gf->ProjectCoefficient(phi_exact);
 
-        c2_exact.SetTime(t);
-        c2_gf->ProjectCoefficient(c2_exact);
-        c2_gf->SetTrueVector();
-        c2_gf->SetFromTrueVector();
+            c1_exact.SetTime(t);
+            c1_gf->ProjectCoefficient(c1_exact);
 
-        oper = new PNP_Box_Gummel_CG_TimeDependent(A, M1, M2, B1, B2, true_size,
-                                            true_offset, ess_tdof_list, h1, t);
+            c2_exact.SetTime(t);
+            c2_gf->ProjectCoefficient(c2_exact);
+        }
+
+        {
+            double phiL2errornorm = phi_gf->ComputeL2Error(phi_exact);
+            double  c1L2errornorm =  c1_gf->ComputeL2Error(c1_exact);
+            double  c2L2errornorm =  c2_gf->ComputeL2Error(c2_exact);
+            if (myid == 0) {
+                cout << "After setting initial conditions, t = " << t << '\n'
+                     << "phi L2 errornorm: " << phiL2errornorm << '\n'
+                     << " c1 L2 errornorm: " <<  c1L2errornorm << '\n'
+                     << " c2 L2 errornorm: " <<  c2L2errornorm << endl;
+            }
+        }
+
+        oper = new PNP_Box_Gummel_CG_TimeDependent(offsets, ess_bdr, ess_tdof_list, h1, t);
 
         switch (ode_solver_type)
         {
             // Implicit L-stable methods
             case 1:  ode_solver = new BackwardEulerSolver; break;
-            case 2:  ode_solver = new SDIRK23Solver(2); break;
-            case 3:  ode_solver = new SDIRK33Solver; break;
                 // Explicit methods
             case 11: ode_solver = new ForwardEulerSolver; break;
-            case 12: ode_solver = new RK2Solver(0.5); break; // midpoint method
-            case 13: ode_solver = new RK3SSPSolver; break;
-            case 14: ode_solver = new RK4Solver; break;
-                // Implicit A-stable methods (not L-stable)
-            case 22: ode_solver = new ImplicitMidpointSolver; break;
-            case 23: ode_solver = new SDIRK23Solver; break;
-            case 24: ode_solver = new SDIRK34Solver; break;
             default:
             MFEM_ABORT("Not support ODE solver.");
         }
@@ -367,15 +367,12 @@ public:
         delete pmesh;
         delete fec;
         delete h1;
-        delete a11;
-        delete a12;
-        delete a13;
-        delete m1;
-        delete m2;
+
+        delete phic1c2;
         delete phi_gf;
         delete c1_gf;
         delete c2_gf;
-        delete phic1c2;
+
         delete oper;
         delete ode_solver;
         if (paraview) delete pd;
@@ -387,14 +384,11 @@ public:
         if (myid == 0) {
             cout << '\n';
             cout << Discretize << p_order << ", " << Linearize << ", " << mesh_file << ", refine times: " << refine_times << '\n'
-                 << ", " << options_src << '\n'
-                 << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" \
+                 << "petsc options: " << options_src << '\n'
+                 << ((ode_type == 1) ? ("Backward Euler") : (ode_type == 11 ? "Forward Euler" \
                                                                        : "wrong type")) << ", " << "time step: " << t_stepsize
                  << endl;
         }
-
-        int gdb_break = 0;
-        while(gdb_break) {};
 
         MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
@@ -421,21 +415,12 @@ public:
         chrono.Stop();
 
         {
-            phi_exact.SetTime(t);
-            phi_gf->SetFromTrueVector();
-
-            c1_exact.SetTime(t);
-            c1_gf->SetFromTrueVector();
-
-            c2_exact.SetTime(t);
-            c2_gf->SetFromTrueVector();
-
             // 计算误差范数只能是在所有进程上都运行，输出误差范数可以只在root进程
             double phiL2err = phi_gf->ComputeL2Error(phi_exact);
             double c1L2err = c1_gf->ComputeL2Error(c1_exact);
             double c2L2err = c2_gf->ComputeL2Error(c2_exact);
 
-            if (myid == 0) {
+            if (myid == 0 && verbose >= 1) {
                 cout << "ODE solver taking " << chrono.RealTime() << " s." << endl;
                 cout.precision(14);
                 cout << "At final time: " << t << '\n'

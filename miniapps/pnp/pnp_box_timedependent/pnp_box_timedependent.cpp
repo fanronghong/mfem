@@ -28,6 +28,7 @@ int main(int argc, char *argv[])
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.AddOption(&paraview, "-para", "--paraview", "-nopara", "--noparaview", "Save time-dependent results");
     args.AddOption(&output, "-out", "--output", "File name to save outputs", false);
+    args.AddOption(&verbose, "-ver", "--verbose", "Print Level: 1,2");
     args.Parse();
     if (!args.Good())
     {
@@ -91,11 +92,10 @@ int main(int argc, char *argv[])
         {
             if (strcmp(Discretize, "cg") == 0)
             {
-//                PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, ode_type);
-//                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-
-                PNP_Box_Gummel_CG_TimeDependent_ForwardEuler* solver = new PNP_Box_Gummel_CG_TimeDependent_ForwardEuler(mesh);
-                solver->Solve();
+                PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, ode_type);
+                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+//                PNP_Box_Gummel_CG_TimeDependent_ForwardEuler* solver = new PNP_Box_Gummel_CG_TimeDependent_ForwardEuler(mesh);
+//                solver->Solve();
                 delete solver;
             }
         }
