@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.AddOption(&paraview, "-para", "--paraview", "-nopara", "--noparaview", "Save time-dependent results");
     args.AddOption(&output, "-out", "--output", "File name to save outputs", false);
-    args.AddOption(&verbose, "-ver", "--verbose", "Print Level: 1,2");
+    args.AddOption(&verbose, "-verb", "--verbose", "Print Level: 1,2");
     args.Parse();
     if (!args.Good())
     {

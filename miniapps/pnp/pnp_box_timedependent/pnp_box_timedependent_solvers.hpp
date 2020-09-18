@@ -87,7 +87,8 @@ public:
         c2_gf .MakeRef(h1, *phic1c2_, offsets[2]);
 
         // 开始Gummel线性化(即Gummel迭代), Gummel迭代的初值为0
-        ParGridFunction phi_Gummel_gf(h1), c1_Gummel_gf(h1), c2_Gummel_gf(h1);
+        ParGridFunction phi_Gummel_gf(h1), c1_Gummel_gf(h1), c2_Gummel_gf(h1),
+                        phi_Gummel_gf_old(h1), c1_Gummel_gf_old(h1), c2_Gummel_gf_old(h1);
         phi_Gummel_gf = 0.0;
         c1_Gummel_gf  = 0.0;
         c2_Gummel_gf  = 0.0;
@@ -97,20 +98,18 @@ public:
         phi_Gummel_gf.ProjectBdrCoefficient(phi_exact, ess_bdr); // 需要满足下一时刻的边界条件
         c1_Gummel_gf .ProjectBdrCoefficient( c1_exact, ess_bdr);
         c2_Gummel_gf .ProjectBdrCoefficient( c2_exact, ess_bdr);
+        phi_Gummel_gf_old = phi_Gummel_gf;
+        c1_Gummel_gf_old  = c1_Gummel_gf;
+        c2_Gummel_gf_old  = c2_Gummel_gf;
 
-        Vector diff(h1->GetVSize());
         bool last_gummel_step = false;
         for (int gummel_step=1; !last_gummel_step; ++gummel_step)
         {
-            cout.precision(14);
-            diff = 0.0; // 为了计算Gummel迭代的Tol
-            diff += phi_Gummel_gf;
-
             // ----------------------- 求解Poisson -----------------------
             ParLinearForm l0(h1);
             // alpha2 alpha3 (z1 c1 + z2 c2, psi)
-            GridFunctionCoefficient c1_Gummel_coeff(&c1_Gummel_gf);
-            GridFunctionCoefficient c2_Gummel_coeff(&c2_Gummel_gf);
+            GridFunctionCoefficient c1_Gummel_coeff(&c1_Gummel_gf_old);
+            GridFunctionCoefficient c2_Gummel_coeff(&c2_Gummel_gf_old);
             ProductCoefficient alpha2_alpha3_z1_c1(alpha2_prod_alpha3_prod_v_K,  c1_Gummel_coeff);
             ProductCoefficient alpha2_alpha3_z2_c2(alpha2_prod_alpha3_prod_v_Cl, c2_Gummel_coeff);
             l0.AddDomainIntegrator(new DomainLFIntegrator(alpha2_alpha3_z1_c1));
@@ -125,16 +124,20 @@ public:
             PetscLinearSolver poisson(*A0, false, "phi_");
             poisson.Mult(*B0, *X0);
             a0->RecoverFEMSolution(*X0, l0, phi_Gummel_gf); // 得到下一个Gummel迭代步的解
+            // 使用松弛方法
+            phi_Gummel_gf *= (1 - relax);
+            phi_Gummel_gf.Add(relax, phi_Gummel_gf_old);
 
-            diff -= phi_Gummel_gf;
-            double tol = diff.Norml2() / phi_Gummel_gf.Norml2();
-            if (tol < Gummel_rel_tol) { // Gummel迭代停止
+            double L2err1 = phi_Gummel_gf_old.ComputeL2Error(zero);
+            double L2err2 = phi_Gummel_gf.ComputeL2Error(zero);
+            double diff = abs(L2err1 - L2err2) / L2err2;
+            if (diff < Gummel_rel_tol) { // Gummel迭代停止
                 last_gummel_step = true;
             }
             if (myid == 0 && verbose >= 2) {
-                cout << "Gummel step: " << gummel_step << ", Relative Tol: " << tol << endl;
+                cout << "Gummel step: " << gummel_step << ", Relative Tol: " << diff << endl;
             }
-
+            phi_Gummel_gf_old = phi_Gummel_gf;
 
             // ----------------------- 求解NP1 -----------------------
             ParLinearForm l1(h1);
@@ -154,8 +157,16 @@ public:
             this->buildM0();
             m0->FormLinearSystem(ess_tdof_list, c1_Gummel_gf, l1, *M0, *X1, *B1);
             PetscLinearSolver np1(*M0, false, "np1_");
+            if (abs(t - 0.06) < 10E-8 && gummel_step == 29) {
+                int fff=1;
+                while(fff == 1) {}
+            }
             np1.Mult(*B1, *X1);
             m0->RecoverFEMSolution(*X1, l1, c1_Gummel_gf);
+            // 使用松弛方法
+            c1_Gummel_gf *= (1 - relax);
+            c1_Gummel_gf.Add(relax, c1_Gummel_gf_old);
+            c1_Gummel_gf_old = c1_Gummel_gf;
 
 
             // ----------------------- 求解NP2 -----------------------
@@ -178,12 +189,15 @@ public:
             PetscLinearSolver np2(*M0, false, "np2_");
             np2.Mult(*B2, *X2);
             m0->RecoverFEMSolution(*X2, l2, c2_Gummel_gf);
+            // 使用松弛方法
+            c2_Gummel_gf *= (1 - relax);
+            c2_Gummel_gf.Add(relax, c2_Gummel_gf_old);
+            c2_Gummel_gf_old = c2_Gummel_gf;
         }
 
         phi_gf = phi_Gummel_gf; // 更新下一个时间步的解
         c1_gf = c1_Gummel_gf;
         c2_gf = c2_Gummel_gf;
-
         {
             phi_exact.SetTime(t);
             c1_exact.SetTime(t);
@@ -402,6 +416,8 @@ public:
             ode_solver->Step(*phic1c2, t, dt_real); // 进过这一步之后phic1c2和t都被更新了
 
             last_step = (t >= t_final - 1e-8*t_stepsize);
+//            int fff=1;
+//            while (fff==1) {}
 
             if (paraview)
             {

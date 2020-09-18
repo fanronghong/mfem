@@ -27,10 +27,10 @@ double relax                = 0.2; //松弛因子: relax * phi^{k-1} + (1 - rela
 int ode_type                = 1; // 1: backward Euler; 11: forward Euler
 double t_init               = 0.0; // 初始时间
 double t_stepsize           = 0.001;// 时间步长
-double t_final              = 0.1; // 最后时间
+double t_final              = 0.04; // 最后时间
 const int skip_zero_entries = 0; // 为了保证某些矩阵的sparsity pattern一致
 int mpi_debug               = 0;
-int verbose                 = 1; // 数字越大输出越多: 0, 1,2
+int verbose                 = 2; // 数字越大输出越多: 0, 1,2
 
 const int bottom_attr       = 1;
 const int top_attr          = 6;
