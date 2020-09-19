@@ -29,6 +29,7 @@ double lambda;
 double resiG;
 double ep=.2;
 double yrefine=0.2;
+// ref: https://github.com/mfem/mfem/tree/tds-mhd-dev/miniapps/mhd
 int icase = 1;
 
 bool region(const Vector &p, const int lev)
@@ -391,6 +392,7 @@ int main(int argc, char *argv[])
      w.MakeTRef(&fespace, vx, fe_offset[2]);
 
    //+++++Set the initial conditions, and the boundary conditions
+   // 分别给 phi, psi, w 设定初值条件
    FunctionCoefficient phiInit(InitialPhi);
    phi.ProjectCoefficient(phiInit);
    phi.SetTrueVector();

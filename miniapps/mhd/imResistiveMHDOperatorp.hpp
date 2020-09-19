@@ -263,8 +263,10 @@ protected:
    HypreParMatrix Kmat, Mmat, *MfullMat, DSlmat, DRemat, *KBMat;
    HypreParVector *E0Vec;
    FunctionCoefficient *E0rhs;
+   // 粘性系数和电阻系数
    double viscosity, resistivity;
    bool useAMG, use_petsc, use_factory, convergedSolver;
+   // 粘性系数和电阻系数
    ConstantCoefficient visc_coeff, resi_coeff;
    FunctionCoefficient visc_vari, resi_vari;
 
@@ -377,12 +379,14 @@ ResistiveMHDOperator::ResistiveMHDOperator(ParFiniteElementSpace &f,
    fespace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
    //mass matrix
+   // (u, v)
    M = new ParBilinearForm(&fespace);
    M->AddDomainIntegrator(new MassIntegrator);
    M->Assemble();
    M->FormSystemMatrix(ess_tdof_list, Mmat);
 
-   //full mass matrix 
+   //full mass matrix
+   // (u, v)
    Mfull = new ParBilinearForm(&fespace);
    MassIntegrator *mass = new MassIntegrator;
    if (lumpedMass) //use a lumped mass integrator to compute J
@@ -422,6 +426,7 @@ ResistiveMHDOperator::ResistiveMHDOperator(ParFiniteElementSpace &f,
    M_solver2.SetOperator(*MfullMat);
 
    //stiffness matrix
+   // (grad(u), grad(v))
    K = new ParBilinearForm(&fespace);
    K->AddDomainIntegrator(new DiffusionIntegrator);
    K->Assemble();
@@ -452,6 +457,7 @@ ResistiveMHDOperator::ResistiveMHDOperator(ParFiniteElementSpace &f,
       K_solver.SetOperator(Kmat);
    }
 
+   // (grad(u), grad(v))
    KB = new ParBilinearForm(&fespace);
    KB->AddDomainIntegrator(new DiffusionIntegrator);      //  K matrix
    KB->AddBdrFaceIntegrator(new BoundaryGradIntegrator);  // -B matrix
@@ -459,6 +465,7 @@ ResistiveMHDOperator::ResistiveMHDOperator(ParFiniteElementSpace &f,
    KB->Finalize();
    KBMat=KB->ParallelAssemble();
 
+   // viscosity (grad(u), grad(v))
    Coefficient *visc_ptr, *resi_ptr;
    if (icase==5)
    {
@@ -473,6 +480,7 @@ ResistiveMHDOperator::ResistiveMHDOperator(ParFiniteElementSpace &f,
    DRe.AddDomainIntegrator(new DiffusionIntegrator(*visc_ptr));    
    DRe.Assemble();
 
+   // resistivity (grad(u), grad(v))
    DSl.AddDomainIntegrator(new DiffusionIntegrator(*resi_ptr));    
    DSl.Assemble();
 
@@ -751,6 +759,7 @@ void ResistiveMHDOperator::computeV(ParGridFunction *phi, ParGridFunction *v1, P
 
 void ResistiveMHDOperator::Mult(const Vector &vx, Vector &dvx_dt) const
 {
+    // 从imMHDp.cpp中的 ode_solver->Step()可以看出, 这里传入的vx是TrueVector, 不是PrimalVector
    // Create views to the sub-vectors and time derivative
    int sc = height/3;
    dvx_dt=0.0;
@@ -1260,6 +1269,7 @@ ReducedSystemOperator::ReducedSystemOperator(ParFiniteElementSpace &f,
  * [  Pw  Sc  0    ]
  * [  K   0   M    ]
 */
+// GetGradient()和Mult()中的参数k是TrueVector, 而不是PrimalVector
 Operator &ReducedSystemOperator::GetGradient(const Vector &k) const
 {
    MFEM_ASSERT(initialMdt, "Mdt not initialized correctly!"); 
@@ -1280,8 +1290,10 @@ Operator &ReducedSystemOperator::GetGradient(const Vector &k) const
 
        //form Nv matrix
        delete Nv;
+       // 把TrueVector转换成PrimalVector
        phiGf.MakeTRef(&fespace, k_, 0);
        phiGf.SetFromTrueVector();
+       // (velocity . grad(u), v)
        Nv = new ParBilinearForm(&fespace);
        MyCoefficient velocity(&phiGf, 2);   //we update velocity
        Nv->AddDomainIntegrator(new ConvectionIntegrator(velocity));

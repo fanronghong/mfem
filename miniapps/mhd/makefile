@@ -12,7 +12,8 @@
 
 # Use the MFEM build directory
 MFEM_DIR ?= ../..
-MFEM_BUILD_DIR ?= ../..
+MFEM_BUILD_DIR ?= ../../build_pnp
+#重点就是指定上面的两个路径, 然后就可以make编译了
 SRC = $(if $(MFEM_DIR:../..=),$(MFEM_DIR)/miniapps/mhd/,)
 CONFIG_MK = $(MFEM_BUILD_DIR)/config/config.mk
 OBJ = InitialConditions.o
