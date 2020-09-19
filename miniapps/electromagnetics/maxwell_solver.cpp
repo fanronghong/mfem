@@ -242,6 +242,7 @@ MaxwellSolver::MaxwellSolver(ParMesh & pmesh, int order,
    b_    = new ParGridFunction(HDivFESpace_);
 
    E_ = e_->ParallelProject();
+    // b_是PrimalVector, B_是对应的TrueVector, 已知b_求B_
    B_ = b_->ParallelProject();
 
    HD_  = new HypreParVector(HDivFESpace_);
@@ -434,7 +435,9 @@ MaxwellSolver::implicitSolve(double dt, const Vector &B, Vector &dEdt) const
 {
    int idt = hCurlLosses_ ? ((int)(dtScale_ * dt / dtMax_)) : 0;
 
+   // b_是PrimalVector, B是对应的TrueVector, 已知B求b_
    b_->Distribute(B);
+   // 这里 weakCurlMuInv_ 没有设定边界条件
    weakCurlMuInv_->Mult(*b_, *rhs_);
 
    if ( hCurlLosses_ )
@@ -461,6 +464,7 @@ MaxwellSolver::implicitSolve(double dt, const Vector &B, Vector &dEdt) const
    setupSolver(idt, dt);
 
    // Apply essential BCs and determine true DoFs for the right hand side
+   // 求解 epsilon dE/dt = Curl 1/mu B - sigma E - J 中的未知量 dE_dt
    a1_[idt]->FormLinearSystem(dbc_dofs_, *dedt_, *rhs_, *A1_[idt], dEdt, *RHS_);
 
    // Solve for the time derivative of the electric field (true DoFs)

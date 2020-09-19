@@ -108,6 +108,7 @@ private:
 
    ParDiscreteCurlOperator * Curl_;
 
+   // 对应的TrueVector就是下面的E_, B_
    ParGridFunction * e_;    // Electric Field (HCurl)
    ParGridFunction * b_;    // Magnetic Flux (HDiv)
    ParGridFunction * j_;    // Volumetric Current Density (HCurl)
@@ -119,6 +120,7 @@ private:
    HypreParMatrix * M2MuInv_;
    HypreParMatrix * NegCurl_;
    HypreParMatrix * WeakCurlMuInv_;
+   // 对应的PrimalVector就是上面的e_, b_
    HypreParVector * E_; // Current value of the electric field DoFs
    HypreParVector * B_; // Current value of the magnetic flux DoFs
    mutable HypreParVector * HD_; // Used in energy calculation
@@ -133,6 +135,7 @@ private:
    VectorCoefficient * jCoef_;      // Time dependent current density
    VectorCoefficient * dEdtBCCoef_; // Time dependent boundary condition
 
+   // 分别对应maxwell.cpp中的几个函数
    double (*eps_    )(const Vector&);
    double (*muInv_  )(const Vector&);
    double (*sigma_  )(const Vector&);
