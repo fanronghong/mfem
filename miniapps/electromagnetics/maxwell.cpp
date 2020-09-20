@@ -526,6 +526,7 @@ BFieldFunc(const Vector &x, Vector &B)
    B = 0.0;
 }
 
+// dE_dt 的边界条件
 void
 dEdtBCFunc(const Vector &x, double t, Vector &dE)
 {
