@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
         {
             if (strcmp(Discretize, "cg") == 0)
             {
-                PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, ode_type);
+                PNP_Box_Gummel_CG_TimeDependent_Solver1* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver1(mesh, ode_type);
                 solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
 //                PNP_Box_Gummel_CG_TimeDependent_ForwardEuler* solver = new PNP_Box_Gummel_CG_TimeDependent_ForwardEuler(mesh);
 //                solver->Solve();

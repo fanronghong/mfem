@@ -43,7 +43,7 @@ def ComputeTimeDependentSolutions():
     Poisson Equation:
             div( -epsilon_s grad(phi) ) - alpha2 alpha3 \sum_i z_i c_i = f
     NP Equation:
-            dc_i / dt = div( -D_i (grad(c_i) + z_i c_i grad(phi) ) ) + f_i
+            dc_i / dt = div( D_i (grad(c_i) + z_i c_i grad(phi) ) ) + f_i
     '''
     x, y, z, t = sympy.symbols("x[0] x[1] x[2] t")
 
@@ -75,8 +75,8 @@ def ComputeTimeDependentSolutions():
 
     f  = phi_flux[0].diff(x, 1) + phi_flux[1].diff(y, 1) + phi_flux[2].diff(z, 1) \
          - alpha2 * alpha3 * (z1 * c1 + z2 * c2)
-    f1 = c1.diff(t, 1) - ( c1_flux[0].diff(x, 1) + c1_flux[1].diff(y, 1) + c1_flux[2].diff(z, 1) )
-    f2 = c2.diff(t, 1) - ( c2_flux[0].diff(x, 1) + c2_flux[1].diff(y, 1) + c2_flux[2].diff(z, 1) )
+    f1 = c1.diff(t, 1) + ( c1_flux[0].diff(x, 1) + c1_flux[1].diff(y, 1) + c1_flux[2].diff(z, 1) )
+    f2 = c2.diff(t, 1) + ( c2_flux[0].diff(x, 1) + c2_flux[1].diff(y, 1) + c2_flux[2].diff(z, 1) )
 
     # 真实的对流速度
     adv1 = [D1 * z1 * phi3_x,
@@ -95,7 +95,11 @@ def ComputeTimeDependentSolutions():
     print("\ndouble c1_exact_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(c1)))
     print("\ndouble c2_exact_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(c2)))
 
-    print("\ndouble f_analytic_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(f)))
+    print("\ndouble dphidt_exact_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(phi3.diff(t, 1))))
+    print("\ndouble dc1dt_exact_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(c1.diff(t, 1))))
+    print("\ndouble dc2dt_exact_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(c2.diff(t, 1))))
+
+    print("\ndouble f0_analytic_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(f)))
     print("\ndouble f1_analytic_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(f1)))
     print("\ndouble f2_analytic_time(const Vector& x, double t)\n{{\n    return {};\n}}".format(sympy.printing.ccode(f2)))
 

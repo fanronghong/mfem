@@ -10,7 +10,7 @@ using namespace mfem;
 
 const char* mesh_file       = "./4_4_4_translate.msh";
 int p_order                 = 1; //有限元基函数的多项式次数
-int refine_times            = 0;
+int refine_times            = 1;
 const char* Linearize       = "gummel"; // newton, gummel
 bool zero_initial           = true; // 非线性迭代的初值是否为0
 double initTol              = 1e-3; // 为得到非线性迭代的初值所需Gummel迭代
@@ -26,10 +26,10 @@ int max_newton              = 20;
 double relax                = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 int ode_type                = 1; // 1: backward Euler; 11: forward Euler
 double t_init               = 0.0; // 初始时间
-double t_stepsize           = 0.001;// 时间步长
-double t_final              = 0.04; // 最后时间
+double t_stepsize           = 0.05;// 时间步长
+double t_final              = 0.5; // 最后时间
 const int skip_zero_entries = 0; // 为了保证某些矩阵的sparsity pattern一致
-int mpi_debug               = 0;
+int mpi_debug               = 1;
 int verbose                 = 2; // 数字越大输出越多: 0, 1,2
 
 const int bottom_attr       = 1;
@@ -53,6 +53,7 @@ const double kappa = 20; // penalty parameter for DG
 #define Angstrom_SCALE
 
 #if defined(Angstrom_SCALE)
+//======> Time Dependent Analytic Solutions:
 double phi_exact_time(const Vector& x, double t)
 {
     return cos(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
@@ -68,19 +69,34 @@ double c2_exact_time(const Vector& x, double t)
     return cos(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
 }
 
-double f_analytic_time(const Vector& x, double t)
+double dphidt_exact_time(const Vector& x, double t)
+{
+    return -3.1415926535900001*sin(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
+}
+
+double dc1dt_exact_time(const Vector& x, double t)
+{
+    return -3.1415926535900001*sin(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
+}
+
+double dc2dt_exact_time(const Vector& x, double t)
+{
+    return -3.1415926535900001*sin(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
+}
+
+double f0_analytic_time(const Vector& x, double t)
 {
     return 592.17626406543945*cos(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
 }
 
 double f1_analytic_time(const Vector& x, double t)
 {
-    return -3.1415926535900001*sin(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]) + 0.48361061565344232*pow(sin(1.570796326795*x[0]), 2)*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[1]), 2)*pow(cos(1.570796326795*x[2]), 2) + 0.48361061565344232*pow(sin(1.570796326795*x[1]), 2)*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[0]), 2)*pow(cos(1.570796326795*x[2]), 2) + 0.48361061565344232*pow(sin(1.570796326795*x[2]), 2)*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[0]), 2)*pow(cos(1.570796326795*x[1]), 2) - 1.450831846960327*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[0]), 2)*pow(cos(1.570796326795*x[1]), 2)*pow(cos(1.570796326795*x[2]), 2) - 1.450831846960327*cos(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
+    return -3.1415926535900001*sin(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]) - 0.48361061565344232*pow(sin(1.570796326795*x[0]), 2)*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[1]), 2)*pow(cos(1.570796326795*x[2]), 2) - 0.48361061565344232*pow(sin(1.570796326795*x[1]), 2)*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[0]), 2)*pow(cos(1.570796326795*x[2]), 2) - 0.48361061565344232*pow(sin(1.570796326795*x[2]), 2)*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[0]), 2)*pow(cos(1.570796326795*x[1]), 2) + 1.450831846960327*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[0]), 2)*pow(cos(1.570796326795*x[1]), 2)*pow(cos(1.570796326795*x[2]), 2) + 1.450831846960327*cos(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
 }
 
 double f2_analytic_time(const Vector& x, double t)
 {
-    return -3.1415926535900001*sin(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]) - 0.50088242335535094*pow(sin(1.570796326795*x[0]), 2)*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[1]), 2)*pow(cos(1.570796326795*x[2]), 2) - 0.50088242335535094*pow(sin(1.570796326795*x[1]), 2)*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[0]), 2)*pow(cos(1.570796326795*x[2]), 2) - 0.50088242335535094*pow(sin(1.570796326795*x[2]), 2)*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[0]), 2)*pow(cos(1.570796326795*x[1]), 2) + 1.5026472700660527*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[0]), 2)*pow(cos(1.570796326795*x[1]), 2)*pow(cos(1.570796326795*x[2]), 2) - 1.5026472700660527*cos(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
+    return -3.1415926535900001*sin(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]) + 0.50088242335535094*pow(sin(1.570796326795*x[0]), 2)*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[1]), 2)*pow(cos(1.570796326795*x[2]), 2) + 0.50088242335535094*pow(sin(1.570796326795*x[1]), 2)*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[0]), 2)*pow(cos(1.570796326795*x[2]), 2) + 0.50088242335535094*pow(sin(1.570796326795*x[2]), 2)*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[0]), 2)*pow(cos(1.570796326795*x[1]), 2) - 1.5026472700660527*pow(cos(3.1415926535900001*t), 2)*pow(cos(1.570796326795*x[0]), 2)*pow(cos(1.570796326795*x[1]), 2)*pow(cos(1.570796326795*x[2]), 2) + 1.5026472700660527*cos(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
 }
 
 void J_time(const Vector& x, double t, Vector& y)
@@ -128,11 +144,12 @@ double div_adv2_time(const Vector& x, double t)
     return 1.5026472700660527*cos(3.1415926535900001*t)*cos(1.570796326795*x[0])*cos(1.570796326795*x[1])*cos(1.570796326795*x[2]);
 }
 
-
 FunctionCoefficient phi_exact(phi_exact_time);
 FunctionCoefficient c1_exact(c1_exact_time);
 FunctionCoefficient c2_exact(c2_exact_time);
-FunctionCoefficient f_analytic(f_analytic_time);
+FunctionCoefficient dc1dt_exact(dc1dt_exact_time);
+FunctionCoefficient dc2dt_exact(dc2dt_exact_time);
+FunctionCoefficient f0_analytic(f0_analytic_time);
 FunctionCoefficient f1_analytic(f1_analytic_time);
 FunctionCoefficient f2_analytic(f2_analytic_time);
 VectorFunctionCoefficient J (3, J_time);
