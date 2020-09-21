@@ -477,8 +477,7 @@ private:
 public:
     PNP_Box_Gummel_CG_TimeDependent1(int truesize, Array<int>& offset, Array<int>& ess_bdr_,
                                     ParFiniteElementSpace* fsp, double time)
-            : TimeDependentOperator(3*truesize, time), true_size(truesize), true_offset(offset),
-              ess_bdr(ess_bdr_), h1(fsp),
+            : TimeDependentOperator(3*truesize, time), true_size(truesize), true_offset(offset), ess_bdr(ess_bdr_), h1(fsp),
               b1(NULL), b2(NULL), a0(NULL), a1(NULL), m(NULL), a2(NULL), m1_dta1(NULL), m2_dta2(NULL)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
@@ -642,14 +641,18 @@ public:
         old_phi.MakeTRef(h1, *phic1c2_ptr, true_offset[0]);
         old_c1 .MakeTRef(h1, *phic1c2_ptr, true_offset[1]);
         old_c2 .MakeTRef(h1, *phic1c2_ptr, true_offset[2]);
-        
+        old_phi.SetFromTrueVector(); // 下面要用到PrimalVector, 而不是TrueVector
+        old_c1 .SetFromTrueVector();
+        old_c2 .SetFromTrueVector();
+
         ParGridFunction dc1dt, dc2dt;
         dc1dt.MakeTRef(h1, dphic1c2_dt, true_offset[1]);
         dc2dt.MakeTRef(h1, dphic1c2_dt, true_offset[2]);
+        dc1dt.SetFromTrueVector();
         
         ParGridFunction temp_phi(h1); // 保留初始的phi, 后面要用(old_phi在Poisson solver中会被改变)
         temp_phi = old_phi;
-        
+
         // 求解 Poisson
         ParLinearForm *l0 = new ParLinearForm(h1);
         // (f0, psi)
@@ -660,7 +663,7 @@ public:
         buildb1();
         b1->AddMult(old_c1, *l0, 1.0); // l0 = l0 + b1 c1
         buildb2();
-        b2->AddMult(old_c2, *l0, 1.0); // l0 = (l0 + b1 c1) + b2 c2
+        b2->AddMult(old_c2, *l0, 1.0); // l0 = l0 + b1 c1 + b2 c2
 
         builda0();
         phi_exact.SetTime(t);
@@ -678,10 +681,11 @@ public:
         f1_analytic.SetTime(t);
         l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
         l1->Assemble();
-        
+        cout.precision(14);
+
         builda1(temp_phi);
         a1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1
-        
+
         buildm();
         dc1dt_exact.SetTime(t);
         dc1dt.ProjectBdrCoefficient(dc1dt_exact, ess_bdr);
@@ -712,6 +716,11 @@ public:
         m->RecoverFEMSolution(*temp_x2, *l2, dc2dt); // 更新 dc2dt
         delete l2;
         delete np2_solver;
+
+        // 上面我们求解了3个未知量的PrimalVector: old_phi, dc1dt, dc2dt. 但返回值必须是TrueVector
+        old_phi.SetTrueVector();
+        dc1dt  .SetTrueVector();
+        dc2dt  .SetTrueVector();
     }
 
     virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
@@ -724,25 +733,22 @@ public:
         old_phi.MakeTRef(h1, *phic1c2_ptr, true_offset[0]);
         old_c1 .MakeTRef(h1, *phic1c2_ptr, true_offset[1]);
         old_c2 .MakeTRef(h1, *phic1c2_ptr, true_offset[2]);
-        old_phi.SetFromTrueVector();
+        old_phi.SetFromTrueVector(); // 下面要用到PrimalVector, 而不是TrueVector
+        old_c1 .SetFromTrueVector();
+        old_c2 .SetFromTrueVector();
 
         ParGridFunction dc1dt, dc2dt;
         dc1dt.MakeTRef(h1, dphic1c2_dt, true_offset[1]);
         dc2dt.MakeTRef(h1, dphic1c2_dt, true_offset[2]);
 
+        // 变量*_Gummel用于Gummel迭代过程中
         ParGridFunction phi_Gummel(h1), dc1dt_Gummel(h1), dc2dt_Gummel(h1);
         phi_Gummel = 0.0; dc1dt_Gummel = 0.0; dc2dt_Gummel = 0.0;
-        phi_exact.SetTime(t);
+        phi_exact.SetTime(t); // t在ODE里面已经变成下一个时刻了(要求解的时刻)
         dc1dt_exact.SetTime(t);
         dc2dt_exact.SetTime(t);
-        old_phi.ProjectBdrCoefficient(phi_exact, ess_bdr);
-        phi_Gummel.ProjectBdrCoefficient(phi_exact, ess_bdr);
-        dc1dt.ProjectBdrCoefficient(dc1dt_exact, ess_bdr);
-        dc1dt_Gummel.ProjectBdrCoefficient(dc1dt_exact, ess_bdr);
-        dc2dt.ProjectBdrCoefficient(dc2dt_exact, ess_bdr);
-        dc2dt_Gummel.ProjectBdrCoefficient(dc2dt_exact, ess_bdr);
 
-        Vector diff(true_size);
+        ParGridFunction diff(h1);
         bool last_gummel_step = false;
         for (int gummel_step=1; !last_gummel_step; ++gummel_step)
         {
@@ -756,11 +762,12 @@ public:
             buildb1();
             buildb2();
             b1->AddMult(old_c1, *l0, 1.0);    // l0 = l0 + b1 c1
-            b1->AddMult(dc1dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + dt b1 dc1dt
-            b2->AddMult(old_c2, *l0, 1.0);    // l0 = l0 + b1 c1 + dt b1 dc1dt + b2 c2
-            b2->AddMult(dc2dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + dt b1 dc1dt + b2 c2 + dt b2 dc2dt
+            b2->AddMult(old_c2, *l0, 1.0);    // l0 = l0 + b1 c1 + b2 c2
+            b1->AddMult(dc1dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt
+            b2->AddMult(dc2dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
 
             builda0();
+            phi_Gummel.ProjectBdrCoefficient(phi_exact, ess_bdr);
             a0->FormLinearSystem(ess_tdof_list, phi_Gummel, *l0, *A0, *temp_x0, *temp_b0);
 
             PetscLinearSolver* poisson_solver = new PetscLinearSolver(*A0, false, "phi_");
@@ -771,8 +778,8 @@ public:
 
             diff = 0.0;
             diff += phi_Gummel;
-            diff -= old_phi;
-            double tol = diff.Norml2() / phi_Gummel.Norml2();
+            diff -= old_phi; // 用到的是old_phi的PrimalVector
+            double tol = diff.ComputeL2Error(zero) / phi_Gummel.ComputeL2Error(zero);
             old_phi = phi_Gummel; // 算完本次Gummel迭代的tol就可以更新phi_Gummel
             if (myid == 0) {
                 cout << "Gummel step: " << gummel_step << ", Relative Tol: " << tol << endl;
@@ -783,6 +790,7 @@ public:
 
             // 求解 NP1
             ParLinearForm *l1 = new ParLinearForm(h1);
+            // (f1, v1)
             f1_analytic.SetTime(t);
             l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
             l1->Assemble();
@@ -791,6 +799,7 @@ public:
             a1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1
 
             buildm1_dta1(dt, phi_Gummel);
+            dc1dt_Gummel.ProjectBdrCoefficient(dc1dt_exact, ess_bdr);
             m1_dta1->FormLinearSystem(ess_tdof_list, dc1dt_Gummel, *l1, *M1_dtA1, *temp_x1, *temp_b1);
 
             PetscLinearSolver* np1_solver = new PetscLinearSolver(*M1_dtA1, false, "np1_");
@@ -799,8 +808,9 @@ public:
             delete l1;
             delete np1_solver;
 
-            // 求解 NP1
+            // 求解 NP2
             ParLinearForm *l2 = new ParLinearForm(h1);
+            // (f2, v2)
             f2_analytic.SetTime(t);
             l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
             l2->Assemble();
@@ -809,6 +819,7 @@ public:
             a2->AddMult(old_c2, *l2, -1.0); // l2 = l2 - a2 c2
 
             buildm2_dta2(dt, phi_Gummel);
+            dc2dt_Gummel.ProjectBdrCoefficient(dc2dt_exact, ess_bdr);
             m2_dta2->FormLinearSystem(ess_tdof_list, dc2dt_Gummel, *l2, *M2_dtA2, *temp_x2, *temp_b2);
 
             PetscLinearSolver* np2_solver = new PetscLinearSolver(*M2_dtA2, false, "np2_");
@@ -817,6 +828,15 @@ public:
             delete l2;
             delete np2_solver;
         }
+
+        // 用最终Gummel迭代的解更新要求解的3个未知量
+        old_phi = phi_Gummel;
+        dc1dt = dc1dt_Gummel;
+        dc2dt = dc2dt_Gummel;
+        // 而我们要返回的TrueVector, 而不是PrimalVector
+        old_phi.SetTrueVector();
+        dc1dt  .SetTrueVector();
+        dc2dt  .SetTrueVector();
     }
 };
 class PNP_Box_Gummel_CG_TimeDependent_Solver1
