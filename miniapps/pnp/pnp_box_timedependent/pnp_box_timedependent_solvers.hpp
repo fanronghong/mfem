@@ -781,7 +781,7 @@ public:
             diff -= old_phi; // 用到的是old_phi的PrimalVector
             double tol = diff.ComputeL2Error(zero) / phi_Gummel.ComputeL2Error(zero);
             old_phi = phi_Gummel; // 算完本次Gummel迭代的tol就可以更新phi_Gummel
-            if (myid == 0) {
+            if (myid == 0 && verbose >= 2) {
                 cout << "Gummel step: " << gummel_step << ", Relative Tol: " << tol << endl;
             }
             if (tol < Gummel_rel_tol) { // Gummel迭代停止
