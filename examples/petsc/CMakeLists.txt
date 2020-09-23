@@ -23,9 +23,9 @@ if (MFEM_USE_MPI)
     ex9p.cpp
     ex10p.cpp
 
-    ts_tutorial_ex1.cpp
-    ts_tutorial_ex2.cpp
-    ts_tutorial_ex3.cpp
+#    ts_tutorial_ex1.cpp
+#    ts_tutorial_ex2.cpp
+#    ts_tutorial_ex3.cpp
     )
   list(APPEND PETSC_RC_FILES
     rc_ex1p
