@@ -536,10 +536,15 @@ public:
                 cout << "Mesh size: " << mesh_size << endl;
             }
         }
+        // 时间离散误差加上空间离散误差: error = c1 dt + c2 h^2
+        // 如果收敛, 向前向后Euler格式都是1阶, 下面算空间L^2误差范数
+        if(ComputeConvergenceRate) {
+            t_stepsize = mesh_size * mesh_size;
+        }
         if (myid == 0) {
             cout << "\n======> ";
             cout << Discretize << p_order << ", " << Linearize << ", " << mesh_file << ", refine times: " << refine_times << ", mesh size: " << mesh_size << '\n'
-                 << ", " << options_src << '\n'
+                 << options_src << ", DOFs: " << h1->GlobalTrueVSize() * 3<< ", Cores: " << num_procs << '\n'
                  << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" \
                                                                        : "wrong type")) << ", " << "time step: " << t_stepsize
                  << endl;
@@ -549,11 +554,6 @@ public:
         chrono.Clear();
         chrono.Start();
 
-        // 时间离散误差加上空间离散误差: error = c1 dt + c2 h^2
-        // 如果收敛, 向前向后Euler格式都是1阶, 下面算空间L^2误差范数
-        if(ComputeConvergenceRate) {
-            t_stepsize = mesh_size * mesh_size;
-        }
         bool last_step = false;
         for (int ti=1; !last_step; ti++)
         {
