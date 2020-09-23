@@ -36,6 +36,7 @@ class ConvergenceStudy
 {
 private:
    // counters for solutions/derivatives
+   // counter应该表示的是第几次网格加密?
    int counter=0;
    int dcounter=0;
    int fcounter=0;

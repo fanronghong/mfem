@@ -11,7 +11,7 @@
 
 # Use the MFEM build directory
 MFEM_DIR ?= ../..
-MFEM_BUILD_DIR ?= ../..
+MFEM_BUILD_DIR ?= ../../build_pnp
 SRC = $(if $(MFEM_DIR:../../..=),$(MFEM_DIR)/tests/convergence/,)
 CONFIG_MK = $(MFEM_BUILD_DIR)/config/config.mk
 
