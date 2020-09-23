@@ -42,10 +42,10 @@ int main(int argc, char *argv[])
 
     MFEMInitializePetsc(NULL, NULL, options_src, NULL);
 
+    Array<double> phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes;
     if (ComputeConvergenceRate)
     {
         int temp_refine_times = refine_times; // save refine_times temporarily
-        Array<double> phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes;
         for (int i=0; i<refine_times+1; ++i)
         {
             Mesh mesh(mesh_file);
@@ -65,7 +65,8 @@ int main(int argc, char *argv[])
             refine_times = temp_refine_times; // reset real refine_times
         }
 
-        if (myid == 0) {
+        if (myid == 0)
+        {
             meshsizes.Print(cout << "\nMesh sizes: \n", meshsizes.Size());
 
             phi3L2errornorms.Print(cout << "\nL2 errornorms of |phi3 - phi3_h|: \n", phi3L2errornorms.Size());
@@ -77,14 +78,13 @@ int main(int argc, char *argv[])
             c2L2errornorms.Print(cout << "\nL2 errornorms of |c2 - c2_h|: \n", c2L2errornorms.Size());
             Array<double> c2rates = compute_convergence(c2L2errornorms, meshsizes);
 
-            phi3rates.Print(cout << "\nphi3 convergence rate: \n", phi3rates.Size());
-            c1rates  .Print(cout << "c1 convergence rate: \n", c1rates.Size());
-            c2rates  .Print(cout << "c2 convergence rate: \n", c2rates.Size());
+            phi3rates.Print(cout << "\nphi3 L2 convergence rate: \n", phi3rates.Size());
+            c1rates  .Print(cout << "c1 L2 convergence rate: \n", c1rates.Size());
+            c2rates  .Print(cout << "c2 L2 convergence rate: \n", c2rates.Size());
         }
     }
     else
     {
-        Array<double> phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes;
         Mesh mesh(mesh_file);
         for (int i=0; i<refine_times; i++) mesh.UniformRefinement();
 
@@ -92,10 +92,8 @@ int main(int argc, char *argv[])
         {
             if (strcmp(Discretize, "cg") == 0)
             {
-                PNP_Box_Gummel_CG_TimeDependent_Solver1* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver1(mesh, ode_type);
+                PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, ode_type);
                 solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
-//                PNP_Box_Gummel_CG_TimeDependent_ForwardEuler* solver = new PNP_Box_Gummel_CG_TimeDependent_ForwardEuler(mesh);
-//                solver->Solve();
                 delete solver;
             }
         }
