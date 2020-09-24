@@ -48,8 +48,10 @@ int main(int argc, char *argv[])
         int temp_refine_times = refine_times; // save refine_times temporarily
         for (int i=0; i<refine_times+1; ++i)
         {
-            Mesh mesh(mesh_file);
-            for (int j=0; j<i; ++j) mesh.UniformRefinement();
+            Mesh* mesh = new Mesh(mesh_file);
+            ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
+            delete mesh;
+            for (int j=0; j<i; ++j) pmesh->UniformRefinement();
 
             refine_times = i; // for cout right verbose outputs
 
@@ -57,12 +59,13 @@ int main(int argc, char *argv[])
             {
                 if (strcmp(Discretize, "cg") == 0)
                 {
-                    PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, ode_type);
+                    PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(pmesh, ode_type);
                     solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
                     delete solver;
                 }
             }
             refine_times = temp_refine_times; // reset real refine_times
+            delete pmesh;
         }
 
         if (myid == 0)
@@ -85,19 +88,21 @@ int main(int argc, char *argv[])
     }
     else
     {
-        Mesh mesh(mesh_file);
-        for (int i=0; i<refine_times; i++) mesh.UniformRefinement();
+        Mesh* mesh = new Mesh(mesh_file);
+        ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
+        delete mesh;
+        for (int i=0; i<refine_times; i++) pmesh->UniformRefinement();
 
         if (strcmp(Linearize, "gummel") == 0)
         {
             if (strcmp(Discretize, "cg") == 0)
             {
-                PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(mesh, ode_type);
+                PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(pmesh, ode_type);
                 solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
                 delete solver;
             }
         }
-
+        delete pmesh;
     }
 
     MFEMFinalizePetsc();

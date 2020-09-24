@@ -402,7 +402,6 @@ public:
 class PNP_Box_Gummel_CG_TimeDependent_Solver
 {
 private:
-    Mesh& mesh;
     ParMesh* pmesh;
     H1_FECollection* fec;
     ParFiniteElementSpace* h1;
@@ -422,18 +421,17 @@ private:
     StopWatch chrono;
 
 public:
-    PNP_Box_Gummel_CG_TimeDependent_Solver(Mesh& mesh_, int ode_solver_type): mesh(mesh_)
+    PNP_Box_Gummel_CG_TimeDependent_Solver(ParMesh* pmesh_, int ode_solver_type): pmesh(pmesh_)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
         MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
         t = t_init;
 
-        pmesh = new ParMesh(MPI_COMM_WORLD, mesh);
-        fec   = new H1_FECollection(p_order, mesh.Dimension());
+        fec   = new H1_FECollection(p_order, pmesh->Dimension());
         h1    = new ParFiniteElementSpace(pmesh, fec);
 
-        ess_bdr.SetSize(mesh.bdr_attributes.Max());
+        ess_bdr.SetSize(pmesh->bdr_attributes.Max());
         ess_bdr = 1; // 设置所有边界都是essential的
 
         phi_gf = new ParGridFunction(h1); *phi_gf = 0.0;
@@ -506,7 +504,6 @@ public:
     }
     ~PNP_Box_Gummel_CG_TimeDependent_Solver()
     {
-        delete pmesh;
         delete fec;
         delete h1;
         delete phi_gf;
@@ -531,10 +528,6 @@ public:
             }
 
             MPI_Allreduce(&max_size, &mesh_size, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-
-            if (pmesh->GetMyRank() == 0) {
-                cout << "Mesh size: " << mesh_size << endl;
-            }
         }
         // 时间离散误差加上空间离散误差: error = c1 dt + c2 h^2
         // 如果收敛, 向前向后Euler格式都是1阶, 下面算空间L^2误差范数
