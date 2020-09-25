@@ -213,6 +213,11 @@ ProductCoefficient kappa_D2(kappa_coeff, D_Cl_);
 ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl(neg, alpha2_prod_alpha3_prod_v_Cl);
 ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K(neg, alpha2_prod_alpha3_prod_v_K);
 
+ProductCoefficient sigma_D_K_v_K(sigma_coeff, D_K_prod_v_K);
+ProductCoefficient sigma_D_Cl_v_Cl(sigma_coeff, D_Cl_prod_v_Cl);
+ProductCoefficient neg_D_K_v_K(neg, D_K_prod_v_K);
+ProductCoefficient neg_D_Cl_v_Cl(neg, D_Cl_prod_v_Cl);
+
 ProductCoefficient neg_div_Adv1(neg, div_Adv1);
 ProductCoefficient neg_div_Adv2(neg, div_Adv2);
 #endif

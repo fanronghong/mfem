@@ -853,6 +853,8 @@ protected:
 public:
     DGDiffusionSymmetryIntegrator(const double s)
             : Q(NULL), MQ(NULL), sigma(s), kappa(0.0) { }
+    DGDiffusionSymmetryIntegrator(const double s, Coefficient& q)
+            : Q(&q), MQ(NULL), sigma(s), kappa(0.0) { }
     using BilinearFormIntegrator::AssembleFaceMatrix;
     virtual void AssembleFaceMatrix(const FiniteElement &el1,
                                     const FiniteElement &el2,
@@ -1115,6 +1117,8 @@ protected:
 public:
     DGDiffusionPenaltyIntegrator(const double k)
             : Q(NULL), MQ(NULL), sigma(0.0), kappa(k) { }
+    DGDiffusionPenaltyIntegrator(const double k, Coefficient& q)
+            : Q(&q), MQ(NULL), sigma(0.0), kappa(k) { }
     using BilinearFormIntegrator::AssembleFaceMatrix;
     virtual void AssembleFaceMatrix(const FiniteElement &el1,
                                     const FiniteElement &el2,
