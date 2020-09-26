@@ -63,6 +63,12 @@ int main(int argc, char *argv[])
                     solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
                     delete solver;
                 }
+                if (strcmp(Discretize, "dg") == 0)
+                {
+                    PNP_Box_Gummel_DG_TimeDependent_Solver* solver = new PNP_Box_Gummel_DG_TimeDependent_Solver(pmesh, ode_type);
+                    solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+                    delete solver;
+                }
             }
             refine_times = temp_refine_times; // reset real refine_times
             delete pmesh;
@@ -98,6 +104,12 @@ int main(int argc, char *argv[])
             if (strcmp(Discretize, "cg") == 0)
             {
                 PNP_Box_Gummel_CG_TimeDependent_Solver* solver = new PNP_Box_Gummel_CG_TimeDependent_Solver(pmesh, ode_type);
+                solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
+                delete solver;
+            }
+            if (strcmp(Discretize, "dg") == 0)
+            {
+                PNP_Box_Gummel_DG_TimeDependent_Solver* solver = new PNP_Box_Gummel_DG_TimeDependent_Solver(pmesh, ode_type);
                 solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes);
                 delete solver;
             }

@@ -10,11 +10,11 @@ using namespace mfem;
 
 const char* mesh_file       = "./4_4_4_translate.msh";
 int p_order                 = 1; //有限元基函数的多项式次数
-int refine_times            = 1;
+int refine_times            = 0;
 const char* Linearize       = "gummel"; // newton, gummel
 bool zero_initial           = true; // 非线性迭代的初值是否为0
 double initTol              = 1e-3; // 为得到非线性迭代的初值所需Gummel迭代
-const char* Discretize      = "cg"; // cg, dg
+const char* Discretize      = "dg"; // cg, dg
 const char* AdvecStable     = "none"; // none, eafe, supg
 const char* options_src     = "./pnp_box_petsc_opts";
 bool ComputeConvergenceRate = false; // 利用解析解计算误差阶
@@ -24,7 +24,7 @@ bool paraview               = false;
 const char* output          = NULL;
 int max_newton              = 20;
 double relax                = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
-int ode_type                = 11; // 1: backward Euler; 11: forward Euler
+int ode_type                = 1; // 1: backward Euler; 11: forward Euler
 double t_init               = 0.0; // 初始时间
 double t_stepsize           = 0.05;// 时间步长
 double t_final              = 0.5; // 最后时间
@@ -214,7 +214,9 @@ ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl(neg, alpha2_prod_alpha3_prod
 ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K(neg, alpha2_prod_alpha3_prod_v_K);
 
 ProductCoefficient sigma_D_K_v_K(sigma_coeff, D_K_prod_v_K);
+ProductCoefficient neg_sigma_D_K_v_K(neg, sigma_D_K_v_K);
 ProductCoefficient sigma_D_Cl_v_Cl(sigma_coeff, D_Cl_prod_v_Cl);
+ProductCoefficient neg_sigma_D_Cl_v_Cl(neg, sigma_D_Cl_v_Cl);
 ProductCoefficient neg_D_K_v_K(neg, D_K_prod_v_K);
 ProductCoefficient neg_D_Cl_v_Cl(neg, D_Cl_prod_v_Cl);
 

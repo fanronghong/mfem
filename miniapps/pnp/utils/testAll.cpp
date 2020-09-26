@@ -16,6 +16,8 @@
 #include "StdFunctionCoefficient.hpp"
 #include "SUPG_Integrator.hpp"
 
+#include "DGDiffusion_Edge_Symmetry_Penalty.hpp"
+
 #include <iostream>
 using namespace std;
 
