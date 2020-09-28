@@ -13,6 +13,7 @@
 #include "../utils/LocalConservation.hpp"
 //#include "../utils/python_utils.hpp" // not work in computer cluster
 #include "../utils/DGDiffusion_Edge_Symmetry_Penalty.hpp"
+#include "../utils/DGEdgeIntegrator.hpp"
 
 
 /* Poisson Equation:
@@ -796,10 +797,16 @@ public:
         e1->AddBdrFaceIntegrator(new DGDiffusion_Edge(D_K_), ess_bdr);
 
         // -<{D1 z1 c1 grad(phi)}, [v1]>
-        e1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, phi));
-        e1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, phi), ess_bdr);
+//        e1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, phi));
+//        e1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, phi), ess_bdr);
+        e1->AddInteriorFaceIntegrator(new DGEdgeIntegrator1(neg_D_K_v_K, phi));
+        e1->AddBdrFaceIntegrator(new DGEdgeIntegrator1(neg_D_K_v_K, phi), ess_bdr);
+        MPI_Barrier(MPI_COMM_WORLD);
+        cout << "before assemble e1()." << endl;
 
         e1->Assemble(skip_zero_entries);
+        MPI_Barrier(MPI_COMM_WORLD);
+        cout << "1_rank" << myid << endl;
     }
     // -<{D2 (grad(c2) + z2 c2 grad(phi))}, [v2]>, given phi
     void builde2(ParGridFunction& phi) const
@@ -919,15 +926,22 @@ public:
         if (abs(sigma - 0.0) > 1E-10) // 添加对称项
         {
             a0_e0_s0_p0->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(epsilon_water, sigma));
-            a0_e0_s0_p0->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(epsilon_water, sigma), ess_bdr);
+            if (symmetry_with_boundary) {
+                a0_e0_s0_p0->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(epsilon_water, sigma), ess_bdr);
+            }
         }
 
         // copy from p0
         if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
         {
             a0_e0_s0_p0->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(kappa));
-            a0_e0_s0_p0->AddBdrFaceIntegrator(new DGDiffusion_Penalty(kappa), ess_bdr);
+            if (penalty_with_boundary) {
+                a0_e0_s0_p0->AddBdrFaceIntegrator(new DGDiffusion_Penalty(kappa), ess_bdr);
+            }
         }
+
+        // weak Dirichlet boundary condition
+        a0_e0_s0_p0->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator, ess_bdr);
 
         a0_e0_s0_p0->Assemble(skip_zero_entries);
     }
@@ -935,6 +949,9 @@ public:
     void buildm1_dta1_dte1_dts1_dtp1(double dt, ParGridFunction& phi) const
     {
         if (m1_dta1_dte1_dts1_dtp1 != NULL) { delete m1_dta1_dte1_dts1_dtp1; }
+
+        ProductCoefficient dt_one(-1.0 * dt, one);
+        ProductCoefficient dt_sigma_D_K_v_K(-1.0 * dt, sigma_D_K_v_K);
 
         m1_dta1_dte1_dts1_dtp1 = new ParBilinearForm(fes);
 
@@ -957,20 +974,25 @@ public:
         // copy from s1, multiply -dt
         if (abs(sigma - 0.0) > 1E-10) // 添加对称项
         {
-            ProductCoefficient dt_one(-1.0 * dt, one);
-            ProductCoefficient dt_sigma_D_K_v_K(-1.0 * dt, sigma_D_K_v_K);
             m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(dt_one, phi));
-            m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(dt_sigma_D_K_v_K, phi), ess_bdr);
             m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(D_K_, -1.0 * dt * sigma));
-            m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_K_, -1.0 * dt * sigma), ess_bdr);
+            if (symmetry_with_boundary) {
+                m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(dt_sigma_D_K_v_K, phi), ess_bdr);
+                m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_K_, -1.0 * dt * sigma), ess_bdr);
+            }
         }
 
         // copy from p1, multiply -dt
         if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
         {
             m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(-1.0 * dt * kappa));
-            m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGDiffusion_Penalty(-1.0 * dt * kappa), ess_bdr);
+            if (penalty_with_boundary) {
+                m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGDiffusion_Penalty(-1.0 * dt * kappa), ess_bdr);
+            }
         }
+
+        // weak Dirichlet boundary condition
+        m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(c1_exact), ess_bdr);
 
         m1_dta1_dte1_dts1_dtp1->Assemble(skip_zero_entries);
     }
@@ -978,6 +1000,9 @@ public:
     void buildm2_dta2_dte2_dts2_dtp2(double dt, ParGridFunction& phi) const
     {
         if (m2_dta2_dte2_dts2_dtp2 != NULL) { delete m2_dta2_dte2_dts2_dtp2; }
+
+        ProductCoefficient dt_one(-1.0 * dt, one);
+        ProductCoefficient dt_sigma_D_Cl_v_Cl(-1.0 * dt, sigma_D_Cl_v_Cl);
 
         m2_dta2_dte2_dts2_dtp2 = new ParBilinearForm(fes);
 
@@ -1000,24 +1025,28 @@ public:
         // copy from s2, multiply -dt
         if (abs(sigma - 0.0) > 1E-10) // 添加对称项
         {
-            ProductCoefficient dt_one(-1.0 * dt, one);
-            ProductCoefficient dt_sigma_D_Cl_v_Cl(-1.0 * dt, sigma_D_Cl_v_Cl);
             m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(dt_one, phi));
-            m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(dt_sigma_D_Cl_v_Cl, phi), ess_bdr);
             m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, -1.0 * dt * sigma));
-            m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, -1.0 * dt * sigma), ess_bdr);
+            if (symmetry_with_boundary) {
+                m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(dt_sigma_D_Cl_v_Cl, phi), ess_bdr);
+                m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, -1.0 * dt * sigma), ess_bdr);
+            }
         }
 
         // copy from p2, multiply -dt
         if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
         {
             m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(-1.0 * dt * kappa));
-            m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGDiffusion_Penalty(-1.0 * dt * kappa), ess_bdr);
+            if (penalty_with_boundary) {
+                m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGDiffusion_Penalty(-1.0 * dt * kappa), ess_bdr);
+            }
         }
+
+        // weak Dirichlet boundary condition
+        m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(c2_exact), ess_bdr);
 
         m2_dta2_dte2_dts2_dtp2->Assemble(skip_zero_entries);
     }
-
 
     virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
     {
@@ -1058,12 +1087,14 @@ public:
             ParLinearForm *l0 = new ParLinearForm(fes);
             // b0: (f0, psi)
             l0->AddDomainIntegrator(new DomainLFIntegrator(f0_analytic));
-            if (abs(sigma - 0.0) > 1E-10) // 添加对称项
+            // weak Dirichlet boundary condition
+            l0->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(phi_exact), ess_bdr);
+            if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
                 // g0: sigma <phi_D, epsilon_s grad(psi).n>
                 l0->AddBdrFaceIntegrator(new DGDirichletLF_Symmetry(phi_exact, epsilon_water, sigma), ess_bdr);
             }
-            if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
+            if (abs(kappa - 0.0) > 1E-10 && penalty_with_boundary) // 添加惩罚项
             {
                 // q0: kappa <{h^{-1}} phi_D, psi>
                 l0->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(phi_exact, kappa), ess_bdr);
@@ -1107,20 +1138,26 @@ public:
             ParLinearForm *l1 = new ParLinearForm(fes);
             // b1: (f1, v1)
             l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
-            if (abs(sigma - 0.0) > 1E-10) // 添加对称项
+            if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
                 // -g1: -sigma <c1_D, D1(grad(v1) + z1 v1 grad(phi)).n>
                 l1->AddBdrFaceIntegrator(new DGDirichletLF_Symmetry(c1_exact, D_K_, -1.0 * sigma), ess_bdr);
                 l1->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&neg_sigma_D_K_v_K, &c1_exact, &old_phi), ess_bdr);
             }
-            if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
+            if (abs(kappa - 0.0) > 1E-10 && penalty_with_boundary) // 添加惩罚项
             {
                 // -q1: -kappa <{h^{-1}} c1_D, v1>
                 l1->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(c1_exact, -1.0 * kappa), ess_bdr);
             }
+            // weak Dirichlet boundary condition
+            l1->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(c1_exact), ess_bdr);
             l1->Assemble();
+            MPI_Barrier(MPI_COMM_WORLD);
+            cout << "after assemble l1()." << endl;
 
             builda1(phi_Gummel);
+            MPI_Barrier(MPI_COMM_WORLD);
+            cout << "after build a1()." << endl;
             builde1(phi_Gummel);
             builds1(phi_Gummel);
             buildp1();
@@ -1147,17 +1184,19 @@ public:
             ParLinearForm *l2 = new ParLinearForm(fes);
             // b2: (f2, v2)
             l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
-            if (abs(sigma - 0.0) > 1E-10) // 添加对称项
+            if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
                 // -g2: -sigma <c2_D, D2(grad(v2) + z2 v2 grad(phi)).n>
                 l2->AddBdrFaceIntegrator(new DGDirichletLF_Symmetry(c2_exact, D_Cl_, -1.0 * sigma), ess_bdr);
                 l2->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&neg_sigma_D_Cl_v_Cl, &c2_exact, &old_phi), ess_bdr);
             }
-            if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
+            if (abs(kappa - 0.0) > 1E-10 && penalty_with_boundary) // 添加惩罚项
             {
                 // -q2: -kappa <{h^{-1}} c2_D, v2>
                 l2->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(c2_exact, -1.0 * kappa), ess_bdr);
             }
+            // weak Dirichlet boundary condition
+            l2->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(c2_exact), ess_bdr);
             l2->Assemble();
 
             builda2(phi_Gummel);

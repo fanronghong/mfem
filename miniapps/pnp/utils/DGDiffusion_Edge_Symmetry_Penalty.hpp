@@ -1,9 +1,11 @@
-//
-// Created by fan on 2020/9/25.
-//
 
 #ifndef MFEM_DGDIFFUSION_EDGE_SYMMETRY_PENALTY_HPP
 #define MFEM_DGDIFFUSION_EDGE_SYMMETRY_PENALTY_HPP
+
+#include <iostream>
+#include "mfem.hpp"
+using namespace std;
+using namespace mfem;
 
 
 /** Integrator for the DG form:
@@ -1053,5 +1055,318 @@ public:
     }
 };
 
+
+/* 由上面的 DGDirichletLF_Symmetry 改变而来: 把sigma始终设为1.0
+ *
+ *     < u_D, (Q grad(v)).n >, 只在Dirichlet边界积分
+ *
+ * 所以理论上来讲不会有bug
+ * */
+class DGWeakDirichlet_LFIntegrator : public LinearFormIntegrator
+{
+protected:
+    Coefficient *uD, *Q;
+    MatrixCoefficient *MQ;
+    double sigma, kappa;
+
+    // these are not thread-safe!
+    Vector shape, dshape_dn, nor, nh, ni;
+    DenseMatrix dshape, mq, adjJ;
+
+public:
+    // 只修改一个地方: 把下面三个构造函数的参数sigma设为1.0
+    DGWeakDirichlet_LFIntegrator(Coefficient &u)
+            : uD(&u), Q(NULL), MQ(NULL), sigma(1.0), kappa(0.0) { }
+    DGWeakDirichlet_LFIntegrator(Coefficient &u, Coefficient &q)
+            : uD(&u), Q(&q), MQ(NULL), sigma(1.0), kappa(0.0) { }
+    DGWeakDirichlet_LFIntegrator(Coefficient &u, MatrixCoefficient &q)
+            : uD(&u), Q(NULL), MQ(&q), sigma(1.0), kappa(0.0) { }
+
+    virtual void AssembleRHSElementVect(const FiniteElement &el,
+                                        ElementTransformation &Tr,
+                                        Vector &elvect)
+    {
+        mfem_error("DGDirichletLFIntegrator::AssembleRHSElementVect");
+    }
+
+    virtual void AssembleRHSElementVect(const FiniteElement &el,
+                                        FaceElementTransformations &Tr,
+                                        Vector &elvect)
+
+    {
+        int dim, ndof;
+        bool kappa_is_nonzero = (kappa != 0.);
+        double w;
+
+        dim = el.GetDim();
+        ndof = el.GetDof();
+
+        nor.SetSize(dim);
+        nh.SetSize(dim);
+        ni.SetSize(dim);
+        adjJ.SetSize(dim);
+        if (MQ)
+        {
+            mq.SetSize(dim);
+        }
+
+        shape.SetSize(ndof);
+        dshape.SetSize(ndof, dim);
+        dshape_dn.SetSize(ndof);
+
+        elvect.SetSize(ndof);
+        elvect = 0.0;
+
+        const IntegrationRule *ir = IntRule;
+        if (ir == NULL)
+        {
+            // a simple choice for the integration order; is this OK?
+            int order = 2*el.GetOrder();
+            ir = &IntRules.Get(Tr.GetGeometryType(), order);
+        }
+
+        for (int p = 0; p < ir->GetNPoints(); p++)
+        {
+            const IntegrationPoint &ip = ir->IntPoint(p);
+
+            // Set the integration point in the face and the neighboring element
+            Tr.SetAllIntPoints(&ip);
+
+            // Access the neighboring element's integration point
+            const IntegrationPoint &eip = Tr.GetElement1IntPoint();
+
+            if (dim == 1)
+            {
+                nor(0) = 2*eip.x - 1.0;
+            }
+            else
+            {
+                CalcOrtho(Tr.Jacobian(), nor);
+            }
+
+            el.CalcShape(eip, shape);
+            el.CalcDShape(eip, dshape);
+
+            // compute uD through the face transformation
+            w = ip.weight * uD->Eval(Tr, ip) / Tr.Elem1->Weight();
+            if (!MQ)
+            {
+                if (Q)
+                {
+                    w *= Q->Eval(*Tr.Elem1, eip);
+                }
+                ni.Set(w, nor);
+            }
+            else
+            {
+                nh.Set(w, nor);
+                MQ->Eval(mq, *Tr.Elem1, eip);
+                mq.MultTranspose(nh, ni);
+            }
+            CalcAdjugate(Tr.Elem1->Jacobian(), adjJ);
+            adjJ.Mult(ni, nh);
+
+            dshape.Mult(nh, dshape_dn);
+            elvect.Add(sigma, dshape_dn);
+
+            if (kappa_is_nonzero)
+            {
+                elvect.Add(kappa*(ni*nor), shape);
+            }
+        }
+    }
+};
+/* 参考上面的 DGWeakDirichlet_LFIntegrator 修改而来: 只要替换u_D为u即可
+ *
+ *     <u, (Q grad(v)).n >, 只在Dirichlet边界积分
+ *
+ * */
+class DGWeakDirichlet_BLFIntegrator : public BilinearFormIntegrator
+{
+protected:
+    Coefficient *Q;
+    DenseMatrix dshape1, adjJ;
+    Vector nor, shape1, work1, work2;
+
+public:
+    DGWeakDirichlet_BLFIntegrator() : Q(NULL) {}
+    DGWeakDirichlet_BLFIntegrator(Coefficient &q) : Q(&q) {}
+    ~DGWeakDirichlet_BLFIntegrator() { }
+
+    using BilinearFormIntegrator::AssembleFaceMatrix;
+    virtual void AssembleFaceMatrix(const FiniteElement &el1,
+                                    const FiniteElement &el2,
+                                    FaceElementTransformations &Trans,
+                                    DenseMatrix &elmat)
+    {
+        int dim, ndof1; // 不应该出现el2, 因为是对边界积分
+
+        dim = el1.GetDim();
+        nor.SetSize(dim);
+        work1.SetSize(dim);
+
+        ndof1 = el1.GetDof();
+        shape1.SetSize(ndof1);
+        dshape1.SetSize(ndof1, dim);
+        adjJ.SetSize(dim);
+        work2.SetSize(ndof1);
+
+        elmat.SetSize(ndof1);
+        elmat = 0.0;
+
+        const IntegrationRule *ir = IntRule; // ref: DGTraceIntegrator::AssembleFaceMatrix
+        if (ir == NULL) {
+            int order = Trans.Elem1->OrderW() + 2 * el1.GetOrder();;
+            // Assuming order(u)==order(mesh)
+
+            if (el1.Space() == FunctionSpace::Pk) {
+                order++;
+            }
+            ir = &IntRules.Get(Trans.FaceGeom, order); //得到face上的积分规则(里面包含积分点)
+        }
+
+        for (int p=0; p<ir->GetNPoints(); ++p)
+        {
+            const IntegrationPoint& ip = ir->IntPoint(p);
+
+            // Set the integration point in the face and the neighboring elements
+            Trans.SetAllIntPoints(&ip);
+
+            const IntegrationPoint &eip1 = Trans.GetElement1IntPoint();
+
+            el1.CalcShape(eip1, shape1);
+            el1.CalcDShape(eip1, dshape1);
+            CalcAdjugate(Trans.Elem1->Jacobian(), adjJ);
+
+            if (dim == 1) nor(0) = 2*eip1.x - 1.0;
+            else CalcOrtho(Trans.Face->Jacobian(), nor); // 计算Face的法向量
+
+            double val = ip.weight / Trans.Elem1->Weight();
+            if (Q) {
+                val *= Q->Eval(*Trans.Elem1, eip1);
+            }
+
+            adjJ.Mult(nor, work1);
+            dshape1.Mult(work1, work2);
+
+            for (int i=0; i<ndof1; ++i)
+                for (int j=0; j<ndof1; ++j)
+                    elmat(i, j) += val * work2(i) * shape1(j);
+        }
+    }
+};
+
+
+namespace _DGDiffusion_Edge_Symmetry_Penalty
+{
+    double sin_cfun(const Vector& x)
+    {
+        return sin(x[0]) * sin(x[1]); // sin(x) * sin(y)
+    }
+
+    // 同时测试 DGDiffusion_Edge, DGDiffusion_Symmetry, DGDiffusion_Penalty 三者
+    void Test_DGDiffusion_Edge_Symmetry_Penalty_1()
+    {
+        Mesh* mesh = new Mesh(50, 50, Element::TRIANGLE, true, 1.0, 1.0);
+
+        DG_FECollection fec(1, mesh->Dimension());
+        FiniteElementSpace fes(mesh, &fec);
+
+        FunctionCoefficient sin_coeff(sin_cfun);
+
+        GridFunction rand_gf(&fes);
+        for (int i=0; i<fes.GetNDofs(); ++i)
+        {
+            rand_gf[i] = rand() % 10;
+        }
+
+        GridFunctionCoefficient rand_coeff(&rand_gf);
+        double sigma = 3.14159268888, kappa=0.3216549877777;
+        {
+            BilinearForm blf1(&fes);
+            blf1.AddInteriorFaceIntegrator(new DGDiffusion_Edge(rand_coeff));
+            blf1.AddBdrFaceIntegrator(new DGDiffusion_Edge(rand_coeff));
+            blf1.AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(rand_coeff, sigma));
+            blf1.AddBdrFaceIntegrator(new DGDiffusion_Symmetry(rand_coeff, sigma));
+            blf1.AddInteriorFaceIntegrator(new DGDiffusion_Penalty(rand_coeff, kappa));
+            blf1.AddBdrFaceIntegrator(new DGDiffusion_Penalty(rand_coeff, kappa));
+            blf1.Assemble();
+
+            BilinearForm blf2(&fes);
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, sigma, kappa));
+            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, sigma, kappa));
+            blf2.Assemble();
+
+            Vector worker1(fes.GetVSize()), worker2(fes.GetVSize());
+            blf1.Mult(rand_gf, worker1);
+            blf2.Mult(rand_gf, worker2);
+
+//            worker1.Print(cout << "worker1:\n", 1);
+//            worker2.Print(cout << "worker2:\n", 1);
+            worker1 -= worker2;
+
+            double TOL = 1E-10;
+            for (int i=0; i<fes.GetVSize(); ++i)
+            {
+                if (abs(worker1[i]) > TOL)
+                MFEM_ABORT("Error in DGDiffusion_Edge_Symmetry_Penalty");
+            }
+        }
+    }
+
+    // 对比测试 class DGWeakDirichlet_LFIntegrator 和 class DGWeakDirichlet_BLFIntegrator
+    void Test_DGWeakDirichlet_BLFIntegrator_1()
+    {
+        Mesh* mesh = new Mesh(50, 50, Element::TRIANGLE, true, 1.0, 1.0);
+
+        DG_FECollection fec(1, mesh->Dimension());
+        FiniteElementSpace fes(mesh, &fec);
+
+        FunctionCoefficient sin_coeff(sin_cfun);
+
+        GridFunction rand_gf(&fes);
+        for (int i=0; i<fes.GetNDofs(); ++i)
+        {
+            rand_gf[i] = rand() % 10;
+        }
+
+        GridFunctionCoefficient rand_coeff(&rand_gf);
+
+        {
+            LinearForm lf(&fes);
+            lf.AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(rand_coeff, rand_coeff));
+            lf.Assemble();
+
+            BilinearForm blf(&fes);
+            blf.AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(rand_coeff));
+            blf.Assemble();
+
+            Vector worker1(fes.GetVSize());
+            blf.Mult(rand_gf, worker1);
+
+            worker1 -= lf;
+
+            double TOL = 1E-10;
+            for (int i=0; i<fes.GetVSize(); ++i)
+            {
+                if (abs(worker1[i]) > TOL)
+                    MFEM_ABORT("Error in DGWeakDirichlet_BLFIntegrator");
+            }
+        }
+    }
+
+}
+
+
+void Test_DGDiffusion_Edge_Symmetry_Penalty()
+{
+    using namespace _DGDiffusion_Edge_Symmetry_Penalty;
+
+    Test_DGDiffusion_Edge_Symmetry_Penalty_1();
+
+    Test_DGWeakDirichlet_BLFIntegrator_1();
+
+    /* ---------- 完成本文件中所有类的全部测试 ------------ */
+};
 
 #endif //MFEM_DGDIFFUSION_EDGE_SYMMETRY_PENALTY_HPP

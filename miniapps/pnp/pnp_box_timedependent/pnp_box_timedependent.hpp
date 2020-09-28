@@ -31,6 +31,10 @@ double t_final              = 0.5; // 最后时间
 const int skip_zero_entries = 0; // 为了保证某些矩阵的sparsity pattern一致
 int mpi_debug               = 1;
 int verbose                 = 2; // 数字越大输出越多: 0, 1,2
+double sigma                = -1.0; // symmetric parameter for DG
+bool symmetry_with_boundary = false;
+double kappa                = 10; // penalty parameter for DG
+bool penalty_with_boundary  = true;
 
 const int bottom_attr       = 1;
 const int top_attr          = 6;
@@ -42,8 +46,6 @@ const int right_attr        = 3;
 const int Gummel_max_iters  = 50;
 const double Gummel_rel_tol = 1e-10;
 const double TOL            = 1e-20;
-const double sigma = -1.0; // symmetric parameter for DG
-const double kappa = 20; // penalty parameter for DG
 
 /* 可以定义如下模型参数: 前三个宏定义参数在其他头文件定义
  * Angstrom_SCALE: 埃米尺度
