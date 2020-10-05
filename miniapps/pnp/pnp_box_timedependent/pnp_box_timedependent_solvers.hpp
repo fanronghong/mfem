@@ -659,6 +659,11 @@ public:
         h1_fec = new H1_FECollection(p_order, fes->GetMesh()->Dimension());
         h1 = new ParFiniteElementSpace(fes->GetParMesh(), h1_fec);
 
+        MPI_Barrier(MPI_COMM_WORLD);
+        cout << "Rank: " << myid << ", fes->GetNE(): " << fes->GetNE() << endl;
+        MPI_Barrier(MPI_COMM_WORLD);
+        PetscSleep(1);
+
         A0_E0_S0_P0 = new HypreParMatrix;
         M1_dtA1_dtE1_dtS1_dtP1 = new HypreParMatrix;
         M2_dtA2_dtE2_dtS2_dtP2 = new HypreParMatrix;
@@ -793,20 +798,20 @@ public:
 
         e1 = new ParBilinearForm(fes);
         // -<{D1 grad(c1)}, [v1]>
-        e1->AddInteriorFaceIntegrator(new DGDiffusion_Edge(D_K_));
-        e1->AddBdrFaceIntegrator(new DGDiffusion_Edge(D_K_), ess_bdr);
+//        e1->AddInteriorFaceIntegrator(new DGDiffusion_Edge(D_K_));
+//        e1->AddBdrFaceIntegrator(new DGDiffusion_Edge(D_K_), ess_bdr);
 
         // -<{D1 z1 c1 grad(phi)}, [v1]>
-//        e1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, phi));
-//        e1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_K_v_K, phi), ess_bdr);
         e1->AddInteriorFaceIntegrator(new DGEdgeIntegrator1(neg_D_K_v_K, phi));
-        e1->AddBdrFaceIntegrator(new DGEdgeIntegrator1(neg_D_K_v_K, phi), ess_bdr);
+//        e1->AddBdrFaceIntegrator(new DGEdgeIntegrator1(neg_D_K_v_K, phi), ess_bdr);
+
         MPI_Barrier(MPI_COMM_WORLD);
         cout << "before assemble e1()." << endl;
-
+//        int gdb_break=1;
+//        while (gdb_break) {}
         e1->Assemble(skip_zero_entries);
         MPI_Barrier(MPI_COMM_WORLD);
-        cout << "1_rank" << myid << endl;
+        cout << "after assemble e1()." << endl;
     }
     // -<{D2 (grad(c2) + z2 c2 grad(phi))}, [v2]>, given phi
     void builde2(ParGridFunction& phi) const
@@ -1152,12 +1157,8 @@ public:
             // weak Dirichlet boundary condition
             l1->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(c1_exact), ess_bdr);
             l1->Assemble();
-            MPI_Barrier(MPI_COMM_WORLD);
-            cout << "after assemble l1()." << endl;
 
             builda1(phi_Gummel);
-            MPI_Barrier(MPI_COMM_WORLD);
-            cout << "after build a1()." << endl;
             builde1(phi_Gummel);
             builds1(phi_Gummel);
             buildp1();

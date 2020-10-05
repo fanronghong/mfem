@@ -214,6 +214,8 @@ int main(int argc, char *argv[]) {
 
     // Create H1 finite element space
     auto fec = new H1_FECollection(order, mesh->Dimension());
+    auto fes = new FiniteElementSpace(mesh, fec);
+    fes->GetEssentialTrueDofs()
 
     TDHeatOperator tdheat_op(*mesh, 1);
     GridFunction u = tdheat_op.GetTempGF();

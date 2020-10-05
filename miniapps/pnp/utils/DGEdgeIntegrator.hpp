@@ -17,15 +17,16 @@ class DGEdgeIntegrator1: public BilinearFormIntegrator
 {
 protected:
     Coefficient *Q;
+    ParGridFunction& w;
     GradientGridFunctionCoefficient* gradw;
 
     Vector nor, shape1, shape2, grad_w;
     double val1, val2;
 
 public:
-    DGEdgeIntegrator1(GridFunction &w) : Q(NULL)
+    DGEdgeIntegrator1(ParGridFunction &w_) : Q(NULL), w(w_)
     { gradw = new GradientGridFunctionCoefficient(&w); }
-    DGEdgeIntegrator1(Coefficient &q, GridFunction &w) : Q(&q)
+    DGEdgeIntegrator1(Coefficient &q, ParGridFunction &w_) : Q(&q), w(w_)
     { gradw = new GradientGridFunctionCoefficient(&w); }
     ~DGEdgeIntegrator1() { delete gradw; }
 
@@ -43,9 +44,9 @@ public:
         nor.SetSize(dim);
 
         ndof1 = el1.GetDof();
-        if (Trans.Elem2No != Trans.Elem1No) // 内部边界
+        if (Trans.Elem2No >= 0) // 内部边界
         {
-            ndof2 = el2.GetDof();
+            ndof2 = el2.GetDof(); // 后面判断是否是内部边界可以通过判断 ndof2 是否为0判断
         }
 
         shape1.SetSize(ndof1);
@@ -89,17 +90,25 @@ public:
                 CalcOrtho(Trans.Jacobian(), nor); // 计算Face的法向量
             }
 
-            gradw->Eval(grad_w, *Trans.Elem1, eip1);
+            gradw->Eval(grad_w, *Trans.Elem1, eip1); // fff 并行不会出错, 对比下面
             val1 = ip.weight * Q->Eval(*Trans.Elem1, eip1) * (grad_w * nor);
 
-            if (Trans.Elem2No != Trans.Elem1No) // 内部边界
+            if (Trans.Elem2No >= 0) // 内部边界
             {
                 val1 *= 0.5;
                 for (int i=0; i<ndof1; ++i)
                     for (int j=0; j<ndof1; ++j)
                         elmat(i, j) += val1 * shape1(i) * shape1(j);
 
-                gradw->Eval(grad_w, *Trans.Elem2, eip2);
+                if (Trans.Elem2No >= w.FESpace()->GetNE())
+                {
+                    int gdb_break=1;
+                    while(gdb_break) {}
+                    cout << "Elem2NO: " << Trans.Elem2No << ", " << w.FESpace()->GetNE() << ", " << w.ParFESpace()->GetNE() << endl;
+                }
+                gradw->Eval(grad_w, *Trans.Elem2, eip2); // fff 并行会出错, 对比上面
+//                w.GetGradient(*Trans.Elem2, grad_w); // 同上
+
                 val2 = ip.weight * Q->Eval(*Trans.Elem2, eip2) * (grad_w * nor) * 0.5;
 
                 for (int i=0; i<ndof2; ++i)
@@ -120,7 +129,6 @@ public:
                     for (int j=0; j<ndof1; ++j)
                         elmat(i, j) += val1 * shape1(i) * shape1(j);
             }
-
         }
     }
 };

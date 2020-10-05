@@ -1160,6 +1160,7 @@ public:
 };
 
 
+// fff 被替换成 DGEdgeIntegrator1
 // 计算(边界或者内部Face都可以): q <{u grad(w).n}, [v]>_E,
 // u is trial function, v is test function; q are Coefficient, q在边E的两边连续; w is GridFunction, 但是w是不连续的(至少grad_w是不连续的)
 class DGSelfTraceIntegrator_1 : public BilinearFormIntegrator
