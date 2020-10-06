@@ -802,8 +802,8 @@ public:
 //        e1->AddBdrFaceIntegrator(new DGDiffusion_Edge(D_K_), ess_bdr);
 
         // -<{D1 z1 c1 grad(phi)}, [v1]>
-        e1->AddInteriorFaceIntegrator(new DGEdgeIntegrator1(neg_D_K_v_K, phi));
-//        e1->AddBdrFaceIntegrator(new DGEdgeIntegrator1(neg_D_K_v_K, phi), ess_bdr);
+        e1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_K_v_K, phi));
+//        e1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_K_v_K, phi), ess_bdr);
 
         MPI_Barrier(MPI_COMM_WORLD);
         cout << "before assemble e1()." << endl;
@@ -826,8 +826,8 @@ public:
         e2->AddBdrFaceIntegrator(new DGDiffusion_Edge(D_Cl_), ess_bdr);
 
         // -<{D2 z2 c2 grad(phi)}, [v2]>
-        e2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_Cl_v_Cl, phi));
-        e2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(neg_D_Cl_v_Cl, phi), ess_bdr);
+        e2->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_Cl_v_Cl, phi));
+        e2->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_Cl_v_Cl, phi), ess_bdr);
 
         e2->Assemble(skip_zero_entries);
     }
