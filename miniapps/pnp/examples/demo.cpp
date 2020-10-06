@@ -4,6 +4,7 @@
 #include <memory>
 #include "mfem.hpp"
 #include "../utils/DGEdgeIntegrator.hpp"
+#include "../utils/ProteinWaterInterfaceIntegrators.hpp"
 using namespace mfem;
 
 

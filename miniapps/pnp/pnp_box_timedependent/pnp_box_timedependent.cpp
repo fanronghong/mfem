@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
 
     MFEMInitializePetsc(NULL, NULL, options_src, NULL);
 
-    Array<double> phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes;
+    Array<double> phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes, timesteps;
     if (ComputeConvergenceRate)
     {
         int temp_refine_times = refine_times; // save refine_times temporarily

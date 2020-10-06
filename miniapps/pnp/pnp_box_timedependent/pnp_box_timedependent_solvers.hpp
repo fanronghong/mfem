@@ -622,6 +622,7 @@ public:
     }
 };
 
+
 class PNP_Box_Gummel_DG_TimeDependent: public TimeDependentOperator
 {
 private:
@@ -644,8 +645,8 @@ private:
     int num_procs, myid;
 
 public:
-    PNP_Box_Gummel_DG_TimeDependent(int truesize, Array<int>& offset, Array<int>& ess_bdr_, ParFiniteElementSpace* fsp, double time)
-            : TimeDependentOperator(3*truesize, time), true_vsize(truesize), true_offset(offset), ess_bdr(ess_bdr_), fes(fsp),
+    PNP_Box_Gummel_DG_TimeDependent(int truesize, Array<int>& offset, Array<int>& ess_bdr_, ParFiniteElementSpace* fes_, double time)
+            : TimeDependentOperator(3*truesize, time), true_vsize(truesize), true_offset(offset), ess_bdr(ess_bdr_), fes(fes_),
               a0(NULL), e0(NULL), s0(NULL), p0(NULL), a0_e0_s0_p0(NULL),
               m1(NULL), a1(NULL), e1(NULL), s1(NULL), p1(NULL), m1_dta1_dte1_dts1_dtp1(NULL),
               m2(NULL), a2(NULL), e2(NULL), s2(NULL), p2(NULL), m2_dta2_dte2_dts2_dtp2(NULL),
@@ -658,11 +659,6 @@ public:
 
         h1_fec = new H1_FECollection(p_order, fes->GetMesh()->Dimension());
         h1 = new ParFiniteElementSpace(fes->GetParMesh(), h1_fec);
-
-        MPI_Barrier(MPI_COMM_WORLD);
-        cout << "Rank: " << myid << ", fes->GetNE(): " << fes->GetNE() << endl;
-        MPI_Barrier(MPI_COMM_WORLD);
-        PetscSleep(1);
 
         A0_E0_S0_P0 = new HypreParMatrix;
         M1_dtA1_dtE1_dtS1_dtP1 = new HypreParMatrix;
@@ -798,20 +794,14 @@ public:
 
         e1 = new ParBilinearForm(fes);
         // -<{D1 grad(c1)}, [v1]>
-//        e1->AddInteriorFaceIntegrator(new DGDiffusion_Edge(D_K_));
-//        e1->AddBdrFaceIntegrator(new DGDiffusion_Edge(D_K_), ess_bdr);
+        e1->AddInteriorFaceIntegrator(new DGDiffusion_Edge(D_K_));
+        e1->AddBdrFaceIntegrator(new DGDiffusion_Edge(D_K_), ess_bdr);
 
         // -<{D1 z1 c1 grad(phi)}, [v1]>
         e1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_K_v_K, phi));
-//        e1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_K_v_K, phi), ess_bdr);
+        e1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_K_v_K, phi), ess_bdr);
 
-        MPI_Barrier(MPI_COMM_WORLD);
-        cout << "before assemble e1()." << endl;
-//        int gdb_break=1;
-//        while (gdb_break) {}
         e1->Assemble(skip_zero_entries);
-        MPI_Barrier(MPI_COMM_WORLD);
-        cout << "after assemble e1()." << endl;
     }
     // -<{D2 (grad(c2) + z2 c2 grad(phi))}, [v2]>, given phi
     void builde2(ParGridFunction& phi) const
@@ -1058,6 +1048,7 @@ public:
         dphic1c2_dt = 0.0;
 
         Vector* phic1c2_ptr = (Vector*) &phic1c2;
+        // 上一个时间步的解(已知)
         ParGridFunction old_phi, old_c1, old_c2;
         // 后面更新 old_phi 的同时也会更新 phic1c2_ptr, 从而更新 phic1c2
         old_phi.MakeTRef(fes, *phic1c2_ptr, true_offset[0]);
@@ -1067,7 +1058,7 @@ public:
         old_c1 .SetFromTrueVector();
         old_c2 .SetFromTrueVector();
 
-        ParGridFunction dc1dt, dc2dt;
+        ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi_dt
         dc1dt.MakeTRef(fes, dphic1c2_dt, true_offset[1]);
         dc2dt.MakeTRef(fes, dphic1c2_dt, true_offset[2]);
 
@@ -1127,6 +1118,7 @@ public:
             delete l0;
             delete poisson_solver;
 
+
             diff = 0.0;
             diff += phi_Gummel;
             diff -= old_phi; // 用到的是old_phi的PrimalVector
@@ -1138,6 +1130,7 @@ public:
             if (tol < Gummel_rel_tol) { // Gummel迭代停止
                 last_gummel_step = true;
             }
+
 
             // 求解 NP1
             ParLinearForm *l1 = new ParLinearForm(fes);
@@ -1180,6 +1173,7 @@ public:
             m1_dta1_dte1_dts1_dtp1->RecoverFEMSolution(*temp_x1, *l1, dc1dt_Gummel); // 更新 dc1dt
             delete l1;
             delete np1_solver;
+
 
             // 求解 NP2
             ParLinearForm *l2 = new ParLinearForm(fes);
