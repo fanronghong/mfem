@@ -921,7 +921,9 @@ public:
         if (abs(sigma - 0.0) > 1E-10) // 添加对称项
         {
             a0_e0_s0_p0->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(epsilon_water, sigma));
-            if (symmetry_with_boundary) {
+
+            if (symmetry_with_boundary)
+            {
                 a0_e0_s0_p0->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(epsilon_water, sigma), ess_bdr);
             }
         }
@@ -930,7 +932,9 @@ public:
         if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
         {
             a0_e0_s0_p0->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(kappa));
-            if (penalty_with_boundary) {
+
+            if (penalty_with_boundary)
+            {
                 a0_e0_s0_p0->AddBdrFaceIntegrator(new DGDiffusion_Penalty(kappa), ess_bdr);
             }
         }
@@ -971,7 +975,9 @@ public:
         {
             m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(dt_one, phi));
             m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(D_K_, -1.0 * dt * sigma));
-            if (symmetry_with_boundary) {
+
+            if (symmetry_with_boundary)
+            {
                 m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(dt_sigma_D_K_v_K, phi), ess_bdr);
                 m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_K_, -1.0 * dt * sigma), ess_bdr);
             }
@@ -981,7 +987,9 @@ public:
         if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
         {
             m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(-1.0 * dt * kappa));
-            if (penalty_with_boundary) {
+
+            if (penalty_with_boundary)
+            {
                 m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGDiffusion_Penalty(-1.0 * dt * kappa), ess_bdr);
             }
         }
@@ -1022,7 +1030,9 @@ public:
         {
             m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(dt_one, phi));
             m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, -1.0 * dt * sigma));
-            if (symmetry_with_boundary) {
+
+            if (symmetry_with_boundary)
+            {
                 m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(dt_sigma_D_Cl_v_Cl, phi), ess_bdr);
                 m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, -1.0 * dt * sigma), ess_bdr);
             }
@@ -1032,7 +1042,9 @@ public:
         if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
         {
             m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(-1.0 * dt * kappa));
-            if (penalty_with_boundary) {
+
+            if (penalty_with_boundary)
+            {
                 m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGDiffusion_Penalty(-1.0 * dt * kappa), ess_bdr);
             }
         }
