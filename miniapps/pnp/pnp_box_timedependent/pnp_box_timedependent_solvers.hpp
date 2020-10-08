@@ -1206,20 +1206,6 @@ public:
             delete l1;
             delete np1_solver;
 
-            if (visualization && 0)
-            {
-                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
-                dc->RegisterField("c1_Gummel", &old_c1);
-
-                old_c1.Add(dt, dc1dt_Gummel);
-                cout << "L2 norm of c1: " << old_c1.ComputeL2Error(c1_exact) << endl;
-
-                Visualize(*dc, "c1_Gummel", "c1_Gummel_DG");
-
-                delete dc;
-                MFEM_ABORT("FFFF");
-            }
-
 
             // **************************************************************************************
             //                                4. 求解 NP2
@@ -1263,8 +1249,8 @@ public:
 
         // 用最终Gummel迭代的解更新要求解的3个未知量
         old_phi = phi_Gummel;
-        dc1dt = dc1dt_Gummel;
-        dc2dt = dc2dt_Gummel;
+        dc1dt   = dc1dt_Gummel;
+        dc2dt   = dc2dt_Gummel;
         // 而我们要返回的TrueVector, 而不是PrimalVector
         old_phi.SetTrueVector();
         dc1dt  .SetTrueVector();
