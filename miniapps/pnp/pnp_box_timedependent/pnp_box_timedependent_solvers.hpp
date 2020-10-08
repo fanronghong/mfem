@@ -338,6 +338,16 @@ public:
             delete l0;
             delete poisson_solver;
 
+            if (visualization)
+            {
+                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
+                dc->RegisterField("phi_Gummel", &phi_Gummel);
+
+                Visualize(*dc, "phi_Gummel", "phi_Gummel_DG");
+
+                delete dc;
+            }
+
             diff = 0.0;
             diff += phi_Gummel;
             diff -= old_phi; // 用到的是old_phi的PrimalVector
@@ -657,7 +667,7 @@ public:
 
         // fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list); // 在H1空间中存在, 在DG空间中不存在
 
-        h1_fec = new H1_FECollection(p_order, fes->GetMesh()->Dimension());
+        h1_fec = new H1_FECollection(p_order, fes->GetParMesh()->Dimension());
         h1 = new ParFiniteElementSpace(fes->GetParMesh(), h1_fec);
 
         A0_E0_S0_P0 = new HypreParMatrix;
@@ -940,7 +950,7 @@ public:
         }
 
         // weak Dirichlet boundary condition
-        a0_e0_s0_p0->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator, ess_bdr);
+        a0_e0_s0_p0->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(epsilon_water), ess_bdr);
 
         a0_e0_s0_p0->Assemble(skip_zero_entries);
     }
@@ -970,6 +980,9 @@ public:
         m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(dt_neg_D_K_v_K, phi));
         m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(dt_neg_D_K_v_K, phi), ess_bdr);
 
+        // weak Dirichlet boundary condition
+        m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(D_K_), ess_bdr);
+
         // copy from s1, multiply -dt
         if (abs(sigma - 0.0) > 1E-10) // 添加对称项
         {
@@ -993,9 +1006,6 @@ public:
                 m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGDiffusion_Penalty(-1.0 * dt * kappa), ess_bdr);
             }
         }
-
-        // weak Dirichlet boundary condition
-        m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(c1_exact), ess_bdr);
 
         m1_dta1_dte1_dts1_dtp1->Assemble(skip_zero_entries);
     }
@@ -1025,6 +1035,9 @@ public:
         m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(dt_neg_D_Cl_v_Cl, phi));
         m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(dt_neg_D_Cl_v_Cl, phi), ess_bdr);
 
+        // weak Dirichlet boundary condition
+        m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(D_Cl_), ess_bdr);
+
         // copy from s2, multiply -dt
         if (abs(sigma - 0.0) > 1E-10) // 添加对称项
         {
@@ -1049,9 +1062,6 @@ public:
             }
         }
 
-        // weak Dirichlet boundary condition
-        m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(c2_exact), ess_bdr);
-
         m2_dta2_dte2_dts2_dtp2->Assemble(skip_zero_entries);
     }
 
@@ -1074,29 +1084,33 @@ public:
         dc1dt.MakeTRef(fes, dphic1c2_dt, true_offset[1]);
         dc2dt.MakeTRef(fes, dphic1c2_dt, true_offset[2]);
 
-        // 变量*_Gummel用于Gummel迭代过程中
-        ParGridFunction phi_Gummel(fes), dc1dt_Gummel(fes), dc2dt_Gummel(fes);
-        phi_Gummel = 0.0; dc1dt_Gummel = 0.0; dc2dt_Gummel = 0.0;
-        phi_exact  .SetTime(t); // t在ODE里面已经变成下一个时刻了(要求解的时刻)
-        dc1dt_exact.SetTime(t);
-        dc2dt_exact.SetTime(t);
-
+        phi_exact.SetTime(t); // t在ODE里面已经变成下一个时刻了(要求解的时刻)
         c1_exact.SetTime(t);
         c2_exact.SetTime(t);
+        dc1dt_exact.SetTime(t);
+        dc2dt_exact.SetTime(t);
         f0_analytic.SetTime(t);
         f1_analytic.SetTime(t);
         f2_analytic.SetTime(t);
+
+        // 变量*_Gummel用于Gummel迭代过程中
+        ParGridFunction phi_Gummel(fes), dc1dt_Gummel(fes), dc2dt_Gummel(fes);
+        phi_Gummel   = 0.0;
+        dc1dt_Gummel = 0.0;
+        dc2dt_Gummel = 0.0;
 
         ParGridFunction diff(fes);
         bool last_gummel_step = false;
         for (int gummel_step=1; !last_gummel_step; ++gummel_step)
         {
-            // 求解 Poisson
+            // **************************************************************************************
+            //                                1. 求解 Poisson
+            // **************************************************************************************
             ParLinearForm *l0 = new ParLinearForm(fes);
             // b0: (f0, psi)
             l0->AddDomainIntegrator(new DomainLFIntegrator(f0_analytic));
             // weak Dirichlet boundary condition
-            l0->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(phi_exact), ess_bdr);
+            l0->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(phi_exact, epsilon_water), ess_bdr);
             if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
                 // g0: sigma <phi_D, epsilon_s grad(psi).n>
@@ -1117,10 +1131,20 @@ public:
             b2->AddMult(dc2dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
 
             builda0_e0_s0_p0();
-            {
+            if (0) { // fff 下面两种投影方式画出的图在区域外边界的取值相差很大, 有问题
+                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
+                dc->RegisterField("phi_Gummel", &phi_Gummel);
+
                 ParGridFunction temp_gf(h1);
                 temp_gf.ProjectBdrCoefficient(phi_exact, ess_bdr);
+
                 phi_Gummel.ProjectGridFunction(temp_gf);
+                Visualize(*dc, "phi_Gummel", "phi_Gummel_DG");
+
+                phi_Gummel.ProjectCoefficient(phi_exact);
+                Visualize(*dc, "phi_Gummel", "phi_Gummel_DG");
+
+                delete dc;
             }
             a0_e0_s0_p0->FormLinearSystem(null_array, phi_Gummel, *l0, *A0_E0_S0_P0, *temp_x0, *temp_b0);
 
@@ -1130,7 +1154,23 @@ public:
             delete l0;
             delete poisson_solver;
 
+            if (visualization && 0)
+            {
+                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
+                dc->RegisterField("phi_Gummel", &phi_Gummel);
 
+                cout << "L2 norm of phi: " << phi_Gummel.ComputeL2Error(phi_exact) << endl;
+//                phi_Gummel.ProjectCoefficient(phi_exact);
+                Visualize(*dc, "phi_Gummel", "phi_Gummel_DG");
+
+                delete dc;
+                MFEM_ABORT("FFFF");
+            }
+
+
+            // **************************************************************************************
+            //                                2. 计算Gummel迭代相对误差
+            // **************************************************************************************
             diff = 0.0;
             diff += phi_Gummel;
             diff -= old_phi; // 用到的是old_phi的PrimalVector
@@ -1144,10 +1184,14 @@ public:
             }
 
 
-            // 求解 NP1
+            // **************************************************************************************
+            //                                3. 求解 NP1
+            // **************************************************************************************
             ParLinearForm *l1 = new ParLinearForm(fes);
             // b1: (f1, v1)
             l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+            // weak Dirichlet boundary condition
+            l1->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(c1_exact, D_K_), ess_bdr);
             if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
                 // -g1: -sigma <c1_D, D1(grad(v1) + z1 v1 grad(phi)).n>
@@ -1159,8 +1203,6 @@ public:
                 // -q1: -kappa <{h^{-1}} c1_D, v1>
                 l1->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(c1_exact, -1.0 * kappa), ess_bdr);
             }
-            // weak Dirichlet boundary condition
-            l1->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(c1_exact), ess_bdr);
             l1->Assemble();
 
             builda1(phi_Gummel);
@@ -1173,11 +1215,6 @@ public:
             p1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1 + p1 c1
 
             buildm1_dta1_dte1_dts1_dtp1(dt, phi_Gummel);
-            {
-                ParGridFunction temp_gf(h1);
-                temp_gf.ProjectBdrCoefficient(dc1dt_exact, ess_bdr);
-                dc1dt_Gummel.ProjectGridFunction(temp_gf);
-            }
             m1_dta1_dte1_dts1_dtp1->FormLinearSystem(null_array, dc1dt_Gummel, *l1, *M1_dtA1_dtE1_dtS1_dtP1, *temp_x1, *temp_b1);
 
             PetscLinearSolver* np1_solver = new PetscLinearSolver(*M1_dtA1_dtE1_dtS1_dtP1, false, "np1_");
@@ -1186,11 +1223,29 @@ public:
             delete l1;
             delete np1_solver;
 
+            if (visualization && 0)
+            {
+                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
+                dc->RegisterField("c1_Gummel", &old_c1);
 
-            // 求解 NP2
+                old_c1.Add(dt, dc1dt_Gummel);
+                cout << "L2 norm of c1: " << old_c1.ComputeL2Error(c1_exact) << endl;
+
+                Visualize(*dc, "c1_Gummel", "c1_Gummel_DG");
+
+                delete dc;
+                MFEM_ABORT("FFFF");
+            }
+
+
+            // **************************************************************************************
+            //                                4. 求解 NP2
+            // **************************************************************************************
             ParLinearForm *l2 = new ParLinearForm(fes);
             // b2: (f2, v2)
             l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
+            // weak Dirichlet boundary condition
+            l2->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(c2_exact, D_Cl_), ess_bdr);
             if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
                 // -g2: -sigma <c2_D, D2(grad(v2) + z2 v2 grad(phi)).n>
@@ -1202,8 +1257,6 @@ public:
                 // -q2: -kappa <{h^{-1}} c2_D, v2>
                 l2->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(c2_exact, -1.0 * kappa), ess_bdr);
             }
-            // weak Dirichlet boundary condition
-            l2->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(c2_exact), ess_bdr);
             l2->Assemble();
 
             builda2(phi_Gummel);
@@ -1216,11 +1269,6 @@ public:
             p2->AddMult(old_c2, *l2, 1.0);  // l2 = l2 - a2 c2 - e2 c2 + s2 c2 + p2 c2
 
             buildm2_dta2_dte2_dts2_dtp2(dt, phi_Gummel);
-            {
-                ParGridFunction temp_gf(h1);
-                temp_gf.ProjectBdrCoefficient(dc2dt_exact, ess_bdr);
-                dc2dt_Gummel.ProjectGridFunction(temp_gf);
-            }
             m2_dta2_dte2_dts2_dtp2->FormLinearSystem(null_array, dc2dt_Gummel, *l2, *M2_dtA2_dtE2_dtS2_dtP2, *temp_x2, *temp_b2);
 
             PetscLinearSolver* np2_solver = new PetscLinearSolver(*M2_dtA2_dtE2_dtS2_dtP2, false, "np2_");

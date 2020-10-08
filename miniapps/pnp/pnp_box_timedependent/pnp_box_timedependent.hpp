@@ -10,7 +10,7 @@ using namespace mfem;
 
 const char* mesh_file       = "./4_4_4_translate.msh";
 int p_order                 = 1; //有限元基函数的多项式次数
-int refine_times            = 0;
+int refine_times            = 1;
 const char* Linearize       = "gummel"; // newton, gummel
 bool zero_initial           = true; // 非线性迭代的初值是否为0
 double initTol              = 1e-3; // 为得到非线性迭代的初值所需Gummel迭代
@@ -19,21 +19,21 @@ const char* AdvecStable     = "none"; // none, eafe, supg
 const char* options_src     = "./pnp_box_petsc_opts";
 bool ComputeConvergenceRate = false; // 利用解析解计算误差阶
 bool local_conservation     = false;
-bool visualization          = false;
+bool visualization          = true;
 bool paraview               = false;
-const char* output          = NULL;
+const char* output          = NULL; // dummy参数, 为了显示bsub运行的程序名字
 int max_newton              = 20;
 double relax                = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 int ode_type                = 1; // 1: backward Euler; 11: forward Euler
 double t_init               = 0.0; // 初始时间
 double t_stepsize           = 0.1;// 时间步长
-double t_final              = 0.5; // 最后时间
+double t_final              = 0.3; // 最后时间
 const int skip_zero_entries = 0; // 为了保证某些矩阵的sparsity pattern一致
 int mpi_debug               = 1;
 int verbose                 = 2; // 数字越大输出越多: 0, 1,2
 double sigma                = -1.0; // symmetric parameter for DG
-bool symmetry_with_boundary = false;
-double kappa                = 10; // penalty parameter for DG
+bool symmetry_with_boundary = true;
+double kappa                = 20; // penalty parameter for DG
 bool penalty_with_boundary  = true;
 
 const int bottom_attr       = 1;
