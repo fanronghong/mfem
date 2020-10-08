@@ -102,7 +102,7 @@ public:
         // dt D1 (grad(c1), grad(v1))
         m1_dta1->AddDomainIntegrator(new DiffusionIntegrator(dt_D1));
         // dt D1 z1 (c1 grad(phi), grad(v1))
-        m1_dta1->AddDomainIntegrator(new GradConvectionIntegrator(phi, &dt_D1_z1));
+        m1_dta1->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi, &dt_D1_z1));
 
         m1_dta1->Assemble(skip_zero_entries);
     }
@@ -121,7 +121,7 @@ public:
         // dt D2 (grad(c2), grad(v2))
         m2_dta2->AddDomainIntegrator(new DiffusionIntegrator(dt_D2));
         // dt D2 z2 (c2 grad(phi), grad(v2))
-        m2_dta2->AddDomainIntegrator(new GradConvectionIntegrator(phi, &dt_D2_z2));
+        m2_dta2->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi, &dt_D2_z2));
 
         m2_dta2->Assemble(skip_zero_entries);
     }
@@ -146,7 +146,7 @@ public:
         // D1 (grad(c1), grad(v1))
         a1->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
         // D1 z1 (c1 grad(phi), grad(v1))
-        a1->AddDomainIntegrator(new GradConvectionIntegrator(phi, &D_K_prod_v_K));
+        a1->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi, &D_K_prod_v_K));
 
         a1->Assemble(skip_zero_entries);
     }
@@ -160,7 +160,7 @@ public:
         // D2 (grad(c2), grad(v2))
         a2->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
         // D2 z2 (c2 grad(phi), grad(v2))
-        a2->AddDomainIntegrator(new GradConvectionIntegrator(phi, &D_Cl_prod_v_Cl));
+        a2->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi, &D_Cl_prod_v_Cl));
 
         a2->Assemble(skip_zero_entries);
     }
@@ -710,7 +710,6 @@ public:
         b1->AddDomainIntegrator(new MassIntegrator(alpha2_prod_alpha3_prod_v_K));
 
         b1->Assemble(skip_zero_entries);
-        b1->Finalize(skip_zero_entries);
     }
     // alpha2 alpha3 z2 (c2, psi)
     void buildb2() const
@@ -722,7 +721,6 @@ public:
         b2->AddDomainIntegrator(new MassIntegrator(alpha2_prod_alpha3_prod_v_Cl));
 
         b2->Assemble(skip_zero_entries);
-        b2->Finalize(skip_zero_entries);
     }
     // (c1, v1)
     void buildm1() const
@@ -767,7 +765,7 @@ public:
         // D1 (grad(c1), grad(v1))
         a1->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
         // D1 z1 (c1 grad(phi), grad(v1))
-        a1->AddDomainIntegrator(new GradConvectionIntegrator(phi, &D_K_prod_v_K));
+        a1->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi, &D_K_prod_v_K));
 
         a1->Assemble(skip_zero_entries);
     }
@@ -780,7 +778,7 @@ public:
         // D2 (grad(c2), grad(v2))
         a2->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
         // D2 z2 (c2 grad(phi), grad(v2))
-        a2->AddDomainIntegrator(new GradConvectionIntegrator(phi, &D_Cl_prod_v_Cl));
+        a2->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi, &D_Cl_prod_v_Cl));
 
         a2->Assemble(skip_zero_entries);
     }
@@ -851,8 +849,8 @@ public:
 
         s1 = new ParBilinearForm(fes);
         // sigma <[c1], {D1 z1 v1 grad(phi)}>
-        s1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(one, phi));
-        s1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_K_v_K, phi), ess_bdr);
+        s1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(one, phi));
+        s1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(sigma_D_K_v_K, phi), ess_bdr);
 
         // sigma <[c1], {D1 grad(v1)}>
         s1->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(D_K_, sigma));
@@ -867,8 +865,8 @@ public:
 
         s2 = new ParBilinearForm(fes);
         // sigma <[c2], {D2 z2 v2 grad(phi)}>
-        s2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(one, phi));
-        s2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(sigma_D_Cl_v_Cl, phi), ess_bdr);
+        s2->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(one, phi));
+        s2->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(sigma_D_Cl_v_Cl, phi), ess_bdr);
 
         // sigma <[c2], {D2 grad(v2)}>
         s2->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, sigma));
@@ -971,14 +969,14 @@ public:
         ProductCoefficient dt_D1(dt, D_K_);
         ProductCoefficient dt_D1_z1(dt_D1, v_K_coeff);
         m1_dta1_dte1_dts1_dtp1->AddDomainIntegrator(new DiffusionIntegrator(dt_D1));
-        m1_dta1_dte1_dts1_dtp1->AddDomainIntegrator(new GradConvectionIntegrator(phi, &dt_D1_z1));
+        m1_dta1_dte1_dts1_dtp1->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi, &dt_D1_z1));
 
         // copy from e1, multiply dt
         ProductCoefficient dt_neg_D_K_v_K(dt, neg_D_K_v_K);
         m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGDiffusion_Edge(dt_D1));
         m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGDiffusion_Edge(dt_D1), ess_bdr);
-        m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(dt_neg_D_K_v_K, phi));
-        m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(dt_neg_D_K_v_K, phi), ess_bdr);
+        m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator1(dt_neg_D_K_v_K, phi));
+        m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(dt_neg_D_K_v_K, phi), ess_bdr);
 
         // weak Dirichlet boundary condition
         m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(D_K_), ess_bdr);
@@ -986,12 +984,12 @@ public:
         // copy from s1, multiply -dt
         if (abs(sigma - 0.0) > 1E-10) // 添加对称项
         {
-            m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(dt_one, phi));
+            m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(dt_one, phi));
             m1_dta1_dte1_dts1_dtp1->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(D_K_, -1.0 * dt * sigma));
 
             if (symmetry_with_boundary)
             {
-                m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(dt_sigma_D_K_v_K, phi), ess_bdr);
+                m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(dt_sigma_D_K_v_K, phi), ess_bdr);
                 m1_dta1_dte1_dts1_dtp1->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_K_, -1.0 * dt * sigma), ess_bdr);
             }
         }
@@ -1026,14 +1024,14 @@ public:
         ProductCoefficient dt_D2(dt, D_Cl_);
         ProductCoefficient dt_D2_z2(dt_D2, v_Cl_coeff);
         m2_dta2_dte2_dts2_dtp2->AddDomainIntegrator(new DiffusionIntegrator(dt_D2));
-        m2_dta2_dte2_dts2_dtp2->AddDomainIntegrator(new GradConvectionIntegrator(phi, &dt_D2_z2));
+        m2_dta2_dte2_dts2_dtp2->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi, &dt_D2_z2));
 
         // copy from e2, multiply dt
         ProductCoefficient dt_neg_D_Cl_v_Cl(dt, neg_D_Cl_v_Cl);
         m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGDiffusion_Edge(dt_D2));
         m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGDiffusion_Edge(dt_D2), ess_bdr);
-        m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_1(dt_neg_D_Cl_v_Cl, phi));
-        m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_1(dt_neg_D_Cl_v_Cl, phi), ess_bdr);
+        m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator1(dt_neg_D_Cl_v_Cl, phi));
+        m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(dt_neg_D_Cl_v_Cl, phi), ess_bdr);
 
         // weak Dirichlet boundary condition
         m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(D_Cl_), ess_bdr);
@@ -1041,12 +1039,12 @@ public:
         // copy from s2, multiply -dt
         if (abs(sigma - 0.0) > 1E-10) // 添加对称项
         {
-            m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_2(dt_one, phi));
+            m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(dt_one, phi));
             m2_dta2_dte2_dts2_dtp2->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, -1.0 * dt * sigma));
 
             if (symmetry_with_boundary)
             {
-                m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGSelfTraceIntegrator_2(dt_sigma_D_Cl_v_Cl, phi), ess_bdr);
+                m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(dt_sigma_D_Cl_v_Cl, phi), ess_bdr);
                 m2_dta2_dte2_dts2_dtp2->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, -1.0 * dt * sigma), ess_bdr);
             }
         }
@@ -1131,21 +1129,6 @@ public:
             b2->AddMult(dc2dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
 
             builda0_e0_s0_p0();
-            if (0) { // fff 下面两种投影方式画出的图在区域外边界的取值相差很大, 有问题
-                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
-                dc->RegisterField("phi_Gummel", &phi_Gummel);
-
-                ParGridFunction temp_gf(h1);
-                temp_gf.ProjectBdrCoefficient(phi_exact, ess_bdr);
-
-                phi_Gummel.ProjectGridFunction(temp_gf);
-                Visualize(*dc, "phi_Gummel", "phi_Gummel_DG");
-
-                phi_Gummel.ProjectCoefficient(phi_exact);
-                Visualize(*dc, "phi_Gummel", "phi_Gummel_DG");
-
-                delete dc;
-            }
             a0_e0_s0_p0->FormLinearSystem(null_array, phi_Gummel, *l0, *A0_E0_S0_P0, *temp_x0, *temp_b0);
 
             PetscLinearSolver* poisson_solver = new PetscLinearSolver(*A0_E0_S0_P0, false, "phi_");
@@ -1196,7 +1179,7 @@ public:
             {
                 // -g1: -sigma <c1_D, D1(grad(v1) + z1 v1 grad(phi)).n>
                 l1->AddBdrFaceIntegrator(new DGDirichletLF_Symmetry(c1_exact, D_K_, -1.0 * sigma), ess_bdr);
-                l1->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&neg_sigma_D_K_v_K, &c1_exact, &old_phi), ess_bdr);
+                l1->AddBdrFaceIntegrator(new DGEdgeLFIntegrator2(&neg_sigma_D_K_v_K, &c1_exact, &old_phi), ess_bdr);
             }
             if (abs(kappa - 0.0) > 1E-10 && penalty_with_boundary) // 添加惩罚项
             {
@@ -1250,7 +1233,7 @@ public:
             {
                 // -g2: -sigma <c2_D, D2(grad(v2) + z2 v2 grad(phi)).n>
                 l2->AddBdrFaceIntegrator(new DGDirichletLF_Symmetry(c2_exact, D_Cl_, -1.0 * sigma), ess_bdr);
-                l2->AddBdrFaceIntegrator(new DGSelfBdrFaceIntegrator(&neg_sigma_D_Cl_v_Cl, &c2_exact, &old_phi), ess_bdr);
+                l2->AddBdrFaceIntegrator(new DGEdgeLFIntegrator2(&neg_sigma_D_Cl_v_Cl, &c2_exact, &old_phi), ess_bdr);
             }
             if (abs(kappa - 0.0) > 1E-10 && penalty_with_boundary) // 添加惩罚项
             {

@@ -17,10 +17,10 @@ using namespace mfem;
  * Given w(类型为GridFunction), or given adv is VectorCoefficient (对流速度),
  * u is Trial function, v is Test function.
  *
- * The stiffness matrix of GradConvectionIntegrator is just the transpose
+ * The stiffness matrix of GradConvection_BLFIntegrator is just the transpose
  * of ConvectionIntegrator (ref: Test_gradConvectionIntegrator2)
  * */
-class GradConvectionIntegrator: public BilinearFormIntegrator
+class GradConvection_BLFIntegrator: public BilinearFormIntegrator
 {
 protected:
     GradientGridFunctionCoefficient* grad_w;
@@ -35,11 +35,11 @@ public:
     Array<double> local_peclet; // for more info
 
 public:
-    GradConvectionIntegrator(GridFunction& w_, Coefficient* Q_, Coefficient* diff_=NULL): Q(Q_), diff(diff_)
+    GradConvection_BLFIntegrator(GridFunction& w_, Coefficient* Q_, Coefficient* diff_=NULL): Q(Q_), diff(diff_)
     { grad_w = new GradientGridFunctionCoefficient(&w_); }
-    GradConvectionIntegrator(VectorCoefficient* adv_, Coefficient* Q_, Coefficient* diff_=NULL)
+    GradConvection_BLFIntegrator(VectorCoefficient* adv_, Coefficient* Q_, Coefficient* diff_=NULL)
         : Q(Q_), adv(adv_), diff(diff_) { param = true; }
-    ~GradConvectionIntegrator() { delete grad_w; }
+    ~GradConvection_BLFIntegrator() { delete grad_w; }
 
     virtual void AssembleElementMatrix(const FiniteElement& el,
             ElementTransformation& eltran, DenseMatrix& elmat)
@@ -97,7 +97,7 @@ public:
  *
  * Given Q is Coefficient, w is GridFunction
  * */
-class GradConvectionIntegrator2: public LinearFormIntegrator
+class GradConvection_LFIntegrator: public LinearFormIntegrator
 {
 protected:
     Coefficient *q;
@@ -107,9 +107,9 @@ protected:
     Vector gradw_val, tmp_vec;
 
 public:
-    GradConvectionIntegrator2(Coefficient* q_, GridFunction* w): q(q_)
+    GradConvection_LFIntegrator(Coefficient* q_, GridFunction* w): q(q_)
     { gradw = new GradientGridFunctionCoefficient(w); }
-    ~GradConvectionIntegrator2() {}
+    ~GradConvection_LFIntegrator() {}
 
     virtual void AssembleRHSElementVect(const FiniteElement &el, ElementTransformation &Tr, Vector &elvect)
     {
@@ -190,7 +190,7 @@ namespace _GradConvection_Integrator
 
         // 用自己写的积分算子生成刚度矩阵
         BilinearForm blf1(&h1_space);
-        blf1.AddDomainIntegrator(new GradConvectionIntegrator(w, &one)); // (u grad(w), grad(v)): w取GridFunction
+        blf1.AddDomainIntegrator(new GradConvection_BLFIntegrator(w, &one)); // (u grad(w), grad(v)): w取GridFunction
         blf1.Assemble();
 
         SparseMatrix blf1_mat(blf1.SpMat());
@@ -230,7 +230,7 @@ namespace _GradConvection_Integrator
 
         // 用自己写的积分算子生成刚度矩阵
         BilinearForm blf1(&h1_space);
-        blf1.AddDomainIntegrator(new GradConvectionIntegrator(func_gf, &one));
+        blf1.AddDomainIntegrator(new GradConvection_BLFIntegrator(func_gf, &one));
         blf1.Assemble();
 
         GridFunction rand_gf(&h1_space), res1(&h1_space), res2(&h1_space);
@@ -277,13 +277,13 @@ namespace _GradConvection_Integrator
 
         // 下面用另外一种方式生成刚度矩阵做对比
         LinearForm lf(&h1_space);
-        lf.AddDomainIntegrator(new GradConvectionIntegrator2(&one, &rand_gf));
+        lf.AddDomainIntegrator(new GradConvection_LFIntegrator(&one, &rand_gf));
         lf.Assemble();
 
         res1 -= lf;
         for (int i=0; i<res1.Size(); i++)
         {
-            if (abs(res1[i]) > 1e-10) mfem_error("Wrong: class GradConvectionIntegrator2");
+            if (abs(res1[i]) > 1e-10) mfem_error("Wrong: class GradConvection_LFIntegrator");
         }
     }
 }

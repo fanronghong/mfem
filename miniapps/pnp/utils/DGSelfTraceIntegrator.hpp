@@ -1092,6 +1092,7 @@ public:
 };
 
 
+// 被替换成: DGEdgeLFIntegrator2
 // 计算(区域边界积分): q<u_D, v grad(w).n>_E,
 // q, u_D are Coefficient, w is GridFunction
 class DGSelfBdrFaceIntegrator: public LinearFormIntegrator
@@ -1160,6 +1161,7 @@ public:
 };
 
 
+// 被替换成: DGEdgeBLFIntegrator1
 // 计算(边界或者内部Face都可以): q <{u grad(w).n}, [v]>_E,
 // u is trial function, v is test function; q are Coefficient, q在边E的两边连续; w is GridFunction, 但是w是不连续的(至少grad_w是不连续的)
 class DGSelfTraceIntegrator_1 : public BilinearFormIntegrator
@@ -1291,6 +1293,7 @@ public:
 };
 
 
+// 被替换成: DGEdgeBLFIntegrator2
 // 计算(边界或者内部Face都可以): <[u], {q v grad(w).n}>_E,
 // u is trial function, v is test function; q is Coefficient, w is GridFunction */
 class DGSelfTraceIntegrator_2 : public BilinearFormIntegrator
@@ -3642,7 +3645,7 @@ namespace _DGSelfTraceIntegrator
 
             LinearForm lf(&fsp);
             // Q (grad(u), grad(v)), Q=one, u=sin
-            lf.AddDomainIntegrator(new GradConvectionIntegrator2(&one, &sin_gf));
+            lf.AddDomainIntegrator(new GradConvection_LFIntegrator(&one, &sin_gf));
             // <{q grad(u).n}, [v]>, q=neg, u=sin
             lf.AddInteriorFaceIntegrator(new DGSelfTraceIntegrator_5(&neg, &sin_gf));
             // q <[u], {grad(v).n}>, q=neg, u=sin, i.e., -<[sin], {grad(v).n}>

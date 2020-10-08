@@ -572,6 +572,85 @@ public:
 
 
 
+/* 计算区域边界积分
+ *
+ *     q<u_D, v grad(w).n>_E,
+ *
+ * v is Test function,
+ * q and u_D are Coefficient, w is GridFunction.
+ * */
+class DGEdgeLFIntegrator2: public LinearFormIntegrator
+{
+protected:
+    Coefficient *q, *u_D;
+    GradientGridFunctionCoefficient *gradw;
+
+    Vector nor, shape, grad_w;
+
+public:
+    DGEdgeLFIntegrator2(Coefficient *q_, Coefficient *u_D_, GridFunction* w)
+            : q(q_), u_D(u_D_) { gradw = new GradientGridFunctionCoefficient(w); }
+
+    // 单元积分: (. , .)
+    virtual void AssembleRHSElementVect(const FiniteElement &el,
+                                        ElementTransformation &Tr,
+                                        Vector &elvect)
+    {
+        mfem_error("Not Support");
+    }
+
+    // 单元边界积分: <. , .>
+    virtual void AssembleRHSElementVect(const FiniteElement& el,
+                                        FaceElementTransformations& Tr,
+                                        Vector& elvect)
+    {
+        int dim  = el.GetDim();
+        int ndof = el.GetDof();
+
+        nor.SetSize(dim);
+        grad_w.SetSize(dim);
+
+        shape.SetSize(ndof);
+        elvect.SetSize(ndof);
+        elvect = 0.0;
+
+        const IntegrationRule *ir = IntRule;
+        if (ir == NULL)
+        {
+            // a simple choice for the integration order; is this OK?
+            int order = 2*el.GetOrder();
+            ir = &IntRules.Get(Tr.FaceGeom, order);
+        }
+
+        for (int p = 0; p < ir->GetNPoints(); p++)
+        {
+            const IntegrationPoint& ip = ir->IntPoint(p);
+            Tr.SetAllIntPoints(&ip);
+
+            const IntegrationPoint &eip = Tr.GetElement1IntPoint();
+
+            if (dim == 1)
+                nor(0) = 2*eip.x - 1.0; //1维参考单元的法向量(不是单位的)
+            else
+                CalcOrtho(Tr.Face->Jacobian(), nor);
+
+            el.CalcShape(eip, shape);
+
+            gradw->Eval(grad_w, *Tr.Elem1, eip);
+
+            double val = ip.weight;
+//            val *= q->Eval(*Tr.Face, ip);
+//            val *= u_D->Eval(*Tr.Face, ip);
+            val *= q->Eval(*Tr.Elem1, eip); // 与上面等价
+            val *= u_D->Eval(*Tr.Elem1, eip);
+            val *= (nor * grad_w);
+
+            shape *= val;
+            elvect += shape;
+        }
+    }
+};
+
 
 
 namespace _DGEdgeIntegrator
