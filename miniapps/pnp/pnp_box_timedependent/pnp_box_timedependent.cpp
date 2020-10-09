@@ -53,6 +53,8 @@ int main(int argc, char *argv[])
     {
         MFEM_ASSERT(!TimeConvergRate, "SpaceConvergRate and TimeConvergRate cannot exist simultaneously");
 
+        for (int i=0; i<refine_time; i++) t_stepsize *= time_scale;
+
         int origin_refine_mesh = refine_mesh; // save refine_mesh temporarily
         for (int i=0; i<refine_mesh+1; ++i)
         {
@@ -93,15 +95,16 @@ int main(int argc, char *argv[])
     {
         MFEM_ASSERT(!SpaceConvergRate, "SpaceConvergRate and TimeConvergRate cannot exist simultaneously");
 
+        Mesh* mesh = new Mesh(mesh_file);
+        ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
+        delete mesh;
+
+        for (int k=0; k<refine_mesh; k++) pmesh->UniformRefinement();
+
         double origin_t_stepsize = t_stepsize;
         int origin_refine_time = refine_time;
         for (int i=0; i<refine_time+1; ++i) // 对时间步长进行"加密"
         {
-            Mesh* mesh = new Mesh(mesh_file);
-            ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
-            delete mesh;
-            for (int k=0; k<refine_mesh; k++) pmesh->UniformRefinement();
-
             for (int j=0; j<i; ++j) t_stepsize *= time_scale;
 
             refine_time = i; // for cout right verbose outputs
@@ -109,11 +112,12 @@ int main(int argc, char *argv[])
             PNP_Box_TimeDependent_Solver* solver = new PNP_Box_TimeDependent_Solver(pmesh, ode_type);
             solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes, timesteps);
             delete solver;
-            delete pmesh;
 
             refine_time = origin_refine_time; // reset real refine_time and t_stepsize
             t_stepsize = origin_t_stepsize;
         }
+
+        delete pmesh;
 
         if (myid == 0)
         {
@@ -138,7 +142,9 @@ int main(int argc, char *argv[])
         Mesh* mesh = new Mesh(mesh_file);
         ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
         delete mesh;
+
         for (int i=0; i<refine_mesh; i++) pmesh->UniformRefinement();
+        for (int i=0; i<refine_time; i++) t_stepsize *= time_scale;
 
         PNP_Box_TimeDependent_Solver* solver = new PNP_Box_TimeDependent_Solver(pmesh, ode_type);
         solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes, timesteps);
