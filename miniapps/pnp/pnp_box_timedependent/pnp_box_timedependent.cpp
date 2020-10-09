@@ -28,6 +28,7 @@ int main(int argc, char *argv[])
     args.AddOption(&SpaceConvergRate, "-space_rate", "--space_rate", "-nospace_rate", "--nospace_rate", "Compute space convergence rate by using analytic solutions");
     args.AddOption(&SpaceConvergRate_Change_dt, "-change_dt", "--change_dt", "-nochange_dt", "--nochange_dt", "Change dt to compute (c1 dt + c2 h^2)");
     args.AddOption(&refine_time, "-ref_dt", "--refine_dt", "Refine the initial time-step times.");
+    args.AddOption(&time_scale, "-dt_scale", "--dt_scale", "Time-step scale factor");
     args.AddOption(&refine_mesh, "-ref_h", "--refine_h", "Refine the initial mesh times.");
     args.AddOption(&TimeConvergRate, "-time_rate", "--time_rate", "-notime_rate", "--notime_rate", "Compute time convergence rate by using analytic solutions");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
