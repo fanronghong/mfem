@@ -48,7 +48,7 @@ const int back_attr         = 4;
 const int right_attr        = 3;
 
 const int Gummel_max_iters  = 50;
-const double Gummel_rel_tol = 1e-10;
+double Gummel_rel_tol       = 1e-10;
 const double TOL            = 1e-20;
 
 /* 可以定义如下模型参数: 前三个宏定义参数在其他头文件定义

@@ -19,6 +19,7 @@ int main(int argc, char *argv[])
     args.AddOption(&max_newton, "-maxNewton", "--maxNewton", "Newton max iterations");
     args.AddOption(&zero_initial, "-zero", "--zero_initial", "-nonzero", "--nonzero_initial", "Choose zero or nonzero for nonlinear iteration initial value");
     args.AddOption(&initTol, "-initTol", "--initTol", "For obtaining initial value, Gummel iteration to satisfy the Tol");
+    args.AddOption(&Gummel_rel_tol, "-GummelTol", "--GummelTol", "Gummel Tolerance");
     args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method.");
     args.AddOption(&AdvecStable, "-stable", "--stable", "Choose stabilization: none, supg, eafe");
     args.AddOption(&ode_type, "-ode", "--ode", "Use ODE Solver");
