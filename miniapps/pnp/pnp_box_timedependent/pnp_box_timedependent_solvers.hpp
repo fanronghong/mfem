@@ -1,3 +1,8 @@
+/* Poisson Equation:
+ *     div( -epsilon_s grad(phi) ) - alpha2 alpha3 \sum_i z_i c_i = f
+ * NP Equation:
+ *     dc_i / dt = div( D_i (grad(c_i) + z_i c_i grad(phi) ) ) + f_i
+ * */
 #ifndef _PNP_STEADYSTATE_BOX_GUMMEL_SOLVERS_HPP_
 #define _PNP_STEADYSTATE_BOX_GUMMEL_SOLVERS_HPP_
 
@@ -16,11 +21,6 @@
 #include "../utils/DGEdgeIntegrator.hpp"
 
 
-/* Poisson Equation:
- *     div( -epsilon_s grad(phi) ) - alpha2 alpha3 \sum_i z_i c_i = f
- * NP Equation:
- *     dc_i / dt = div( D_i (grad(c_i) + z_i c_i grad(phi) ) ) + f_i
- * */
 class PNP_Box_Gummel_CG_TimeDependent: public TimeDependentOperator
 {
 private:
@@ -314,7 +314,9 @@ public:
         bool last_gummel_step = false;
         for (int gummel_step=1; !last_gummel_step; ++gummel_step)
         {
-            // 求解 Poisson
+            // **************************************************************************************
+            //                                1. 求解 Poisson
+            // **************************************************************************************
             ParLinearForm *l0 = new ParLinearForm(fes);
             // (f0, psi)
             f0_analytic.SetTime(t);
@@ -348,6 +350,10 @@ public:
                 delete dc;
             }
 
+
+            // **************************************************************************************
+            //                                2. 计算Gummel迭代相对误差
+            // **************************************************************************************
             diff = 0.0;
             diff += phi_Gummel;
             diff -= old_phi; // 用到的是old_phi的PrimalVector
@@ -360,7 +366,10 @@ public:
                 last_gummel_step = true;
             }
 
-            // 求解 NP1
+
+            // **************************************************************************************
+            //                                3. 求解 NP1
+            // **************************************************************************************
             ParLinearForm *l1 = new ParLinearForm(fes);
             // (f1, v1)
             f1_analytic.SetTime(t);
@@ -380,7 +389,10 @@ public:
             delete l1;
             delete np1_solver;
 
-            // 求解 NP2
+
+            // **************************************************************************************
+            //                                4. 求解 NP2
+            // **************************************************************************************
             ParLinearForm *l2 = new ParLinearForm(fes);
             // (f2, v2)
             f2_analytic.SetTime(t);
@@ -409,226 +421,6 @@ public:
         old_phi.SetTrueVector();
         dc1dt  .SetTrueVector();
         dc2dt  .SetTrueVector();
-    }
-};
-class PNP_Box_Gummel_CG_TimeDependent_Solver
-{
-private:
-    ParMesh* pmesh;
-    H1_FECollection* fec;
-    ParFiniteElementSpace* fes;
-
-    BlockVector* phic1c2;
-    ParGridFunction *phi_gf, *c1_gf, *c2_gf;
-
-    PNP_Box_Gummel_CG_TimeDependent* oper;
-    double t; // 当前时间
-    ODESolver *ode_solver;
-
-    int true_vsize; // 有限元空间维数
-    Array<int> true_offset, ess_bdr;
-    ParaViewDataCollection* pd;
-    int num_procs, myid;
-    StopWatch chrono;
-
-public:
-    PNP_Box_Gummel_CG_TimeDependent_Solver(ParMesh* pmesh_, int ode_solver_type): pmesh(pmesh_)
-    {
-        MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
-
-        t = t_init;
-
-        fec   = new H1_FECollection(p_order, pmesh->Dimension());
-        fes   = new ParFiniteElementSpace(pmesh, fec);
-
-        ess_bdr.SetSize(pmesh->bdr_attributes.Max());
-        ess_bdr = 1; // 设置所有边界都是essential的
-
-        phi_gf = new ParGridFunction(fes); *phi_gf = 0.0;
-        c1_gf  = new ParGridFunction(fes); *c1_gf  = 0.0;
-        c2_gf  = new ParGridFunction(fes); *c2_gf  = 0.0;
-
-        true_vsize = fes->TrueVSize();
-        true_offset.SetSize(3 + 1); // 表示 phi, c1，c2的TrueVector
-        true_offset[0] = 0;
-        true_offset[1] = true_vsize;
-        true_offset[2] = true_vsize * 2;
-        true_offset[3] = true_vsize * 3;
-
-        phic1c2 = new BlockVector(true_offset); *phic1c2 = 0.0;
-        phi_gf->MakeTRef(fes, *phic1c2, true_offset[0]);
-        c1_gf ->MakeTRef(fes, *phic1c2, true_offset[1]);
-        c2_gf ->MakeTRef(fes, *phic1c2, true_offset[2]);
-
-        // 设定初值
-        phi_exact.SetTime(t);
-        phi_gf->ProjectCoefficient(phi_exact);
-        phi_gf->SetTrueVector();
-        phi_gf->SetFromTrueVector();
-
-        c1_exact.SetTime(t);
-        c1_gf->ProjectCoefficient(c1_exact);
-        c1_gf->SetTrueVector();
-        c1_gf->SetFromTrueVector();
-
-        c2_exact.SetTime(t);
-        c2_gf->ProjectCoefficient(c2_exact);
-        c2_gf->SetTrueVector();
-        c2_gf->SetFromTrueVector();
-
-        oper = new PNP_Box_Gummel_CG_TimeDependent(true_vsize, true_offset, ess_bdr, fes, t);
-
-        switch (ode_solver_type)
-        {
-            // Implicit L-stable methods
-            case 1:  ode_solver = new BackwardEulerSolver; break;
-            case 2:  ode_solver = new SDIRK23Solver(2); break;
-            case 3:  ode_solver = new SDIRK33Solver; break;
-                // Explicit methods
-            case 11: ode_solver = new ForwardEulerSolver; break;
-            case 12: ode_solver = new RK2Solver(0.5); break; // midpoint method
-            case 13: ode_solver = new RK3SSPSolver; break;
-            case 14: ode_solver = new RK4Solver; break;
-                // Implicit A-stable methods (not L-stable)
-            case 22: ode_solver = new ImplicitMidpointSolver; break;
-            case 23: ode_solver = new SDIRK23Solver; break;
-            case 24: ode_solver = new SDIRK34Solver; break;
-            default:
-            MFEM_ABORT("Not support ODE solver.");
-        }
-
-        oper->SetTime(t);
-        ode_solver->Init(*oper);
-
-        if (paraview)
-        {
-            pd = new ParaViewDataCollection("PNP_CG_Gummel_Time_Dependent", pmesh);
-            pd->SetPrefixPath("Paraview");
-            pd->SetLevelsOfDetail(p_order);
-            pd->SetDataFormat(VTKFormat::BINARY);
-            pd->SetHighOrderOutput(true);
-            pd->RegisterField("phi", phi_gf);
-            pd->RegisterField("c1",   c1_gf);
-            pd->RegisterField("c2",   c2_gf);
-        }
-    }
-    ~PNP_Box_Gummel_CG_TimeDependent_Solver()
-    {
-        delete fec;
-        delete fes;
-        delete phi_gf;
-        delete c1_gf;
-        delete c2_gf;
-        delete phic1c2;
-        delete oper;
-        delete ode_solver;
-        if (paraview) delete pd;
-    }
-
-    void Solve(Array<double>& phiL2errornorms_, Array<double>& c1L2errornorms_,
-               Array<double>& c2L2errornorms_, Array<double>& meshsizes_)
-    {
-        double mesh_size=0.0;
-        {
-            double max_size=0;
-            for (int i=0; i<pmesh->GetNE(); ++i)
-            {
-                double size = pmesh->GetElementSize(i);
-                if (size > max_size) max_size = size;
-            }
-
-            MPI_Allreduce(&max_size, &mesh_size, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-        }
-        // 时间离散误差加上空间离散误差: error = c1 dt + c2 h^2
-        // 如果收敛, 向前向后Euler格式都是1阶, 下面算空间L^2误差范数
-        if(ComputeConvergenceRate) {
-            t_stepsize = mesh_size * mesh_size;
-        }
-
-        MPI_Barrier(MPI_COMM_WORLD);
-        chrono.Clear();
-        chrono.Start();
-
-        bool last_step = false;
-        for (int ti=1; !last_step; ti++)
-        {
-            double dt_real = min(t_stepsize, t_final - t);
-
-            ode_solver->Step(*phic1c2, t, dt_real); // 进过这一步之后phic1c2和t都被更新了
-
-            last_step = (t >= t_final - 1e-8*t_stepsize);
-
-            phi_gf->SetFromTrueVector();
-            c1_gf->SetFromTrueVector();
-            c2_gf->SetFromTrueVector();
-
-            if (paraview)
-            {
-                pd->SetCycle(ti); // 第 i 个时间步
-                pd->SetTime(t); // 第i个时间步所表示的时间
-                pd->Save();
-            }
-            if (verbose >= 1)
-            {
-                phi_exact.SetTime(t);
-                c1_exact.SetTime(t);
-                c2_exact.SetTime(t);
-
-                double phiL2errornorm = phi_gf->ComputeL2Error(phi_exact);
-                double  c1L2errornorm = c1_gf->ComputeL2Error(c1_exact);
-                double  c2L2errornorm = c2_gf->ComputeL2Error(c2_exact);
-                if (myid == 0) {
-                    cout << "\nTime: " << t << '\n'
-                         << "phi L2 errornorm: " << phiL2errornorm << '\n'
-                         << " c1 L2 errornorm: " <<  c1L2errornorm << '\n'
-                         << " c2 L2 errornorm: " <<  c2L2errornorm << endl;
-                }
-            }
-        }
-
-        MPI_Barrier(MPI_COMM_WORLD);
-        chrono.Stop();
-
-        {
-            phi_exact.SetTime(t);
-            phi_gf->SetFromTrueVector();
-
-            c1_exact.SetTime(t);
-            c1_gf->SetFromTrueVector();
-
-            c2_exact.SetTime(t);
-            c2_gf->SetFromTrueVector();
-
-            // 计算误差范数只能是在所有进程上都运行，输出误差范数可以只在root进程
-            double phiL2err = phi_gf->ComputeL2Error(phi_exact);
-            double c1L2err = c1_gf->ComputeL2Error(c1_exact);
-            double c2L2err = c2_gf->ComputeL2Error(c2_exact);
-
-            if (myid == 0) {
-                cout << "\n=========> ";
-                cout << Discretize << p_order << ", " << Linearize << ", " << mesh_file << ", refine: " << refine_times << ", mesh size: " << mesh_size << '\n'
-                     << options_src << ", DOFs: " << fes->GlobalTrueVSize() * 3<< ", Cores: " << num_procs << ", "
-                     << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" \
-                                                                       : "wrong type")) << ", " << "time step: " << t_stepsize
-                     << endl;
-
-                cout << "ODE solver taking " << chrono.RealTime() << " s." << endl;
-                cout.precision(14);
-                cout << "At final time: " << t << '\n'
-                     << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << '\n'
-                     << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << '\n'
-                     << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
-
-                if (ComputeConvergenceRate)
-                {
-                    meshsizes_.Append(mesh_size);
-                    phiL2errornorms_.Append(phiL2err);
-                    c1L2errornorms_.Append(c1L2err);
-                    c2L2errornorms_.Append(c2L2err);
-                }
-            }
-        }
     }
 };
 
@@ -1262,18 +1054,20 @@ public:
         MFEM_ABORT("Not supported now.");
     }
 };
-class PNP_Box_Gummel_DG_TimeDependent_Solver
+
+
+class PNP_Box_TimeDependent_Solver
 {
 private:
     ParMesh* pmesh;
-    DG_FECollection* fec;
+    FiniteElementCollection* fec;
     ParFiniteElementSpace* fes;
 
     BlockVector* phic1c2;
     ParGridFunction *phi_gf, *c1_gf, *c2_gf;
 
-    PNP_Box_Gummel_DG_TimeDependent* oper;
     double t; // 当前时间
+    TimeDependentOperator* oper;
     ODESolver *ode_solver;
 
     int true_vsize; // 有限元空间维数
@@ -1283,14 +1077,21 @@ private:
     StopWatch chrono;
 
 public:
-    PNP_Box_Gummel_DG_TimeDependent_Solver(ParMesh* pmesh_, int ode_solver_type): pmesh(pmesh_)
+    PNP_Box_TimeDependent_Solver(ParMesh* pmesh_, int ode_solver_type): pmesh(pmesh_)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
         MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
         t = t_init;
 
-        fec = new DG_FECollection(p_order, pmesh->Dimension());
+        if (strcmp(Discretize, "cg") == 0)
+        {
+            fec = new H1_FECollection(p_order, pmesh->Dimension());
+        }
+        else if (strcmp(Discretize, "dg") == 0)
+        {
+            fec = new DG_FECollection(p_order, pmesh->Dimension());
+        }
         fes = new ParFiniteElementSpace(pmesh, fec);
 
         ess_bdr.SetSize(pmesh->bdr_attributes.Max());
@@ -1328,7 +1129,22 @@ public:
         c2_gf->SetTrueVector();
         c2_gf->SetFromTrueVector();
 
-        oper = new PNP_Box_Gummel_DG_TimeDependent(true_vsize, true_offset, ess_bdr, fes, t);
+        if (strcmp(Linearize, "gummel") == 0)
+        {
+            if (strcmp(Discretize, "cg") == 0)
+            {
+                oper = new PNP_Box_Gummel_CG_TimeDependent(true_vsize, true_offset, ess_bdr, fes, t);
+            }
+            else if (strcmp(Discretize, "dg") == 0)
+            {
+                oper = new PNP_Box_Gummel_DG_TimeDependent(true_vsize, true_offset, ess_bdr, fes, t);
+            }
+            else MFEM_ABORT("Not support discretization");
+        }
+        else
+        {
+            MFEM_ABORT("Not support linearization");
+        }
 
         switch (ode_solver_type)
         {
@@ -1364,7 +1180,7 @@ public:
             pd->RegisterField("c2",   c2_gf);
         }
     }
-    ~PNP_Box_Gummel_DG_TimeDependent_Solver()
+    ~PNP_Box_TimeDependent_Solver()
     {
         delete fec;
         delete fes;
@@ -1461,7 +1277,8 @@ public:
                 cout << Discretize << p_order << ", " << Linearize << ", " << mesh_file << ", refine: " << refine_times << ", mesh size: " << mesh_size << '\n'
                      << options_src << ", DOFs: " << fes->GlobalTrueVSize() * 3<< ", Cores: " << num_procs << ", "
                      << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" \
-                                                                       : "wrong type")) << ", " << "time step: " << t_stepsize
+                                                                       : "wrong type")) << '\n'
+                     << "t_init: "<< t_init << ", t_final: " << t_final << ", time step: " << t_stepsize
                      << endl;
 
                 cout << "ODE solver taking " << chrono.RealTime() << " s." << endl;
@@ -1482,7 +1299,6 @@ public:
         }
     }
 };
-
 
 
 #endif
