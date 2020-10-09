@@ -27,11 +27,11 @@ double pi = 3.141592653589793e0;
 
 
 // -------------------------- 一些辅助功能的函数 -------------------------------------
-Array<double> compute_convergence(Array<double> errornorms, Array<double> meshsizes)
+Array<double> compute_convergence(Array<double> errornorms, Array<double> sizes)
 {
     Array<double> rates;
     for (int i=0; i<errornorms.Size() - 1; i++){
-        rates.Append(log(errornorms[i]/errornorms[i+1]) / log(meshsizes[i]/meshsizes[i+1]));
+        rates.Append(log(errornorms[i]/errornorms[i+1]) / log(sizes[i]/sizes[i+1]));
     }
     return rates;
 }

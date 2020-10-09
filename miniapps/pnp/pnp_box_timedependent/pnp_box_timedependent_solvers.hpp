@@ -1194,7 +1194,7 @@ public:
     }
 
     void Solve(Array<double>& phiL2errornorms_, Array<double>& c1L2errornorms_,
-               Array<double>& c2L2errornorms_, Array<double>& meshsizes_)
+               Array<double>& c2L2errornorms_, Array<double>& meshsizes_, Array<double>& time_steps)
     {
         double mesh_size=0.0;
         {
@@ -1209,8 +1209,14 @@ public:
         }
         // 时间离散误差加上空间离散误差: error = c1 dt + c2 h^2
         // 如果收敛, 向前向后Euler格式都是1阶, 下面算空间L^2误差范数
-        if(ComputeConvergenceRate) {
-            t_stepsize = mesh_size * mesh_size;
+        if(SpaceConvergRate) {
+            meshsizes_.Append(mesh_size);
+            if (SpaceConvergRate_Change_dt) {
+                t_stepsize = mesh_size * mesh_size;
+            }
+        }
+        else if (TimeConvergRate) {
+            time_steps.Append(t_stepsize);
         }
 
         MPI_Barrier(MPI_COMM_WORLD);
@@ -1246,10 +1252,10 @@ public:
                 double  c1L2errornorm = c1_gf->ComputeL2Error(c1_exact);
                 double  c2L2errornorm = c2_gf->ComputeL2Error(c2_exact);
                 if (myid == 0) {
-                    cout << "\nTime: " << t << '\n'
+                    cout << "Time: " << t << '\n'
                          << "phi L2 errornorm: " << phiL2errornorm << '\n'
                          << " c1 L2 errornorm: " <<  c1L2errornorm << '\n'
-                         << " c2 L2 errornorm: " <<  c2L2errornorm << endl;
+                         << " c2 L2 errornorm: " <<  c2L2errornorm << '\n' << endl;
                 }
             }
         }
@@ -1273,12 +1279,11 @@ public:
             double c2L2err = c2_gf->ComputeL2Error(c2_exact);
 
             if (myid == 0) {
-                cout << "\n=========> ";
-                cout << Discretize << p_order << ", " << Linearize << ", " << mesh_file << ", refine: " << refine_times << ", mesh size: " << mesh_size << '\n'
-                     << options_src << ", DOFs: " << fes->GlobalTrueVSize() * 3<< ", Cores: " << num_procs << ", "
-                     << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" \
-                                                                       : "wrong type")) << '\n'
-                     << "t_init: "<< t_init << ", t_final: " << t_final << ", time step: " << t_stepsize
+                cout << "=========> ";
+                cout << Discretize << p_order << ", " << Linearize << ", " << options_src << ", DOFs: " << fes->GlobalTrueVSize() * 3<< ", Cores: " << num_procs << ", "
+                     << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" : "wrong type")) << '\n'
+                     << mesh_file << ", refine mesh: " << refine_mesh << ", mesh size: " << mesh_size << '\n'
+                     << "t_init: "<< t_init << ", t_final: " << t_final << ", time step: " << t_stepsize << ", refine time: " << refine_time << ", time scale: " << time_scale
                      << endl;
 
                 cout << "ODE solver taking " << chrono.RealTime() << " s." << endl;
@@ -1286,11 +1291,11 @@ public:
                 cout << "At final time: " << t << '\n'
                      << "L2 errornorm of |phi_h - phi_e|: " << phiL2err << '\n'
                      << "L2 errornorm of | c1_h - c1_e |: " << c1L2err << '\n'
-                     << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << endl;
+                     << "L2 errornorm of | c2_h - c2_e |: " << c2L2err << '\n' << endl;
 
-                if (ComputeConvergenceRate)
+                // 保留最后一个时间步的计算误差
+                if (SpaceConvergRate || TimeConvergRate)
                 {
-                    meshsizes_.Append(mesh_size);
                     phiL2errornorms_.Append(phiL2err);
                     c1L2errornorms_.Append(c1L2err);
                     c2L2errornorms_.Append(c2L2err);
