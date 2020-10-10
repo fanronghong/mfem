@@ -7,10 +7,10 @@ using namespace mfem;
 
 int main(int argc, char *argv[])
 {
-    int num_procs, myid;
+    int num_procs, rank;
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     OptionsParser args(argc, argv);
     args.AddOption(&p_order, "-p", "--p_order", "Polynomial order of basis function.");
@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
     args.Parse();
     if (!args.Good())
     {
-        if (myid == 0)
+        if (rank == 0)
         {
             args.PrintUsage(cout);
         }
@@ -50,14 +50,14 @@ int main(int argc, char *argv[])
     MFEMInitializePetsc(NULL, NULL, options_src, NULL);
 
     Array<double> phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes, timesteps;
-    if (SpaceConvergRate)
+    if (SpaceConvergRate) // dt 不变, 改变 h
     {
-        MFEM_ASSERT(!TimeConvergRate, "SpaceConvergRate and TimeConvergRate cannot exist simultaneously");
+        MFEM_ASSERT(!TimeConvergRate, "SpaceConvergRate and TimeConvergRate cannot be true simultaneously");
 
-        for (int i=0; i<refine_time; i++) t_stepsize *= time_scale;
+        for (int i=0; i<refine_time; ++i) t_stepsize *= time_scale; // 先把时间步长 dt 确定下来
 
         int origin_refine_mesh = refine_mesh; // save refine_mesh temporarily
-        for (int i=0; i<refine_mesh+1; ++i)
+        for (int i=0; i<refine_mesh+1; ++i) // 对网格加密多次
         {
             Mesh* mesh = new Mesh(mesh_file);
             ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
@@ -74,7 +74,7 @@ int main(int argc, char *argv[])
             refine_mesh = origin_refine_mesh; // reset real refine_mesh
         }
 
-        if (myid == 0)
+        if (rank == 0)
         {
             meshsizes.Print(cout << "\nMesh sizes: \n", meshsizes.Size());
 
@@ -92,19 +92,18 @@ int main(int argc, char *argv[])
             c2rates  .Print(cout << "c2   L2 convergence rate: \n", c2rates.Size());
         }
     }
-    else if (TimeConvergRate)
+    else if (TimeConvergRate) // h 不变, 改变 dt
     {
-        MFEM_ASSERT(!SpaceConvergRate, "SpaceConvergRate and TimeConvergRate cannot exist simultaneously");
+        MFEM_ASSERT(!SpaceConvergRate, "SpaceConvergRate and TimeConvergRate cannot be true simultaneously");
 
         Mesh* mesh = new Mesh(mesh_file);
         ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
         delete mesh;
-
-        for (int k=0; k<refine_mesh; k++) pmesh->UniformRefinement();
+        for (int k=0; k<refine_mesh; k++) pmesh->UniformRefinement(); // 先把计算网格尺寸 h 确定下来
 
         double origin_t_stepsize = t_stepsize;
         int origin_refine_time = refine_time;
-        for (int i=0; i<refine_time+1; ++i) // 对时间步长进行"加密"
+        for (int i=0; i<refine_time+1; ++i) // 对时间步长"加密"多次
         {
             for (int j=0; j<i; ++j) t_stepsize *= time_scale;
 
@@ -120,7 +119,7 @@ int main(int argc, char *argv[])
 
         delete pmesh;
 
-        if (myid == 0)
+        if (rank == 0)
         {
             timesteps.Print(cout << "\nTime-step sizes: \n", timesteps.Size());
 
@@ -144,8 +143,8 @@ int main(int argc, char *argv[])
         ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
         delete mesh;
 
-        for (int i=0; i<refine_mesh; i++) pmesh->UniformRefinement();
-        for (int i=0; i<refine_time; i++) t_stepsize *= time_scale;
+        for (int i=0; i<refine_mesh; i++) pmesh->UniformRefinement(); // 确定计算网格
+        for (int i=0; i<refine_time; i++) t_stepsize *= time_scale;   // 确定时间步长
 
         PNP_Box_TimeDependent_Solver* solver = new PNP_Box_TimeDependent_Solver(pmesh, ode_type);
         solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes, timesteps);

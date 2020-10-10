@@ -32,21 +32,20 @@ private:
     Vector *temp_x0, *temp_b0, *temp_x1, *temp_b1, *temp_x2, *temp_b2;
     int true_vsize;
     mutable Array<int> true_offset, ess_bdr, ess_tdof_list;
-    int num_procs, myid;
+    int num_procs, rank;
 
 public:
-    PNP_Box_Gummel_CG_TimeDependent(int truesize, Array<int>& offset, Array<int>& ess_bdr_,
-                                    ParFiniteElementSpace* fsp, double time)
-            : TimeDependentOperator(3*truesize, time), true_vsize(truesize), true_offset(offset), ess_bdr(ess_bdr_), fes(fsp),
-              b1(NULL), b2(NULL), a0(NULL), a1(NULL), m(NULL), a2(NULL), m1_dta1(NULL), m2_dta2(NULL)
+    PNP_Box_Gummel_CG_TimeDependent(int truesize, Array<int>& offset, Array<int>& ess_bdr_, ParFiniteElementSpace* fsp, double time)
+        : TimeDependentOperator(3*truesize, time), true_vsize(truesize), true_offset(offset), ess_bdr(ess_bdr_), fes(fsp),
+                                   b1(NULL), b2(NULL), a0(NULL), a1(NULL), m(NULL), a2(NULL), m1_dta1(NULL), m2_dta2(NULL)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
-        A0 = new HypreParMatrix;
-        M = new HypreParMatrix;
+        A0      = new HypreParMatrix;
+        M       = new HypreParMatrix;
         M1_dtA1 = new HypreParMatrix;
         M2_dtA2 = new HypreParMatrix;
 
@@ -291,7 +290,7 @@ public:
 
         Vector* phic1c2_ptr = (Vector*) &phic1c2;
         ParGridFunction old_phi, old_c1, old_c2;
-        // 后面更新 old_phi 的同时也会更新 phic1c2_ptr, 从而更新 phic1c2
+        // 求解新的 old_phi 从而更新 phic1c2_ptr, 最终更新 phic1c2
         old_phi.MakeTRef(fes, *phic1c2_ptr, true_offset[0]);
         old_c1 .MakeTRef(fes, *phic1c2_ptr, true_offset[1]);
         old_c2 .MakeTRef(fes, *phic1c2_ptr, true_offset[2]);
@@ -299,14 +298,17 @@ public:
         old_c1 .SetFromTrueVector();
         old_c2 .SetFromTrueVector();
 
-        ParGridFunction dc1dt, dc2dt;
+        ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi_dt
+        // 下面通过求解 dc1dt, dc2dt 从而更新 dphic1c2_dt
         dc1dt.MakeTRef(fes, dphic1c2_dt, true_offset[1]);
         dc2dt.MakeTRef(fes, dphic1c2_dt, true_offset[2]);
 
         // 变量*_Gummel用于Gummel迭代过程中
         ParGridFunction phi_Gummel(fes), dc1dt_Gummel(fes), dc2dt_Gummel(fes);
-        phi_Gummel = 0.0; dc1dt_Gummel = 0.0; dc2dt_Gummel = 0.0;
-        phi_exact.SetTime(t); // t在ODE里面已经变成下一个时刻了(要求解的时刻)
+        phi_Gummel   = 0.0;
+        dc1dt_Gummel = 0.0;
+        dc2dt_Gummel = 0.0;
+        phi_exact  .SetTime(t); // t在ODE里面已经变成下一个时刻了(要求解的时刻)
         dc1dt_exact.SetTime(t);
         dc2dt_exact.SetTime(t);
 
@@ -318,7 +320,7 @@ public:
             //                                1. 求解 Poisson
             // **************************************************************************************
             ParLinearForm *l0 = new ParLinearForm(fes);
-            // (f0, psi)
+            // b0: (f0, psi)
             f0_analytic.SetTime(t);
             l0->AddDomainIntegrator(new DomainLFIntegrator(f0_analytic));
             l0->Assemble();
@@ -331,12 +333,12 @@ public:
             b2->AddMult(dc2dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
 
             builda0();
-            phi_Gummel.ProjectBdrCoefficient(phi_exact, ess_bdr);
+            phi_Gummel.ProjectBdrCoefficient(phi_exact, ess_bdr); // 设定解的边界条件
             a0->FormLinearSystem(ess_tdof_list, phi_Gummel, *l0, *A0, *temp_x0, *temp_b0);
 
             PetscLinearSolver* poisson_solver = new PetscLinearSolver(*A0, false, "phi_");
             poisson_solver->Mult(*temp_b0, *temp_x0);
-            a0->RecoverFEMSolution(*temp_x0, *l0, phi_Gummel); // 更新old_phi
+            a0->RecoverFEMSolution(*temp_x0, *l0, phi_Gummel);
             delete l0;
             delete poisson_solver;
 
@@ -357,9 +359,9 @@ public:
             diff = 0.0;
             diff += phi_Gummel;
             diff -= old_phi; // 用到的是old_phi的PrimalVector
-            double tol = diff.ComputeL2Error(zero) / phi_Gummel.ComputeL2Error(zero);
+            double tol = diff.ComputeL2Error(zero) / phi_Gummel.ComputeL2Error(zero); // 这里不能把diff设为Vector类型, 如果是Vector类型, 这里计算Norml2()时各个进程得到的值不一样
             old_phi = phi_Gummel; // 算完本次Gummel迭代的tol就可以更新phi_Gummel
-            if (myid == 0 && verbose >= 2) {
+            if (rank == 0 && verbose >= 2) {
                 cout << "Gummel step: " << gummel_step << ", Relative Tol: " << tol << endl;
             }
             if (tol < Gummel_rel_tol) { // Gummel迭代停止
@@ -371,7 +373,7 @@ public:
             //                                3. 求解 NP1
             // **************************************************************************************
             ParLinearForm *l1 = new ParLinearForm(fes);
-            // (f1, v1)
+            // b1: (f1, v1)
             f1_analytic.SetTime(t);
             l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
             l1->Assemble();
@@ -380,7 +382,7 @@ public:
             a1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1
 
             buildm1_dta1(dt, phi_Gummel);
-            dc1dt_Gummel.ProjectBdrCoefficient(dc1dt_exact, ess_bdr);
+            dc1dt_Gummel.ProjectBdrCoefficient(dc1dt_exact, ess_bdr); // 设定未知量的边界条件
             m1_dta1->FormLinearSystem(ess_tdof_list, dc1dt_Gummel, *l1, *M1_dtA1, *temp_x1, *temp_b1);
 
             PetscLinearSolver* np1_solver = new PetscLinearSolver(*M1_dtA1, false, "np1_");
@@ -394,7 +396,7 @@ public:
             //                                4. 求解 NP2
             // **************************************************************************************
             ParLinearForm *l2 = new ParLinearForm(fes);
-            // (f2, v2)
+            // b2: (f2, v2)
             f2_analytic.SetTime(t);
             l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
             l2->Assemble();
@@ -415,8 +417,8 @@ public:
 
         // 用最终Gummel迭代的解更新要求解的3个未知量
         old_phi = phi_Gummel;
-        dc1dt = dc1dt_Gummel;
-        dc2dt = dc2dt_Gummel;
+        dc1dt   = dc1dt_Gummel;
+        dc2dt   = dc2dt_Gummel;
         // 而我们要返回的TrueVector, 而不是PrimalVector
         old_phi.SetTrueVector();
         dc1dt  .SetTrueVector();
@@ -429,9 +431,9 @@ class PNP_Box_Gummel_DG_TimeDependent: public TimeDependentOperator
 {
 private:
     ParFiniteElementSpace* fes;
-    // 用来给DG空间的GridFunction设定边界条件: 如果gf属于DG空间的GridFunction, 则gf.ProjectBdrCoefficient()会出错
-    H1_FECollection* h1_fec;
-    ParFiniteElementSpace* h1;
+//    // 用来给DG空间的GridFunction设定边界条件: 如果gf属于DG空间的GridFunction, 则gf.ProjectBdrCoefficient()会出错
+//    H1_FECollection* h1_fec;
+//    ParFiniteElementSpace* h1;
 
     mutable ParBilinearForm *a0, *e0, *s0, *p0, *a0_e0_s0_p0,
                             *m1, *a1, *e1, *s1, *p1, *m1_dta1_dte1_dts1_dtp1,
@@ -444,7 +446,7 @@ private:
     Vector *temp_x0, *temp_b0, *temp_x1, *temp_b1, *temp_x2, *temp_b2;
     int true_vsize;
     mutable Array<int> true_offset, ess_bdr, null_array; // 在H1空间中存在ess_tdof_list, 在DG空间中不存在
-    int num_procs, myid;
+    int num_procs, rank;
 
 public:
     PNP_Box_Gummel_DG_TimeDependent(int truesize, Array<int>& offset, Array<int>& ess_bdr_, ParFiniteElementSpace* fes_, double time)
@@ -455,14 +457,14 @@ public:
               b1(NULL), b2(NULL)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        // fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list); // 在H1空间中存在, 在DG空间中不存在
+//         fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list); // 在H1空间中存在, 在DG空间中不存在
 
-        h1_fec = new H1_FECollection(p_order, fes->GetParMesh()->Dimension());
-        h1 = new ParFiniteElementSpace(fes->GetParMesh(), h1_fec);
+//        h1_fec = new H1_FECollection(p_order, fes->GetParMesh()->Dimension());
+//        h1 = new ParFiniteElementSpace(fes->GetParMesh(), h1_fec);
 
-        A0_E0_S0_P0 = new HypreParMatrix;
+        A0_E0_S0_P0            = new HypreParMatrix;
         M1_dtA1_dtE1_dtS1_dtP1 = new HypreParMatrix;
         M2_dtA2_dtE2_dtS2_dtP2 = new HypreParMatrix;
 
@@ -489,7 +491,7 @@ public:
         delete temp_x1; delete temp_b1;
         delete temp_x2; delete temp_b2;
 
-        delete h1_fec; delete h1;
+//        delete h1_fec; delete h1;
     }
 
     // alpha2 alpha3 z1 (c1, psi)
@@ -860,9 +862,8 @@ public:
         dphic1c2_dt = 0.0;
 
         Vector* phic1c2_ptr = (Vector*) &phic1c2;
-        // 上一个时间步的解(已知)
-        ParGridFunction old_phi, old_c1, old_c2;
-        // 后面更新 old_phi 的同时也会更新 phic1c2_ptr, 从而更新 phic1c2
+        ParGridFunction old_phi, old_c1, old_c2; // 上一个时间步的解(已知)
+        // 求解新的 old_phi 从而更新 phic1c2_ptr, 最终更新 phic1c2
         old_phi.MakeTRef(fes, *phic1c2_ptr, true_offset[0]);
         old_c1 .MakeTRef(fes, *phic1c2_ptr, true_offset[1]);
         old_c2 .MakeTRef(fes, *phic1c2_ptr, true_offset[2]);
@@ -871,17 +872,9 @@ public:
         old_c2 .SetFromTrueVector();
 
         ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi_dt
+        // 下面通过求解 dc1dt, dc2dt 从而更新 dphic1c2_dt
         dc1dt.MakeTRef(fes, dphic1c2_dt, true_offset[1]);
         dc2dt.MakeTRef(fes, dphic1c2_dt, true_offset[2]);
-
-        phi_exact.SetTime(t); // t在ODE里面已经变成下一个时刻了(要求解的时刻)
-        c1_exact.SetTime(t);
-        c2_exact.SetTime(t);
-        dc1dt_exact.SetTime(t);
-        dc2dt_exact.SetTime(t);
-        f0_analytic.SetTime(t);
-        f1_analytic.SetTime(t);
-        f2_analytic.SetTime(t);
 
         // 变量*_Gummel用于Gummel迭代过程中
         ParGridFunction phi_Gummel(fes), dc1dt_Gummel(fes), dc2dt_Gummel(fes);
@@ -898,8 +891,10 @@ public:
             // **************************************************************************************
             ParLinearForm *l0 = new ParLinearForm(fes);
             // b0: (f0, psi)
+            f0_analytic.SetTime(t);
             l0->AddDomainIntegrator(new DomainLFIntegrator(f0_analytic));
             // weak Dirichlet boundary condition
+            phi_exact.SetTime(t);
             l0->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(phi_exact, epsilon_water), ess_bdr);
             if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
@@ -925,7 +920,7 @@ public:
 
             PetscLinearSolver* poisson_solver = new PetscLinearSolver(*A0_E0_S0_P0, false, "phi_");
             poisson_solver->Mult(*temp_b0, *temp_x0);
-            a0_e0_s0_p0->RecoverFEMSolution(*temp_x0, *l0, phi_Gummel); // 更新old_phi
+            a0_e0_s0_p0->RecoverFEMSolution(*temp_x0, *l0, phi_Gummel);
             delete l0;
             delete poisson_solver;
 
@@ -946,12 +941,12 @@ public:
             // **************************************************************************************
             //                                2. 计算Gummel迭代相对误差
             // **************************************************************************************
-            diff = 0.0;
+            diff  = 0.0;
             diff += phi_Gummel;
             diff -= old_phi; // 用到的是old_phi的PrimalVector
-            double tol = diff.ComputeL2Error(zero) / phi_Gummel.ComputeL2Error(zero);
+            double tol = diff.ComputeL2Error(zero) / phi_Gummel.ComputeL2Error(zero); // 这里不能把diff设为Vector类型, 如果是Vector类型, 这里计算Norml2()时各个进程得到的值不一样
             old_phi = phi_Gummel; // 算完本次Gummel迭代的tol就可以更新phi_Gummel
-            if (myid == 0 && verbose >= 2) {
+            if (rank == 0 && verbose >= 2) {
                 cout << "Gummel step: " << gummel_step << ", Relative Tol: " << tol << endl;
             }
             if (tol < Gummel_rel_tol) { // Gummel迭代停止
@@ -964,8 +959,10 @@ public:
             // **************************************************************************************
             ParLinearForm *l1 = new ParLinearForm(fes);
             // b1: (f1, v1)
+            f1_analytic.SetTime(t);
             l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
             // weak Dirichlet boundary condition
+            c1_exact.SetTime(t);
             l1->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(c1_exact, D_K_), ess_bdr);
             if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
@@ -1004,8 +1001,10 @@ public:
             // **************************************************************************************
             ParLinearForm *l2 = new ParLinearForm(fes);
             // b2: (f2, v2)
+            f2_analytic.SetTime(t);
             l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
             // weak Dirichlet boundary condition
+            c2_exact.SetTime(t);
             l2->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(c2_exact, D_Cl_), ess_bdr);
             if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
@@ -1073,14 +1072,14 @@ private:
     int true_vsize; // 有限元空间维数
     Array<int> true_offset, ess_bdr;
     ParaViewDataCollection* pd;
-    int num_procs, myid;
+    int num_procs, rank;
     StopWatch chrono;
 
 public:
     PNP_Box_TimeDependent_Solver(ParMesh* pmesh_, int ode_solver_type): pmesh(pmesh_)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         t = t_init;
 
@@ -1108,7 +1107,7 @@ public:
         true_offset[2] = true_vsize * 2;
         true_offset[3] = true_vsize * 3;
 
-        phic1c2 = new BlockVector(true_offset); *phic1c2 = 0.0;
+        phic1c2 = new BlockVector(true_offset); *phic1c2 = 0.0; // TrueVector, not PrimalVector
         phi_gf->MakeTRef(fes, *phic1c2, true_offset[0]);
         c1_gf ->MakeTRef(fes, *phic1c2, true_offset[1]);
         c2_gf ->MakeTRef(fes, *phic1c2, true_offset[2]);
@@ -1178,6 +1177,10 @@ public:
             pd->RegisterField("phi", phi_gf);
             pd->RegisterField("c1",   c1_gf);
             pd->RegisterField("c2",   c2_gf);
+
+            pd->SetCycle(0); // 第 0 个时间步
+            pd->SetTime(t); // 第 0 个时间步所表示的时间
+            pd->Save();
         }
     }
     ~PNP_Box_TimeDependent_Solver()
@@ -1228,18 +1231,19 @@ public:
         {
             double dt_real = min(t_stepsize, t_final - t);
 
-            ode_solver->Step(*phic1c2, t, dt_real); // 进过这一步之后phic1c2和t都被更新了
+            ode_solver->Step(*phic1c2, t, dt_real); // 经过这一步之后 phic1c2(TrueVector, not PrimalVector) 和 t 都被更新了
 
             last_step = (t >= t_final - 1e-8*t_stepsize);
 
+            // 得到下一个时刻t的解, 这个t和执行上述Step()之前的t不一样, 差一个dt_real
             phi_gf->SetFromTrueVector();
             c1_gf->SetFromTrueVector();
             c2_gf->SetFromTrueVector();
 
             if (paraview)
             {
-                pd->SetCycle(ti); // 第 i 个时间步
-                pd->SetTime(t); // 第i个时间步所表示的时间
+                pd->SetCycle(ti); // 第 i 个时间步. 注: ti为0的解就是初始时刻的解, 在构造函数中已经保存
+                pd->SetTime(t); // 第 i 个时间步所表示的时间
                 pd->Save();
             }
             if (verbose >= 1)
@@ -1251,7 +1255,8 @@ public:
                 double phiL2errornorm = phi_gf->ComputeL2Error(phi_exact);
                 double  c1L2errornorm = c1_gf->ComputeL2Error(c1_exact);
                 double  c2L2errornorm = c2_gf->ComputeL2Error(c2_exact);
-                if (myid == 0) {
+                if (rank == 0)
+                {
                     cout << "Time: " << t << '\n'
                          << "phi L2 errornorm: " << phiL2errornorm << '\n'
                          << " c1 L2 errornorm: " <<  c1L2errornorm << '\n'
@@ -1264,6 +1269,7 @@ public:
         chrono.Stop();
 
         {
+            // 计算最后一个时刻的解的误差范数
             phi_exact.SetTime(t);
             phi_gf->SetFromTrueVector();
 
@@ -1278,7 +1284,8 @@ public:
             double c1L2err = c1_gf->ComputeL2Error(c1_exact);
             double c2L2err = c2_gf->ComputeL2Error(c2_exact);
 
-            if (myid == 0) {
+            if (rank == 0)
+            {
                 cout << "=========> ";
                 cout << Discretize << p_order << ", " << Linearize << ", " << options_src << ", DOFs: " << fes->GlobalTrueVSize() * 3<< ", Cores: " << num_procs << ", "
                      << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" : "wrong type")) << '\n'
