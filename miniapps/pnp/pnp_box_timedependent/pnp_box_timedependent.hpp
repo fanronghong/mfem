@@ -9,10 +9,11 @@ using namespace mfem;
 //#define SELF_VERBOSE
 
 int p_order                     = 1; //有限元基函数的多项式次数
+const char* mesh_file           = "./4_4_4_translate.msh";
 const char* Linearize           = "gummel"; // newton, gummel
 bool zero_initial               = true; // 非线性迭代的初值是否为0
 double initTol                  = 1e-3; // 为得到非线性迭代的初值所需Gummel迭代
-const char* Discretize          = "cg"; // cg, dg
+const char* Discretize          = "dg"; // cg, dg
 const char* AdvecStable         = "none"; // none, eafe, supg
 const char* options_src         = "./pnp_box_petsc_opts";
 bool local_conservation         = false;
@@ -25,18 +26,18 @@ int ode_type                    = 1; // 1: backward Euler; 11: forward Euler
 double t_init                   = 0.0; // 初始时间
 double t_final                  = 0.3; // 最后时间
 double t_stepsize               = 0.1; // 时间步长
+int refine_mesh                 = 1; // 初始网格加密次数
 int refine_time                 = 0;   // "加密时间次数"
 double time_scale               = 1.0; // 类似网格加密(h -> 0.5 * h): dt -> time_scale * dt
-const char* mesh_file           = "./4_4_4_translate.msh";
-int refine_mesh                 = 0; // 初始网格加密次数
-bool TimeConvergRate            = true;
+bool TimeConvergRate            = false;
 bool SpaceConvergRate           = false; // 利用解析解计算误差阶
-bool SpaceConvergRate_Change_dt = false; // 为了计算误差: error = c1 dt + c2 h^2, 是否把dt设置为h^2?
+bool SpaceConvergRate_Change_dt = false; // 为了计算误差: error = c1 dt + c2 h^2, 是否把dt设置为h^2的倍数?
+double Change_dt_factor         = 0.1; // dt = factor * h^2
 const int skip_zero_entries     = 0; // 为了保证某些矩阵的sparsity pattern一致
 int mpi_debug                   = 1;
 int verbose                     = 2; // 数字越大输出越多: 0,1,2
 double sigma                    = -1.0; // symmetric parameter for DG
-bool symmetry_with_boundary     = true;
+bool symmetry_with_boundary     = true; // 为true就可以不单独考虑weak Dirichlet.
 double kappa                    = 20; // penalty parameter for DG
 bool penalty_with_boundary      = true;
 

@@ -305,7 +305,7 @@ public:
 
         // 变量*_Gummel用于Gummel迭代过程中
         ParGridFunction phi_Gummel(fes), dc1dt_Gummel(fes), dc2dt_Gummel(fes);
-        phi_Gummel   = 0.0;
+        phi_Gummel   = 0.0; // 这里暂不设定边界条件, 后面在计算的时候直接设定essential边界条件
         dc1dt_Gummel = 0.0;
         dc2dt_Gummel = 0.0;
         phi_exact  .SetTime(t); // t在ODE里面已经变成下一个时刻了(要求解的时刻)
@@ -742,7 +742,10 @@ public:
         }
 
         // weak Dirichlet boundary condition
-        a0_e0_s0_p0->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(epsilon_water), ess_bdr);
+        if (! (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) )
+        {
+            a0_e0_s0_p0->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(epsilon_water), ess_bdr);
+        }
 
         a0_e0_s0_p0->Assemble(skip_zero_entries);
     }
@@ -878,9 +881,15 @@ public:
 
         // 变量*_Gummel用于Gummel迭代过程中
         ParGridFunction phi_Gummel(fes), dc1dt_Gummel(fes), dc2dt_Gummel(fes);
-        phi_Gummel   = 0.0;
+        phi_Gummel   = 0.0; // 这里需要设定边界条件吗fff
         dc1dt_Gummel = 0.0;
         dc2dt_Gummel = 0.0;
+
+        phi_exact.SetTime(t);
+        c1_exact.SetTime(t);
+        c2_exact.SetTime(t);
+        dc1dt_exact.SetTime(t);
+        dc2dt_exact.SetTime(t);
 
         ParGridFunction diff(fes);
         bool last_gummel_step = false;
@@ -893,9 +902,10 @@ public:
             // b0: (f0, psi)
             f0_analytic.SetTime(t);
             l0->AddDomainIntegrator(new DomainLFIntegrator(f0_analytic));
-            // weak Dirichlet boundary condition
-            phi_exact.SetTime(t);
-            l0->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(phi_exact, epsilon_water), ess_bdr);
+            if (! (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) ) // weak Dirichlet boundary condition
+            {
+                l0->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(phi_exact, epsilon_water), ess_bdr);
+            }
             if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
                 // g0: sigma <phi_D, epsilon_s grad(psi).n>
@@ -924,14 +934,17 @@ public:
             delete l0;
             delete poisson_solver;
 
-            if (visualization && 0)
+            if (0)
             {
                 VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
                 dc->RegisterField("phi_Gummel", &phi_Gummel);
 
-                cout << "L2 norm of phi: " << phi_Gummel.ComputeL2Error(phi_exact) << endl;
-//                phi_Gummel.ProjectCoefficient(phi_exact);
-                Visualize(*dc, "phi_Gummel", "phi_Gummel_DG");
+                cout << "L2 norm of phi(appro): " << phi_Gummel.ComputeL2Error(phi_exact) << endl;
+                Visualize(*dc, "phi_Gummel", "appro phi_Gummel_DG");
+
+                phi_Gummel.ProjectCoefficient(phi_exact);
+                cout << "L2 norm of phi(exact): " << phi_Gummel.ComputeL2Error(phi_exact) << endl;
+                Visualize(*dc, "phi_Gummel", "exact phi_Gummel_DG");
 
                 delete dc;
                 MFEM_ABORT("FFFF");
@@ -962,8 +975,7 @@ public:
             f1_analytic.SetTime(t);
             l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
             // weak Dirichlet boundary condition
-            c1_exact.SetTime(t);
-            l1->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(c1_exact, D_K_), ess_bdr);
+            l1->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(dc1dt_exact, D_K_), ess_bdr);
             if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
                 // -g1: -sigma <c1_D, D1(grad(v1) + z1 v1 grad(phi)).n>
@@ -995,6 +1007,30 @@ public:
             delete l1;
             delete np1_solver;
 
+            if (0)
+            {
+                ParGridFunction c1_Gummel(fes);
+                c1_Gummel = 0.0;
+
+                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
+                dc->RegisterField("c1_Gummel", &c1_Gummel);
+
+                c1_Gummel = old_c1;
+                c1_Gummel.Add(dt, dc1dt_Gummel);
+
+                cout << "L2 norm of c1(appro): " << c1_Gummel.ComputeL2Error(c1_exact) << endl;
+                Visualize(*dc, "c1_Gummel", "appro c1_Gummel");
+
+                c1_Gummel.ProjectCoefficient(c1_exact);
+                cout << "L2 norm of c1(exact): " << c1_Gummel.ComputeL2Error(c1_exact) << endl;
+                Visualize(*dc, "c1_Gummel", "exact c1_Gummel");
+
+                cout << "L2 norm of dc1_dt: " << dc1dt_Gummel.ComputeL2Error(dc1dt_exact) << endl;
+
+                delete dc;
+                MFEM_ABORT("FFFF");
+            }
+
 
             // **************************************************************************************
             //                                4. 求解 NP2
@@ -1004,8 +1040,7 @@ public:
             f2_analytic.SetTime(t);
             l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
             // weak Dirichlet boundary condition
-            c2_exact.SetTime(t);
-            l2->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(c2_exact, D_Cl_), ess_bdr);
+            l2->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(dc2dt_exact, D_Cl_), ess_bdr);
             if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
                 // -g2: -sigma <c2_D, D2(grad(v2) + z2 v2 grad(phi)).n>
@@ -1169,7 +1204,9 @@ public:
 
         if (paraview)
         {
-            pd = new ParaViewDataCollection("PNP_DG_Gummel_Time_Dependent", pmesh);
+            string paraview_title = string("PNP_") + Discretize + "_" + Linearize + "_Time_Dependent";
+            cout << paraview_title << endl;
+            pd = new ParaViewDataCollection(paraview_title, pmesh);
             pd->SetPrefixPath("Paraview");
             pd->SetLevelsOfDetail(p_order);
             pd->SetDataFormat(VTKFormat::BINARY);
@@ -1212,15 +1249,11 @@ public:
         }
         // 时间离散误差加上空间离散误差: error = c1 dt + c2 h^2
         // 如果收敛, 向前向后Euler格式都是1阶, 下面算空间L^2误差范数
-        if(SpaceConvergRate) {
-            meshsizes_.Append(mesh_size);
-            if (SpaceConvergRate_Change_dt) {
-                t_stepsize = mesh_size * mesh_size;
-            }
+        if (SpaceConvergRate_Change_dt) {
+            t_stepsize = mesh_size * mesh_size * Change_dt_factor;
         }
-        else if (TimeConvergRate) {
-            time_steps.Append(t_stepsize);
-        }
+        time_steps.Append(t_stepsize);
+        meshsizes_.Append(mesh_size);
 
         MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
