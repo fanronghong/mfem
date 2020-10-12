@@ -74,25 +74,6 @@ int main(int argc, char *argv[])
 
             refine_mesh = origin_refine_mesh; // reset real refine_mesh
         }
-
-        if (rank == 0)
-        {
-            meshsizes.Print(cout << "\nMesh sizes: \n", meshsizes.Size());
-            timesteps.Print(cout << "\nTime-step sizes: \n", timesteps.Size());
-
-            phi3L2errornorms.Print(cout << "\nL2 errornorms of |phi3 - phi3_h|: \n", phi3L2errornorms.Size());
-            Array<double> phi3rates = compute_convergence(phi3L2errornorms, meshsizes);
-
-            c1L2errornorms.Print(cout << "\nL2 errornorms of |c1 - c1_h|: \n", c1L2errornorms.Size());
-            Array<double> c1rates = compute_convergence(c1L2errornorms, meshsizes);
-
-            c2L2errornorms.Print(cout << "\nL2 errornorms of |c2 - c2_h|: \n", c2L2errornorms.Size());
-            Array<double> c2rates = compute_convergence(c2L2errornorms, meshsizes);
-
-            phi3rates.Print(cout << "\nphi3 L2 h convergence rate: \n", phi3rates.Size());
-            c1rates  .Print(cout << "c1   L2 h convergence rate: \n", c1rates.Size());
-            c2rates  .Print(cout << "c2   L2 h convergence rate: \n", c2rates.Size());
-        }
     }
     else if (TimeConvergRate) // h 不变, 改变 dt
     {
@@ -120,25 +101,6 @@ int main(int argc, char *argv[])
         }
 
         delete pmesh;
-
-        if (rank == 0)
-        {
-            meshsizes.Print(cout << "\nMesh sizes: \n", meshsizes.Size());
-            timesteps.Print(cout << "\nTime-step sizes: \n", timesteps.Size());
-
-            phi3L2errornorms.Print(cout << "\nL2 errornorms of |phi3 - phi3_h|: \n", phi3L2errornorms.Size());
-            Array<double> phi3rates = compute_convergence(phi3L2errornorms, timesteps);
-
-            c1L2errornorms.Print(cout << "\nL2 errornorms of |c1 - c1_h|: \n", c1L2errornorms.Size());
-            Array<double> c1rates = compute_convergence(c1L2errornorms, timesteps);
-
-            c2L2errornorms.Print(cout << "\nL2 errornorms of |c2 - c2_h|: \n", c2L2errornorms.Size());
-            Array<double> c2rates = compute_convergence(c2L2errornorms, timesteps);
-
-            phi3rates.Print(cout << "\nphi3 L2 dt convergence rate: \n", phi3rates.Size());
-            c1rates  .Print(cout << "c1   L2 dt convergence rate: \n", c1rates.Size());
-            c2rates  .Print(cout << "c2   L2 dt convergence rate: \n", c2rates.Size());
-        }
     }
     else
     {
@@ -153,6 +115,25 @@ int main(int argc, char *argv[])
         solver->Solve(phi3L2errornorms, c1L2errornorms, c2L2errornorms, meshsizes, timesteps);
         delete solver;
         delete pmesh;
+    }
+
+    if (rank == 0 && (SpaceConvergRate || TimeConvergRate))
+    {
+        meshsizes.Print(cout << "\nMesh sizes: \n", meshsizes.Size());
+        timesteps.Print(cout << "Time-step sizes: \n", timesteps.Size());
+
+        phi3L2errornorms.Print(cout << "\nL2 errornorms of |phi3 - phi3_h|: \n", phi3L2errornorms.Size());
+        Array<double> phi3rates = compute_convergence(phi3L2errornorms, meshsizes);
+
+        c1L2errornorms.Print(cout << "\nL2 errornorms of |c1 - c1_h|: \n", c1L2errornorms.Size());
+        Array<double> c1rates = compute_convergence(c1L2errornorms, meshsizes);
+
+        c2L2errornorms.Print(cout << "\nL2 errornorms of |c2 - c2_h|: \n", c2L2errornorms.Size());
+        Array<double> c2rates = compute_convergence(c2L2errornorms, meshsizes);
+
+        phi3rates.Print(cout << "\nphi3 L2 convergence rate: \n", phi3rates.Size());
+        c1rates  .Print(cout << "c1   L2 convergence rate: \n", c1rates.Size());
+        c2rates  .Print(cout << "c2   L2 convergence rate: \n", c2rates.Size());
     }
 
     MFEMFinalizePetsc();

@@ -890,6 +890,9 @@ public:
         c2_exact.SetTime(t);
         dc1dt_exact.SetTime(t);
         dc2dt_exact.SetTime(t);
+        f0_analytic.SetTime(t);
+        f1_analytic.SetTime(t);
+        f2_analytic.SetTime(t);
 
         ParGridFunction diff(fes);
         bool last_gummel_step = false;
@@ -900,7 +903,6 @@ public:
             // **************************************************************************************
             ParLinearForm *l0 = new ParLinearForm(fes);
             // b0: (f0, psi)
-            f0_analytic.SetTime(t);
             l0->AddDomainIntegrator(new DomainLFIntegrator(f0_analytic));
             if (! (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) ) // weak Dirichlet boundary condition
             {
@@ -972,7 +974,6 @@ public:
             // **************************************************************************************
             ParLinearForm *l1 = new ParLinearForm(fes);
             // b1: (f1, v1)
-            f1_analytic.SetTime(t);
             l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
             // weak Dirichlet boundary condition
             l1->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(dc1dt_exact, D_K_), ess_bdr);
@@ -980,7 +981,7 @@ public:
             {
                 // -g1: -sigma <c1_D, D1(grad(v1) + z1 v1 grad(phi)).n>
                 l1->AddBdrFaceIntegrator(new DGDirichletLF_Symmetry(c1_exact, D_K_, -1.0 * sigma), ess_bdr);
-                l1->AddBdrFaceIntegrator(new DGEdgeLFIntegrator2(&neg_sigma_D_K_v_K, &c1_exact, &old_phi), ess_bdr);
+                l1->AddBdrFaceIntegrator(new DGEdgeLFIntegrator2(&neg_sigma_D_K_v_K, &c1_exact, &phi_Gummel), ess_bdr);
             }
             if (abs(kappa - 0.0) > 1E-10 && penalty_with_boundary) // 添加惩罚项
             {
@@ -1025,11 +1026,10 @@ public:
                 cout << "L2 norm of c1(exact): " << c1_Gummel.ComputeL2Error(c1_exact) << endl;
                 Visualize(*dc, "c1_Gummel", "exact c1_Gummel");
 
-                cout << "L2 norm of dc1_dt: " << dc1dt_Gummel.ComputeL2Error(dc1dt_exact) << endl;
-
                 delete dc;
                 MFEM_ABORT("FFFF");
             }
+
 
 
             // **************************************************************************************
@@ -1037,7 +1037,6 @@ public:
             // **************************************************************************************
             ParLinearForm *l2 = new ParLinearForm(fes);
             // b2: (f2, v2)
-            f2_analytic.SetTime(t);
             l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
             // weak Dirichlet boundary condition
             l2->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(dc2dt_exact, D_Cl_), ess_bdr);
@@ -1045,7 +1044,7 @@ public:
             {
                 // -g2: -sigma <c2_D, D2(grad(v2) + z2 v2 grad(phi)).n>
                 l2->AddBdrFaceIntegrator(new DGDirichletLF_Symmetry(c2_exact, D_Cl_, -1.0 * sigma), ess_bdr);
-                l2->AddBdrFaceIntegrator(new DGEdgeLFIntegrator2(&neg_sigma_D_Cl_v_Cl, &c2_exact, &old_phi), ess_bdr);
+                l2->AddBdrFaceIntegrator(new DGEdgeLFIntegrator2(&neg_sigma_D_Cl_v_Cl, &c2_exact, &phi_Gummel), ess_bdr);
             }
             if (abs(kappa - 0.0) > 1E-10 && penalty_with_boundary) // 添加惩罚项
             {
