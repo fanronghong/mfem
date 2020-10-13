@@ -644,11 +644,17 @@ public:
         s1 = new ParBilinearForm(fes);
         // sigma <[c1], {D1 z1 v1 grad(phi)}>
         s1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(one, phi));
-        s1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(sigma_D_K_v_K, phi), ess_bdr);
+        if (symmetry_with_boundary)
+        {
+            s1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(sigma_D_K_v_K, phi), ess_bdr);
+        }
 
         // sigma <[c1], {D1 grad(v1)}>
         s1->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(D_K_, sigma));
-        s1->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_K_, sigma), ess_bdr);
+        if (symmetry_with_boundary)
+        {
+            s1->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_K_, sigma), ess_bdr);
+        }
 
         s1->Assemble(skip_zero_entries);
     }
@@ -660,11 +666,17 @@ public:
         s2 = new ParBilinearForm(fes);
         // sigma <[c2], {D2 z2 v2 grad(phi)}>
         s2->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(one, phi));
-        s2->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(sigma_D_Cl_v_Cl, phi), ess_bdr);
+        if (symmetry_with_boundary)
+        {
+            s2->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(sigma_D_Cl_v_Cl, phi), ess_bdr);
+        }
 
         // sigma <[c2], {D2 grad(v2)}>
         s2->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, sigma));
-        s2->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, sigma), ess_bdr);
+        if (symmetry_with_boundary)
+        {
+            s2->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, sigma), ess_bdr);
+        }
 
         s2->Assemble(skip_zero_entries);
     }
@@ -689,7 +701,10 @@ public:
         p1 = new ParBilinearForm(fes);
         // kappa <{h^{-1}} [c1], [v1]> 对单元内部边界和区域外部边界积分
         p1->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(kappa));
-        p1->AddBdrFaceIntegrator(new DGDiffusion_Penalty(kappa), ess_bdr);
+        if (penalty_with_boundary)
+        {
+            p1->AddBdrFaceIntegrator(new DGDiffusion_Penalty(kappa), ess_bdr);
+        }
 
         p1->Assemble(skip_zero_entries);
     }
@@ -701,7 +716,10 @@ public:
         p2 = new ParBilinearForm(fes);
         // kappa <{h^{-1}} [c2], [v2]> 对单元内部边界和区域外部边界积分
         p2->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(kappa));
-        p2->AddBdrFaceIntegrator(new DGDiffusion_Penalty(kappa), ess_bdr);
+        if (penalty_with_boundary)
+        {
+            p2->AddBdrFaceIntegrator(new DGDiffusion_Penalty(kappa), ess_bdr);
+        }
 
         p2->Assemble(skip_zero_entries);
     }
@@ -741,7 +759,7 @@ public:
             }
         }
 
-        // weak Dirichlet boundary condition
+        // weak Dirichlet boundary condition. 如果对称项和惩罚项都没有添加边界积分项, 就必须额外添加weak Dirichlet边界条件
         if (! (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) )
         {
             a0_e0_s0_p0->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(epsilon_water), ess_bdr);
@@ -904,7 +922,7 @@ public:
             ParLinearForm *l0 = new ParLinearForm(fes);
             // b0: (f0, psi)
             l0->AddDomainIntegrator(new DomainLFIntegrator(f0_analytic));
-            if (! (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) ) // weak Dirichlet boundary condition
+            if (! (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) ) // weak Dirichlet boundary condition. 如果对称项和惩罚项都没有添加边界积分项, 就必须额外添加weak Dirichlet边界条件
             {
                 l0->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(phi_exact, epsilon_water), ess_bdr);
             }
@@ -975,13 +993,15 @@ public:
             ParLinearForm *l1 = new ParLinearForm(fes);
             // b1: (f1, v1)
             l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
-            // weak Dirichlet boundary condition
-            l1->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(dc1dt_exact, D_K_), ess_bdr);
+            if (! (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) ) // weak Dirichlet boundary condition
+            {
+                l1->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(dc1dt_exact, D_K_), ess_bdr);
+            }
             if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
                 // -g1: -sigma <c1_D, D1(grad(v1) + z1 v1 grad(phi)).n>
                 l1->AddBdrFaceIntegrator(new DGDirichletLF_Symmetry(c1_exact, D_K_, -1.0 * sigma), ess_bdr);
-                l1->AddBdrFaceIntegrator(new DGEdgeLFIntegrator2(&neg_sigma_D_K_v_K, &c1_exact, &phi_Gummel), ess_bdr);
+                l1->AddBdrFaceIntegrator(new DGEdgeLFIntegrator2(&neg_sigma_D_K_v_K, &c1_exact, &phi_Gummel), ess_bdr); // fff no test
             }
             if (abs(kappa - 0.0) > 1E-10 && penalty_with_boundary) // 添加惩罚项
             {
@@ -992,12 +1012,18 @@ public:
 
             builda1(phi_Gummel);
             builde1(phi_Gummel);
-            builds1(phi_Gummel);
-            buildp1();
             a1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1
             e1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1 - e1 c1
-            s1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1
-            p1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1 + p1 c1
+            if (abs(sigma - 0.0) > 1E-10) // 添加对称项
+            {
+                builds1(phi_Gummel);
+                s1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1
+            }
+            if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
+            {
+                buildp1();
+                p1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1 + p1 c1
+            }
 
             buildm1_dta1_dte1_dts1_dtp1(dt, phi_Gummel);
             m1_dta1_dte1_dts1_dtp1->FormLinearSystem(null_array, dc1dt_Gummel, *l1, *M1_dtA1_dtE1_dtS1_dtP1, *temp_x1, *temp_b1);
@@ -1055,12 +1081,18 @@ public:
 
             builda2(phi_Gummel);
             builde2(phi_Gummel);
-            builds2(phi_Gummel);
-            buildp2();
             a2->AddMult(old_c2, *l2, -1.0); // l2 = l2 - a2 c2
             e2->AddMult(old_c2, *l2, -1.0); // l2 = l2 - a2 c2 - e2 c2
-            s2->AddMult(old_c2, *l2, 1.0);  // l2 = l2 - a2 c2 - e2 c2 + s2 c2
-            p2->AddMult(old_c2, *l2, 1.0);  // l2 = l2 - a2 c2 - e2 c2 + s2 c2 + p2 c2
+            if (abs(sigma - 0.0) > 1E-10) // 添加对称项
+            {
+                builds2(phi_Gummel);
+                s2->AddMult(old_c2, *l2, 1.0);  // l2 = l2 - a2 c2 - e2 c2 + s2 c2
+            }
+            if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
+            {
+                buildp2();
+                p2->AddMult(old_c2, *l2, 1.0);  // l2 = l2 - a2 c2 - e2 c2 + s2 c2 + p2 c2
+            }
 
             buildm2_dta2_dte2_dts2_dtp2(dt, phi_Gummel);
             m2_dta2_dte2_dts2_dtp2->FormLinearSystem(null_array, dc2dt_Gummel, *l2, *M2_dtA2_dtE2_dtS2_dtP2, *temp_x2, *temp_b2);
