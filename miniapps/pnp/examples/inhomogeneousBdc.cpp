@@ -1,12 +1,18 @@
 /* Modified from ex16p.cpp
  * ref: https://github.com/mfem/mfem/issues/1811
  * usage:
- *       Explicit: mpirun -np 1 example -visit -rs 0 -rp 0 -s 11 -dt 0.001 -o 1
- *       Implicit: mpirun -np 1 example -visit -rs 0 -rp 0 -s 3 -dt 0.001 -o 1
+ *       Explicit: mpirun -np 1 ./inhomogeneousBdc -rs 0 -rp 0 -s 11 -dt 0.001 -o 1
+ *       Implicit: mpirun -np 1 ./inhomogeneousBdc -rs 0 -rp 0 -s 3 -dt 0.001 -o 1
  *
  * Description:  This example solves a time dependent nonlinear heat equation
  *      problem of the form du/dt = C(u), with a non-linear diffusion
  *      operator C(u) = \nabla \cdot (\kappa + \alpha u) \nabla u.
+ *      如果考虑真解: du/dt = C(u) + f
+ *      u_exact = [1 + cos(pi x) cos(pi y)] e^t
+ *
+ * 双线性型为: (du/dt, v) = -((ka + al u) grad(u), grad(v))
+ *                          + <(ka + al u) grad(u).n, v>
+ *             如果考虑真解, 在右端添加 (f, v)
  * */
 #include <fstream>
 #include <iostream>
@@ -14,6 +20,18 @@
 
 using namespace std;
 using namespace mfem;
+
+//======> Time Dependent Analytic Solutions:
+double u_exact_time(const Vector& x, double t)
+{
+    return (cos(3.1415926535900001*x[0])*cos(3.1415926535900001*x[1]) + 1)*exp(t);
+}
+
+double f_exact_time(const Vector& x, double t)
+{
+    return -6.2831853071800001*(-0.031415926535900002*(cos(3.1415926535900001*x[0])*cos(3.1415926535900001*x[1]) + 1)*exp(t) - 1.570796326795)*exp(t)*cos(3.1415926535900001*x[0])*cos(3.1415926535900001*x[1]) + (cos(3.1415926535900001*x[0])*cos(3.1415926535900001*x[1]) + 1)*exp(t) - 0.098696044010906578*exp(2*t)*pow(sin(3.1415926535900001*x[0]), 2)*pow(cos(3.1415926535900001*x[1]), 2) - 0.098696044010906578*exp(2*t)*pow(sin(3.1415926535900001*x[1]), 2)*pow(cos(3.1415926535900001*x[0]), 2);
+}
+
 
 /** After spatial discretization, the conduction model can be written as:
  *
@@ -29,6 +47,7 @@ class ConductionOperator : public TimeDependentOperator {
 protected:
     ParFiniteElementSpace& fespace;
     Array<int> ess_tdof_list;  // this list remains empty for pure Neumann b.c.
+    mutable Array<int> ess_bdr;
 
     ParBilinearForm* M;
     ParBilinearForm* K;
@@ -50,7 +69,7 @@ protected:
 
 public:
     ConductionOperator(ParFiniteElementSpace& f, double alpha, double kappa,
-                       const Vector& u, const Array<int>& ess_tdof);
+                       const Vector& u, const Array<int>& ess_tdof, const Array<int>& bdr);
 
     virtual void Mult(const Vector& u, Vector& du_dt) const;
     /** Solve the Backward-Euler equation: k = f(u + dt*k, t), for the unknown k.
@@ -58,12 +77,35 @@ public:
     virtual void ImplicitSolve(const double dt, const Vector& u, Vector& k);
 
     /// Update the diffusion BilinearForm K using the given true-dof vector `u`.
-    void SetParameters(const Vector& u);
+    void SetParameters(const Vector& u)
+    {
+        ParGridFunction u_alpha_gf(&fespace);
+        u_alpha_gf.SetFromTrueDofs(u);
+        for (int i = 0; i < u_alpha_gf.Size(); i++)
+            u_alpha_gf(i) = kappa + alpha * u_alpha_gf(i);
 
-    virtual ~ConductionOperator();
+        delete K;
+        K = new ParBilinearForm(&fespace);
+
+        GridFunctionCoefficient u_coeff(&u_alpha_gf);
+
+        K->AddDomainIntegrator(new DiffusionIntegrator(u_coeff));
+        K->Assemble(0);  // keep sparsity pattern of M and K the same
+        K->Finalize();
+        delete T;
+        T = NULL;  // re-compute T on the next ImplicitSolve
+    }
+
+    virtual ~ConductionOperator()
+    {
+        delete T;
+        delete M;
+        delete K;
+    }
 };
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
     // 1. Initialize MPI.
     int num_procs, myid;
     MPI_Init(&argc, &argv);
@@ -71,12 +113,13 @@ int main(int argc, char* argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
     // 2. Parse command-line options.
-    int ser_ref_levels = 2;
-    int par_ref_levels = 1;
-    int order = 2;
-    int ode_solver_type = 11;
-    double t_final = 0.5;
-    double dt = 1.0e-2;
+    const char* mesh_file = "../../../data/inline-quad.mesh";
+    int ser_ref_levels = 0;
+    int par_ref_levels = 0;
+    int order = 1;
+    int ode_solver_type = 1;
+    double t_final = 0.003;
+    double dt = 0.001;
     double alpha = 1.0e-2;
     double kappa = 0.5;
     bool visualization = true;
@@ -122,17 +165,14 @@ int main(int argc, char* argv[]) {
         args.PrintOptions(cout);
     }
 
-    // ================================================================= //
     // 3. Use inline-quad.mesh file for example.
     // Boundary elements are tagged as:
     // Bottom = 1
     // Right = 2
     // Top = 3
     // Left = 4
-    const char* mesh_file = "../../../data/inline-quad.mesh";
     auto mesh = new Mesh(mesh_file, 1, 1);
     int dim = mesh->Dimension();
-    // ================================================================= //
 
     // 4. Define the ODE solver used for time integration. Several implicit
     //    singly diagonal implicit Runge-Kutta (SDIRK) methods, as well as
@@ -208,17 +248,9 @@ int main(int argc, char* argv[]) {
     }
 
     ParGridFunction u_gf(&fespace);
-
-    // ================================================================= //
-    // 8. Set u initially to zero.
-    ConstantCoefficient zero(0.0);
-    u_gf.ProjectCoefficient(zero);
     Vector u;
-    u_gf.GetTrueDofs(u);
-    // ================================================================= //
 
-    // ================================================================= //
-    // 8.b Mark Essential true DOFs for bottom and top walls (will treat
+    // 8. Mark Essential true DOFs for bottom and top walls (will treat
     // as inhomogeneous Dirichlet). Fill boundary of u to be 10.0.
     mfem::Array<int> ess_bdr(pmesh->bdr_attributes.Max());
     mfem::Array<int> ess_tdof_list;
@@ -226,14 +258,15 @@ int main(int argc, char* argv[]) {
     ess_bdr[1 - 1] = 1;  // bottom wall for inline-quad.mesh
     ess_bdr[3 - 1] = 1;  // top wall for inline-quad.mesh
     fespace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
-    ConstantCoefficient ten(10.0);
-    u_gf.ProjectBdrCoefficient(ten, ess_bdr);
-    u_gf.GetTrueDofs(u);
 
-    // ================================================================= //
+    FunctionCoefficient u_exact(u_exact_time);
+    double t = 0.0;
+    u_exact.SetTime(t);
+    u_gf.ProjectCoefficient(u_exact); // 设定initial condition
+    u_gf.GetTrueDofs(u); // u_gf 是 PrimalVector, u是TrueVector
 
     // 9. Initialize the conduction operator and the VisIt visualization.
-    ConductionOperator oper(fespace, alpha, kappa, u, ess_tdof_list);
+    ConductionOperator oper(fespace, alpha, kappa, u, ess_tdof_list, ess_bdr);
 
     u_gf.SetFromTrueDofs(u);
     {
@@ -308,23 +341,22 @@ int main(int argc, char* argv[]) {
     // 10. Perform time-integration (looping over the time iterations, ti, with a
     //     time-step dt).
     ode_solver->Init(oper);
-    double t = 0.0;
 
     bool last_step = false;
     for (int ti = 1; !last_step; ti++) {
-        if (t + dt >= t_final - dt / 2) {
+        if (t + dt >= t_final - dt / 2)
             last_step = true;
-        }
 
         ode_solver->Step(u, t, dt);
 
-        if (last_step || (ti % vis_steps) == 0) {
-            if (myid == 0) {
+        if (last_step || (ti % vis_steps) == 0)
+        {
+            if (myid == 0)
                 cout << "step " << ti << ", t = " << t << endl;
-            }
 
             u_gf.SetFromTrueDofs(u);
-            if (visualization) {
+            if (visualization)
+            {
                 sout << "parallel " << num_procs << " " << myid << "\n";
                 sout << "solution\n" << *pmesh << u_gf << flush;
             }
@@ -346,7 +378,8 @@ int main(int argc, char* argv[]) {
         oper.SetParameters(u);
     }
 
-    double norm = u_gf.ComputeL2Error(zero);
+    u_exact.SetTime(t);
+    double norm = u_gf.ComputeL2Error(u_exact);
     if (myid == 0) {
         cout << "L2 norm of u: " << norm << endl;
     }
@@ -378,17 +411,12 @@ int main(int argc, char* argv[]) {
 
 ConductionOperator::ConductionOperator(ParFiniteElementSpace& f, double al,
                                        double kap, const Vector& u,
-                                       const Array<int>& ess_tdof)
+                                       const Array<int>& ess_tdof, const Array<int>& bdr)
         : TimeDependentOperator(f.GetTrueVSize(), 0.0),
-          fespace(f),
-          ess_tdof_list(ess_tdof),
-          M(NULL),
-          K(NULL),
-          T(NULL),
-          current_dt(0.0),
-          M_solver(f.GetComm()),
-          T_solver(f.GetComm()),
-          z(height) {
+          fespace(f), ess_tdof_list(ess_tdof), ess_bdr(bdr),
+          M(NULL), K(NULL), T(NULL), current_dt(0.0),
+          M_solver(f.GetComm()), T_solver(f.GetComm()), z(height)
+{
     const double rel_tol = 1e-8;
 
     M = new ParBilinearForm(&fespace);
@@ -420,23 +448,20 @@ ConductionOperator::ConductionOperator(ParFiniteElementSpace& f, double al,
 
 // Inhomogeneous Dirichlet on bottom/top walls, inhomogeneous Neumann on
 // left/right wall.
-// *** Serial and parallel produce very different results ***
-void ConductionOperator::Mult(const Vector& u, Vector& du_dt) const {
+void ConductionOperator::Mult(const Vector& u, Vector& du_dt) const
+{
     // Compute:
     //    du_dt = M^{-1}*-K(u)
     // for du_dt
-    ParGridFunction tmp_u(&fespace), tmp_du_dt(&fespace);
-    ParLinearForm tmp_z(&fespace);
+    ParGridFunction tmp_u(&fespace);
     tmp_u.SetFromTrueDofs(u);
-    tmp_du_dt.SetFromTrueDofs(du_dt);
-    K->Mult(tmp_u, tmp_z);  // <----- Segfaults in Mult routine
-    tmp_z.Neg();            // z = -z
+    FunctionCoefficient u_exact(u_exact_time);
+    u_exact.SetTime(t);
+    tmp_u.ProjectBdrCoefficient(u_exact, ess_bdr);
 
-    // OperatorHandle K_op;
-    // K->FormSystemMatrix(ess_tdof_list, K_op);
-    // K_op->Mult(tmp_u, tmp_z);  // <--- Works in serial, mismatch in
-    //                            // matrix/vector sizes when parallel
-    // tmp_z.Neg();               // z = -z
+    ParLinearForm tmp_z(&fespace);
+    K->Mult(tmp_u, tmp_z);
+    tmp_z.Neg();  // z = -z
 
     // Construct and set inhomogeneous Neumann condition
     ParLinearForm neumann(&fespace);
@@ -447,6 +472,9 @@ void ConductionOperator::Mult(const Vector& u, Vector& du_dt) const {
     neumann_bdr[3] = 1;  // Left wal for inline-quad.mesh
     neumann.AddBoundaryIntegrator(new mfem::BoundaryLFIntegrator(ten),
                                   neumann_bdr);
+    FunctionCoefficient f_exact(f_exact_time);
+    f_exact.SetTime(t);
+    neumann.AddDomainIntegrator(new DomainLFIntegrator(f_exact));
     neumann.Assemble();
 
     // Add inhomogeneous Neumann to RHS
@@ -454,17 +482,14 @@ void ConductionOperator::Mult(const Vector& u, Vector& du_dt) const {
 
     OperatorHandle A;
     Vector X, B;
-    K->FormLinearSystem(ess_tdof_list, tmp_u, tmp_z, A, X, B);
-
+    ParGridFunction tmp_du_dt(&fespace);
+    tmp_du_dt = 0.0;
+    M->FormLinearSystem(ess_tdof_list, tmp_du_dt, tmp_z, A, du_dt, B);
     M_solver.Mult(B, du_dt);
-    M->RecoverFEMSolution(du_dt, tmp_z, tmp_du_dt);
-    tmp_du_dt.GetTrueDofs(du_dt);
-    du_dt.SetSubVector(ess_tdof_list, 0.0);
 }
 
 // Inhomogeneous Dirichlet on bottom/top walls, homogeneous Neumann on
 // left/right wall.
-// *** Serial and parallel produce very different results ***
 void ConductionOperator::ImplicitSolve(const double dt, const Vector& u,
                                        Vector& du_dt) {
     // Solve the equation:
@@ -485,6 +510,10 @@ void ConductionOperator::ImplicitSolve(const double dt, const Vector& u,
     tmp_u.SetFromTrueDofs(u);
     tmp_du_dt.SetFromTrueDofs(du_dt);
 
+    FunctionCoefficient u_exact(u_exact_time);
+    u_exact.SetTime(t);
+    tmp_u.ProjectBdrCoefficient(u_exact, ess_bdr);
+
     K->Mult(tmp_u, tmp_z);
     tmp_z.Neg();
 
@@ -493,10 +522,12 @@ void ConductionOperator::ImplicitSolve(const double dt, const Vector& u,
     ConstantCoefficient ten(10.0);
     Array<int> neumann_bdr(fespace.GetParMesh()->bdr_attributes.Max());
     neumann_bdr = 0;
-    neumann_bdr[1] = 1;  // Right wall for inline-quad.mesh
-    neumann_bdr[3] = 1;  // Left wal for inline-quad.mesh
-    neumann.AddBoundaryIntegrator(new mfem::BoundaryLFIntegrator(ten),
-                                  neumann_bdr);
+    neumann_bdr[2 - 1] = 1;  // Right wall for inline-quad.mesh
+    neumann_bdr[4 - 1] = 1;  // Left wal for inline-quad.mesh
+    neumann.AddBoundaryIntegrator(new mfem::BoundaryLFIntegrator(ten), neumann_bdr);
+    FunctionCoefficient f_exact(f_exact_time);
+    f_exact.SetTime(t);
+    neumann.AddDomainIntegrator(new DomainLFIntegrator(f_exact));
     neumann.Assemble();
 
     // Add inhomogeneous Neumann to RHS
@@ -508,29 +539,4 @@ void ConductionOperator::ImplicitSolve(const double dt, const Vector& u,
 
     T_solver.Mult(B, du_dt);
     du_dt.SetSubVector(ess_tdof_list, 0.0);
-}
-
-void ConductionOperator::SetParameters(const Vector& u) {
-    ParGridFunction u_alpha_gf(&fespace);
-    u_alpha_gf.SetFromTrueDofs(u);
-    for (int i = 0; i < u_alpha_gf.Size(); i++) {
-        u_alpha_gf(i) = kappa + alpha * u_alpha_gf(i);
-    }
-
-    delete K;
-    K = new ParBilinearForm(&fespace);
-
-    GridFunctionCoefficient u_coeff(&u_alpha_gf);
-
-    K->AddDomainIntegrator(new DiffusionIntegrator(u_coeff));
-    K->Assemble(0);  // keep sparsity pattern of M and K the same
-//    K->FormSystemMatrix(ess_tdof_list, Kmat);
-    delete T;
-    T = NULL;  // re-compute T on the next ImplicitSolve
-}
-
-ConductionOperator::~ConductionOperator() {
-    delete T;
-    delete M;
-    delete K;
 }
