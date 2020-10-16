@@ -839,8 +839,7 @@ public:
     // 只修改一个地方: 把下面三个构造函数的参数kappa设为0.0
     DGDirichletLF_Symmetry(Coefficient &u, const double s)
             : uD(&u), Q(NULL), MQ(NULL), sigma(s), kappa(0.0) { }
-    DGDirichletLF_Symmetry(Coefficient &u, Coefficient &q,
-                            const double s)
+    DGDirichletLF_Symmetry(Coefficient &u, Coefficient &q, const double s)
             : uD(&u), Q(&q), MQ(NULL), sigma(s), kappa(0.0) { }
     DGDirichletLF_Symmetry(Coefficient &u, MatrixCoefficient &q,
                             const double s)
