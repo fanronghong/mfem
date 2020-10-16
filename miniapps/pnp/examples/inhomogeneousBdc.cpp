@@ -1,5 +1,7 @@
 /* Modified from ex16p.cpp
  * ref: https://github.com/mfem/mfem/issues/1811
+ *      https://github.com/mfem/mfem/issues/1720#issuecomment-709505317
+ *
  * usage:
  *       Explicit: mpirun -np 1 ./inhomogeneousBdc -rs 0 -rp 0 -s 11 -dt 0.001 -o 1
  *       Implicit: mpirun -np 1 ./inhomogeneousBdc -rs 0 -rp 0 -s 3 -dt 0.001 -o 1
