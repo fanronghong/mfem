@@ -550,6 +550,7 @@ public:
 
         a0->Assemble(skip_zero_entries);
     }
+
     // D1 (grad(c1) + z1 c1 grad(phi), grad(v1)), given phi
     void builda1(ParGridFunction& phi) const
     {
@@ -563,7 +564,8 @@ public:
 
         a1->Assemble(skip_zero_entries);
     }
-    // D2 ( grad(c2) + z2 c2 grad(phi), grad(v2) )
+
+    // D2 (grad(c2) + z2 c2 grad(phi), grad(v2)), given phi
     void builda2(ParGridFunction& phi) const
     {
         if (a2 != NULL) { delete a2; }
@@ -589,6 +591,7 @@ public:
 
         e0->Assemble(skip_zero_entries);
     }
+
     // -<{D1 (grad(c1) + z1 c1 grad(phi))}, [v1]>, given phi
     void builde1(ParGridFunction& phi) const
     {
@@ -605,12 +608,11 @@ public:
 
         e1->Assemble(skip_zero_entries);
     }
+
     // -<{D2 (grad(c2) + z2 c2 grad(phi))}, [v2]>, given phi
     void builde2(ParGridFunction& phi) const
     {
         if (e2 != NULL) { delete e2; }
-
-        ProductCoefficient neg_D_Cl_v_Cl(neg, D_Cl_prod_v_Cl);
 
         e2 = new ParBilinearForm(fes);
         // -<{D2 grad(c2)}, [v2]>
@@ -636,6 +638,7 @@ public:
 
         s0->Assemble(skip_zero_entries);
     }
+
     // - sigma <[c1], {D1 (grad(v1) + z1 v1 grad(phi))}>, given phi
     void builds1(ParGridFunction& phi) const
     {
@@ -658,24 +661,25 @@ public:
 
         s1->Assemble(skip_zero_entries);
     }
-    // sigma <[c2], {D2 (grad(v2) + z2 v2 grad(phi))}>, given phi
+
+    // -sigma <[c2], {D2 (grad(v2) + z2 v2 grad(phi))}>, given phi
     void builds2(ParGridFunction& phi) const
     {
         if (s2 != NULL) { delete s2; }
 
         s2 = new ParBilinearForm(fes);
-        // sigma <[c2], {D2 z2 v2 grad(phi)}>
-        s2->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(one, phi));
+        // -sigma <[c2], {D2 grad(v2)}>
+        s2->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(neg_D2, sigma));
         if (symmetry_with_boundary)
         {
-            s2->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(sigma_D_Cl_v_Cl, phi), ess_bdr);
+            s2->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(neg_D2, sigma), ess_bdr);
         }
 
-        // sigma <[c2], {D2 grad(v2)}>
-        s2->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, sigma));
+        // -sigma <[c2], {D2 z2 v2 grad(phi)}>
+        s2->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(neg_sigma_D_Cl_v_Cl, phi));
         if (symmetry_with_boundary)
         {
-            s2->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_Cl_, sigma), ess_bdr);
+            s2->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(neg_sigma_D_Cl_v_Cl, phi), ess_bdr);
         }
 
         s2->Assemble(skip_zero_entries);
@@ -693,6 +697,7 @@ public:
 
         p0->Assemble(skip_zero_entries);
     }
+
     // -kappa <{h^{-1}} [c1], [v1]>
     void buildp1() const
     {
@@ -708,17 +713,18 @@ public:
 
         p1->Assemble(skip_zero_entries);
     }
-    // kappa <{h^{-1}} [c2], [v2]>
+
+    // -kappa <{h^{-1}} [c2], [v2]>
     void buildp2() const
     {
         if (p2 != NULL) { delete p2; }
 
         p2 = new ParBilinearForm(fes);
-        // kappa <{h^{-1}} [c2], [v2]> 对单元内部边界和区域外部边界积分
-        p2->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(kappa));
+        // -kappa <{h^{-1}} [c2], [v2]> 对单元内部边界和区域外部边界积分
+        p2->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(-1.0*kappa));
         if (penalty_with_boundary)
         {
-            p2->AddBdrFaceIntegrator(new DGDiffusion_Penalty(kappa), ess_bdr);
+            p2->AddBdrFaceIntegrator(new DGDiffusion_Penalty(-1.0*kappa), ess_bdr);
         }
 
         p2->Assemble(skip_zero_entries);
@@ -947,23 +953,7 @@ public:
             a0_e0_s0_p0->RecoverFEMSolution(*temp_x0, *l0, phi_Gummel);
             delete l0;
             delete poisson_solver;
-
-            if (0)
-            {
-                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
-                dc->RegisterField("phi_Gummel", &phi_Gummel);
-
-                cout << "L2 norm of phi(appro): " << phi_Gummel.ComputeL2Error(phi_exact) << endl;
-                Visualize(*dc, "phi_Gummel", "appro phi_Gummel_DG");
-
-                phi_Gummel.ProjectCoefficient(phi_exact);
-                cout << "L2 norm of phi(exact): " << phi_Gummel.ComputeL2Error(phi_exact) << endl;
-                Visualize(*dc, "phi_Gummel", "exact phi_Gummel_DG");
-
-                delete dc;
-                MFEM_ABORT("FFFF");
-            }
-
+            
 
             // **************************************************************************************
             //                                2. 计算Gummel迭代相对误差
@@ -987,10 +977,8 @@ public:
             ParLinearForm *l1 = new ParLinearForm(fes);
             // b1: (f1, v1)
             l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
-            if (! (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) ) // weak Dirichlet boundary condition
-            {
-                l1->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(dc1dt_exact, D_K_), ess_bdr);
-            }
+            // weak Dirichlet boundary condition
+            l1->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(dc1dt_exact, D_K_), ess_bdr);
             if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
                 // -g1: sigma <c1_D, D1(grad(v1) + z1 v1 grad(phi)).n> = sigma <c1_D, D1 grad(v1).n> + sigma <c1_D, D1 z1 v1 grad(phi).n>
@@ -1028,28 +1016,6 @@ public:
             delete l1;
             delete np1_solver;
 
-            if (0)
-            {
-                ParGridFunction c1_Gummel(fes);
-                c1_Gummel = 0.0;
-
-                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
-                dc->RegisterField("c1_Gummel", &c1_Gummel);
-
-                c1_Gummel = old_c1;
-                c1_Gummel.Add(dt, dc1dt_Gummel);
-
-                cout << "L2 norm of c1(appro): " << c1_Gummel.ComputeL2Error(c1_exact) << endl;
-                Visualize(*dc, "c1_Gummel", "appro c1_Gummel");
-
-                c1_Gummel.ProjectCoefficient(c1_exact);
-                cout << "L2 norm of c1(exact): " << c1_Gummel.ComputeL2Error(c1_exact) << endl;
-                Visualize(*dc, "c1_Gummel", "exact c1_Gummel");
-
-                delete dc;
-                MFEM_ABORT("FFFF");
-            }
-
 
             // **************************************************************************************
             //                                4. 求解 NP2
@@ -1058,10 +1024,7 @@ public:
             // b2: (f2, v2)
             l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
             // weak Dirichlet boundary condition
-            if (! (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) ) // weak Dirichlet boundary condition
-            {
-                l2->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(dc2dt_exact, D_Cl_), ess_bdr);
-            }
+            l2->AddBdrFaceIntegrator(new DGWeakDirichlet_LFIntegrator(dc2dt_exact, D_Cl_), ess_bdr);
             if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
             {
                 // -g2: sigma <c2_D, D2(grad(v2) + z2 v2 grad(phi)).n>
@@ -1098,28 +1061,6 @@ public:
             m2_dta2_dte2_dts2_dtp2->RecoverFEMSolution(*temp_x2, *l2, dc2dt_Gummel); // 更新 dc2dt
             delete l2;
             delete np2_solver;
-
-            if (0)
-            {
-                ParGridFunction c2_Gummel(fes);
-                c2_Gummel = 0.0;
-
-                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
-                dc->RegisterField("c2_Gummel", &c2_Gummel);
-
-                c2_Gummel = old_c2;
-                c2_Gummel.Add(dt, dc2dt_Gummel);
-
-                cout << "L2 norm of c2(appro): " << c2_Gummel.ComputeL2Error(c2_exact) << endl;
-                Visualize(*dc, "c2_Gummel", "appro c2_Gummel");
-
-                c2_Gummel.ProjectCoefficient(c2_exact);
-                cout << "L2 norm of c2(exact): " << c2_Gummel.ComputeL2Error(c2_exact) << endl;
-                Visualize(*dc, "c2_Gummel", "exact c2_Gummel");
-
-                delete dc;
-                MFEM_ABORT("FFFF");
-            }
         }
 
         // 用最终Gummel迭代的解更新要求解的3个未知量
