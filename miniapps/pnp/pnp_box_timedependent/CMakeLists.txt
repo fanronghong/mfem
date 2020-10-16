@@ -23,6 +23,10 @@ configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box_timedependent/gummel_l
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box_timedependent/gummel_lu
                COPYONLY)
 
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box_timedependent/gummel_dg_lu
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box_timedependent/gummel_dg_lu
+               COPYONLY)
+
 configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box_timedependent/newton_amg
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box_timedependent/newton_amg
                COPYONLY)
