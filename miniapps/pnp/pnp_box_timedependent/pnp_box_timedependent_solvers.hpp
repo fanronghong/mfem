@@ -1194,7 +1194,7 @@ public:
 
         if (paraview)
         {
-            string paraview_title = string("PNP_") + Discretize + "_" + Linearize + "_Time_Dependent";
+            string paraview_title = string("PNP_Box") + Discretize + "_" + Linearize + "_Time_Dependent";
             cout << paraview_title << endl;
             pd = new ParaViewDataCollection(paraview_title, pmesh);
             pd->SetPrefixPath("Paraview");

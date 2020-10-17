@@ -27,6 +27,9 @@ add_subdirectory(pnp_box_steadystate)
 add_subdirectory(pnp_box_timedependent)
 
 add_subdirectory(pnp_protein)
+add_subdirectory(pnp_protein_timedependent)
+
+add_subdirectory(pnp_data)
 
 add_subdirectory(utils)
 
