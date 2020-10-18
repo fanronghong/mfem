@@ -93,6 +93,7 @@ public:
         delete a0; delete b1; delete b2;
         delete m1_dta1; delete a1;
         delete m2_dta2; delete a2;
+
         delete A0; delete M1_dtA1; delete M2_dtA2;
         delete temp_x0; delete temp_b0;
         delete temp_x1; delete temp_b1;
@@ -192,7 +193,7 @@ public:
             cout << "L2 norm of phi2: " << norm << endl;
         }
 
-        if (verbose) {
+        if (verbose >= 2) {
             if (solver->GetConverged() == 1 && rank == 0)
                 cout << "phi2 solver: successfully converged by iterating " << solver->GetNumIterations()
                      << " times, taking " << chrono.RealTime() << " s." << endl;
@@ -330,9 +331,9 @@ public:
             a1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1
 
             buildm1_dta1(dt, phi3_Gummel);
-            dc1dt_Gummel.ProjectBdrCoefficient(zero, ess_bdr); // 设定未知量的边界条件
+//            dc1dt_Gummel.ProjectBdrCoefficient(zero, ess_bdr); // 边界条件为0
             m1_dta1->FormLinearSystem(ess_tdof_list, dc1dt_Gummel, *l1, *M1_dtA1, *temp_x1, *temp_b1);
-            M1_dtA1->EliminateZeroRows();
+            M1_dtA1->EliminateZeroRows(); // 把0行的主对角元素设为1
 
             PetscLinearSolver* np1_solver = new PetscLinearSolver(*M1_dtA1, false, "np1_");
             np1_solver->Mult(*temp_b1, *temp_x1);
@@ -365,9 +366,9 @@ public:
             a2->AddMult(old_c2, *l2, -1.0); // l2 = l2 - a2 c2
 
             buildm2_dta2(dt, phi3_Gummel);
-            dc2dt_Gummel.ProjectBdrCoefficient(zero, ess_bdr);
+//            dc2dt_Gummel.ProjectBdrCoefficient(zero, ess_bdr); // 边界条件为0
             m2_dta2->FormLinearSystem(ess_tdof_list, dc2dt_Gummel, *l2, *M2_dtA2, *temp_x2, *temp_b2);
-            M2_dtA2->EliminateZeroRows();
+            M2_dtA2->EliminateZeroRows(); // 把0行的主对角元素设为1
 
             PetscLinearSolver* np2_solver = new PetscLinearSolver(*M2_dtA2, false, "np2_");
             np2_solver->Mult(*temp_b2, *temp_x2);
@@ -420,11 +421,11 @@ private:
         if (b1 != NULL) { delete b1; }
 
         b1 = new ParBilinearForm(fes);
+
         // alpha2 alpha3 z1 (c1, psi3)_{\Omega_s}
         b1->AddDomainIntegrator(new MassIntegrator(water_alpha2_prod_alpha3_prod_v_K));
 
         b1->Assemble(skip_zero_entries);
-        b1->Finalize(skip_zero_entries);
     }
 
     // alpha2 alpha3 z2 (c2, psi3)_{\Omega_s}
@@ -433,11 +434,11 @@ private:
         if (b2 != NULL) { delete b2; }
 
         b2 = new ParBilinearForm(fes);
+
         // alpha2 alpha3 z2 (c2, psi3)_{\Omega_s}
         b2->AddDomainIntegrator(new MassIntegrator(water_alpha2_prod_alpha3_prod_v_Cl));
 
         b2->Assemble(skip_zero_entries);
-        b2->Finalize(skip_zero_entries);
     }
 
     // (c1, v1)_{\Omega_s} + dt D1 (grad(c1) + z1 c1 grad(phi3), grad(v1))_{\Omega_s}, given dt and phi3
@@ -449,6 +450,7 @@ private:
         ProductCoefficient dt_D1_z1(dt_D1, v_K_coeff);
 
         m1_dta1 = new ParBilinearForm(fes);
+
         // (c1, v1)_{\Omega_s}
         m1_dta1->AddDomainIntegrator(new MassIntegrator(mark_water_coeff));
         // dt D1 (grad(c1), grad(v1))_{\Omega_s}
@@ -483,6 +485,7 @@ private:
         ProductCoefficient dt_D2_z2(dt_D2, v_Cl_coeff);
 
         m2_dta2 = new ParBilinearForm(fes);
+
         // (c2, v2)_{\Omega_s}
         m2_dta2->AddDomainIntegrator(new MassIntegrator(mark_water_coeff));
         // dt D2 (grad(c2), grad(v2))_{\Omega_s}
@@ -507,7 +510,6 @@ private:
 
         a2->Assemble(skip_zero_entries);
     }
-
 };
 
 
@@ -643,6 +645,8 @@ public:
             pd->SetLevelsOfDetail(p_order);
             pd->SetDataFormat(VTKFormat::BINARY);
             pd->SetHighOrderOutput(true);
+            pd->RegisterField("phi1", phi1_gf);
+            pd->RegisterField("phi2", phi2_gf);
             pd->RegisterField("phi3", phi3_gf);
             pd->RegisterField("c1",   c1_gf);
             pd->RegisterField("c2",   c2_gf);

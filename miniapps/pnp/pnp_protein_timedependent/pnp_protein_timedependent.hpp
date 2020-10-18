@@ -15,7 +15,6 @@ const char* Discretize  = "cg"; // cg, dg
 const char* AdvecStable = "eafe"; // none, supg, eafe
 const char* prec_type   = "uzawa"; // preconditioner for Newton discretization: block, uzawa, simple
 const char* options_src = "../pnp_data/pnp_protein_petsc_opts";
-int refine_times        = 0;
 const char* output      = NULL;
 bool self_debug         = false; // 针对特定的条件进行一些检测
 bool visualize          = false;
@@ -24,13 +23,20 @@ bool show_peclet        = false;
 double relax            = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 double schur_alpha1      = 1.0; // schur = A - alpha1 B1 A1^-1 C1 - alpha2 B2 A2^-1 C2, 这个alpha1就是该参数
 double schur_alpha2      = 1.0;
+int refine_mesh                 = 0; // 初始网格加密次数
+int refine_time                 = 0;   // "加密时间次数"
+double time_scale               = 1.0; // 类似网格加密(h -> 0.5 * h): dt -> time_scale * dt
+bool TimeConvergRate            = false;
+bool SpaceConvergRate           = false; // 利用解析解计算误差阶
+bool SpaceConvergRate_Change_dt = false; // 为了计算误差: error = c1 dt + c2 h^2, 是否把dt设置为h^2的倍数?
+double Change_dt_factor         = 0.1; // dt = factor * h^2
 int ode_type            = 1; // 1: backward Euler; 11: forward Euler
 double t_init           = 0.0; // 初始时间
-double t_final          = 0.5; // 最后时间
+double t_final          = 0.03; // 最后时间
 double t_stepsize       = 0.01; // 时间步长
 bool paraview            = false;
 bool skip_zero_entries = false;
-int verbose            = 2;
+int verbose            = 1;
 
 double sigma            = -1.0; // symmetric parameter for DG
 double kappa            = 10.0; // penalty parameter for DG
@@ -81,15 +87,12 @@ const int Gamma_m_marker   = 5;
 
 double phi_top     = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 上边界是 Dirichlet, 乘以alpha1进行无量纲化
 double phi_bottom  = 2.5 * alpha1; // 国际单位V, 电势在计算区域的 下边界是 Dirichlet
-double phi_other   = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 其他边界是 Neumann
 
 double c1_top      = 0.9 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 上边界是 Dirichlet,乘以alpha2是把mol/L换成Angstrom,单位统一
 double c1_bottom   = 0.1 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 下边界是 Dirichlet
-double c1_other    = 0.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 其他边界是 Neumann
 
 double c2_top      = 0.9 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
 double c2_bottom   = 0.1 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
-double c2_other    = 0.0 * alpha3; // 国际单位mol/L, Cl-阳离子在计算区域的 其他边界是 Neumann
 
 ConstantCoefficient phi_D_top_coeff(phi_top);
 ConstantCoefficient phi_D_bottom_coeff(phi_bottom);

@@ -9,7 +9,7 @@
 #-phi2_ksp_monitor
 #-phi2_ksp_monitor_short
 #-phi2_ksp_monitor_true_residual
--phi2_ksp_converged_reason
+#-phi2_ksp_converged_reason
 #-phi2_ksp_view
 
 
