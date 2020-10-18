@@ -29,9 +29,10 @@ private:
     ParMesh* pmesh;
     ParFiniteElementSpace* fes;
     int true_vsize;
-    Array<int> &true_offset, &ess_bdr;
+    Array<int>  &true_offset, &ess_bdr, &top_bdr, &bottom_bdr, &interface_bdr;
+    Array<int> ess_tdof_list, top_ess_tdof_list, bottom_ess_tdof_list, interface_ess_tdof_list;
 
-    mutable ParBilinearForm *a0, *b1, *b2, *m1_dta1, *m2_dta2, *a1, *a2;
+    mutable ParBilinearForm *a0, *b1, *b2, *m1_dta1, *a1, *m2_dta2, *a2;
     mutable HypreParMatrix *A0, *M1_dtA1, *M2_dtA2;
     Vector *temp_x0, *temp_b0, *temp_x1, *temp_b1, *temp_x2, *temp_b2;
 
@@ -39,30 +40,22 @@ private:
     * ref: Poisson–Nernst–Planck equations for simulating biomolecular diffusion–reaction processes I: Finite element solutions
     * */
     ParGridFunction *phi1_gf, *phi2_gf;
-    ParGridFunction *phi3, *c1, *c2;       // FE 解
-    ParGridFunction *phi3_n, *c1_n, *c2_n; // Gummel迭代解
 
     VectorCoefficient *grad_phi1, *grad_phi2, *grad_phi1_plus_grad_phi2; // grad(phi1 + phi2)
 
-    // protein_dofs和water_dofs里面不包含interface_ess_tdof_list
-    Array<int> protein_dofs, water_dofs;
-    Array<int> top_bdr, bottom_bdr, interface_bdr, Gamma_m;
-    Array<int> ess_tdof_list, top_ess_tdof_list, bottom_ess_tdof_list, interface_ess_tdof_list;
-
     StopWatch chrono;
     int num_procs, rank;
-    std::vector< Array<double> > Peclet;
 
 public:
-    PNP_Protein_Gummel_CG_TimeDependent(ParGridFunction* phi1_gf_, ParGridFunction* phi2_gf_,
-                                        int truevsize, Array<int>& trueoffset, Array<int>& ess_bdr_,
-                                        ParFiniteElementSpace* fes_, double time)
-        : TimeDependentOperator(truevsize*3, time), phi1_gf(phi1_gf_), phi2_gf(phi2_gf_),
-        true_vsize(truevsize), true_offset(trueoffset), ess_bdr(ess_bdr_), fes(fes_),
+    PNP_Protein_Gummel_CG_TimeDependent(ParFiniteElementSpace* fes_, double time, ParGridFunction* phi1_gf_, ParGridFunction* phi2_gf_,
+                                        int truevsize, Array<int>& trueoffset, Array<int>& ess_bdr_, Array<int>& top_bdr_,
+                                        Array<int>& bottom_bdr_, Array<int>& interface_bdr_)
+        : TimeDependentOperator(truevsize*3, time), fes(fes_), phi1_gf(phi1_gf_), phi2_gf(phi2_gf_),
+        true_vsize(truevsize), true_offset(trueoffset), ess_bdr(ess_bdr_), top_bdr(top_bdr_), bottom_bdr(bottom_bdr_), interface_bdr(interface_bdr_),
         a0(NULL), b1(NULL), b2(NULL), m1_dta1(NULL), m2_dta2(NULL), a1(NULL), a2(NULL)
     {
-        MPI_Comm_size(fes->GetComm(), &num_procs);
-        MPI_Comm_rank(fes->GetComm(), &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         pmesh = fes->GetParMesh();
 
@@ -84,34 +77,11 @@ public:
         temp_x2 = new Vector;
         temp_b2 = new Vector;
 
-        {
-            int size = pmesh->bdr_attributes.Max();
-
-            ess_bdr.SetSize(size);
-            ess_bdr                    = 0;
-            ess_bdr[top_marker - 1]    = 1;
-            ess_bdr[bottom_marker - 1] = 1;
-            fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
-
-            top_bdr.SetSize(size);
-            top_bdr                 = 0;
-            top_bdr[top_marker - 1] = 1;
-            fes->GetEssentialTrueDofs(top_bdr, top_ess_tdof_list);
-
-            bottom_bdr.SetSize(size);
-            bottom_bdr                    = 0;
-            bottom_bdr[bottom_marker - 1] = 1;
-            fes->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
-
-            interface_bdr.SetSize(size);
-            interface_bdr                       = 0;
-            interface_bdr[interface_marker - 1] = 1;
-            fes->GetEssentialTrueDofs(interface_bdr, interface_ess_tdof_list);
-
-            Gamma_m.SetSize(size);
-            Gamma_m                     = 0;
-            Gamma_m[Gamma_m_marker - 1] = 1;
-        }
+        // DG has no "DOFs"
+        fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+        fes->GetEssentialTrueDofs(top_bdr, top_ess_tdof_list);
+        fes->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
+        fes->GetEssentialTrueDofs(interface_bdr, interface_ess_tdof_list);
 
     }
     ~PNP_Protein_Gummel_CG_TimeDependent()
@@ -120,7 +90,14 @@ public:
 
         delete grad_phi1; delete grad_phi2; delete grad_phi1_plus_grad_phi2;
 
+        delete a0; delete b1; delete b2;
+        delete m1_dta1; delete a1;
+        delete m2_dta2; delete a2;
         delete A0; delete M1_dtA1; delete M2_dtA2;
+        delete temp_x0; delete temp_b0;
+        delete temp_x1; delete temp_b1;
+        delete temp_x2; delete temp_b2;
+
     }
 
     // 1.求解奇异电荷部分的电势
@@ -210,12 +187,12 @@ public:
         blf.RecoverFEMSolution(*x, lf, *phi2_gf);
 
         double norm = phi2_gf->ComputeL2Error(zero);
-        if (rank == 0) {
+        if (rank == 0)
+        {
             cout << "L2 norm of phi2: " << norm << endl;
         }
 
         if (verbose) {
-            cout << "\nL2 norm of phi2: " << phi2_gf->ComputeL2Error(zero) << endl;
             if (solver->GetConverged() == 1 && rank == 0)
                 cout << "phi2 solver: successfully converged by iterating " << solver->GetNumIterations()
                      << " times, taking " << chrono.RealTime() << " s." << endl;
@@ -256,6 +233,24 @@ public:
         old_c1  .SetFromTrueVector();
         old_c2  .SetFromTrueVector();
 
+        if (0)
+        {
+            VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
+            dc->RegisterField("old_phi3", &old_phi3);
+            dc->RegisterField("old_c1", &old_c1);
+            dc->RegisterField("old_c2", &old_c2);
+
+            cout << "l2 norm of phi3: " << old_phi3.Norml2() << endl;
+            cout << "l2 norm of   c1: " << old_c1.Norml2() << endl;
+            cout << "l2 norm of   c2: " << old_c2.Norml2() << endl;
+
+            Visualize(*dc, "old_phi3", "phi3");
+            Visualize(*dc, "old_c1", "old_c1");
+            Visualize(*dc, "old_c2", "old_c2");
+
+            delete dc;
+        }
+
         ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi3_dt
         // 下面通过求解 dc1dt, dc2dt 从而更新 dphi3c1c2_dt
         dc1dt.MakeTRef(fes, dphi3c1c2_dt, true_offset[1]);
@@ -288,7 +283,8 @@ public:
             b2->AddMult(dc2dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
 
             builda0();
-            phi3_Gummel.ProjectBdrCoefficient(phi_D_coeff, ess_bdr); // 设定解的边界条件
+            phi3_Gummel.ProjectBdrCoefficient(phi_D_top_coeff, top_bdr); // 设定解的边界条件
+            phi3_Gummel.ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
             a0->FormLinearSystem(ess_tdof_list, phi3_Gummel, *l0, *A0, *temp_x0, *temp_b0);
 
             PetscLinearSolver* poisson_solver = new PetscLinearSolver(*A0, false, "phi3_");
@@ -297,7 +293,7 @@ public:
             delete l0;
             delete poisson_solver;
 
-            if (1)
+            if (0)
             {
                 VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
                 dc->RegisterField("phi3_Gummel", &phi3_Gummel);
@@ -344,7 +340,7 @@ public:
             delete l1;
             delete np1_solver;
 
-            if (1)
+            if (0)
             {
                 VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
                 ParGridFunction c1_Gummel(fes);
@@ -379,7 +375,7 @@ public:
             delete l2;
             delete np2_solver;
 
-            if (1)
+            if (0)
             {
                 VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
                 ParGridFunction c2_Gummel(fes);
@@ -392,7 +388,6 @@ public:
 
                 delete dc;
             }
-
         }
 
         // 用最终Gummel迭代的解更新要求解的3个未知量
@@ -531,10 +526,11 @@ private:
     ODESolver *ode_solver;
 
     int true_vsize; // 有限元空间维数
-    Array<int> true_offset, ess_bdr;
-    ParaViewDataCollection* pd;
+    Array<int> true_offset, ess_bdr, top_bdr, bottom_bdr, interface_bdr, Gamma_m;
+
     int num_procs, rank;
     StopWatch chrono;
+    ParaViewDataCollection* pd;
 
 public:
     PNP_Protein_TimeDependent_Solver(ParMesh* pmesh_, int ode_solver_type): pmesh(pmesh_)
@@ -550,8 +546,30 @@ public:
         }
         fes = new ParFiniteElementSpace(pmesh, fec);
 
-        ess_bdr.SetSize(pmesh->bdr_attributes.Max());
-        ess_bdr = 1; // 对于H1空间, 设置所有边界都是essential的; 对DG空间, 边界条件都是weak的
+        {
+            int size = pmesh->bdr_attributes.Max();
+
+            ess_bdr.SetSize(size);
+            ess_bdr                    = 0;
+            ess_bdr[top_marker    - 1] = 1;
+            ess_bdr[bottom_marker - 1] = 1;
+
+            top_bdr.SetSize(size);
+            top_bdr                 = 0;
+            top_bdr[top_marker - 1] = 1;
+
+            bottom_bdr.SetSize(size);
+            bottom_bdr                    = 0;
+            bottom_bdr[bottom_marker - 1] = 1;
+
+            interface_bdr.SetSize(size);
+            interface_bdr                       = 0;
+            interface_bdr[interface_marker - 1] = 1;
+
+            Gamma_m.SetSize(size);
+            Gamma_m                     = 0;
+            Gamma_m[Gamma_m_marker - 1] = 1;
+        }
 
         phi1_gf = new ParGridFunction(fes); *phi1_gf = 0.0;
         phi2_gf = new ParGridFunction(fes); *phi2_gf = 0.0;
@@ -572,15 +590,18 @@ public:
         c2_gf  ->MakeTRef(fes, *phi3c1c2, true_offset[2]);
 
         // 设定初值
-        phi3_gf->ProjectCoefficient(phi_D_coeff);
+        phi3_gf->ProjectBdrCoefficient(phi_D_top_coeff, top_bdr);
+        phi3_gf->ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
         phi3_gf->SetTrueVector();
         phi3_gf->SetFromTrueVector();
 
-        c1_gf->ProjectCoefficient(c1_D_coeff);
+        c1_gf->ProjectBdrCoefficient( c1_D_top_coeff, top_bdr);
+        c1_gf->ProjectBdrCoefficient( c1_D_bottom_coeff, bottom_bdr);
         c1_gf->SetTrueVector();
         c1_gf->SetFromTrueVector();
 
-        c2_gf->ProjectCoefficient(c2_D_coeff);
+        c2_gf->ProjectBdrCoefficient( c2_D_top_coeff, top_bdr);
+        c2_gf->ProjectBdrCoefficient( c2_D_bottom_coeff, bottom_bdr);
         c2_gf->SetTrueVector();
         c2_gf->SetFromTrueVector();
 
@@ -588,7 +609,7 @@ public:
         {
             if (strcmp(Discretize, "cg") == 0)
             {
-                oper = new PNP_Protein_Gummel_CG_TimeDependent(phi1_gf, phi2_gf, true_vsize, true_offset, ess_bdr, fes, t);
+                oper = new PNP_Protein_Gummel_CG_TimeDependent(fes, t, phi1_gf, phi2_gf, true_vsize, true_offset, ess_bdr, top_bdr, bottom_bdr, interface_bdr);
             }
         }
 
@@ -616,8 +637,7 @@ public:
 
         if (paraview)
         {
-            string paraview_title = string("PNP_Protein") + Discretize + "_" + Linearize + "_Time_Dependent";
-            cout << paraview_title << endl;
+            string paraview_title = string("PNP_Protein_") + Discretize + "_" + Linearize + "_Time_Dependent";
             pd = new ParaViewDataCollection(paraview_title, pmesh);
             pd->SetPrefixPath("Paraview");
             pd->SetLevelsOfDetail(p_order);

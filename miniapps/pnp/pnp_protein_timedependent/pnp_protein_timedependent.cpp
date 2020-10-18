@@ -24,12 +24,13 @@ int main(int argc, char **argv)
     args.AddOption(&self_debug, "-debug", "--self_debug", "-nodebug", "--no_self_debug", "Run many asserts to debug");
     args.AddOption(&local_conservation, "-conserv", "--conservation", "-noconserv", "--noconservation", "Show local conservation");
     args.AddOption(&show_peclet, "-peclet", "--peclet", "-nopeclet", "--nopeclet", "Show Peclet numbers");
-    args.AddOption(&verbose, "-ver", "--verbose", "-nover", "--noverbose", "Verbose for more outputs");
+    args.AddOption(&verbose, "-verb", "--verbose", "Print Level: 1,2");
     args.AddOption(&visualize, "-v", "--vis", "-nov", "--novis", "Visualize outputs");
     args.AddOption(&prec_type, "-prec", "--prec_type", "Preconditioner type for Newton disretization, choose: block, uzawa, simple");
     args.AddOption(&schur_alpha1, "-schur1", "--schur1", "1st parameter for Schur Complement");
     args.AddOption(&schur_alpha2, "-schur2", "--schur2", "2nd parameter for Schur Complement");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
+    args.AddOption(&paraview, "-para", "--paraview", "-nopara", "--noparaview", "Save time-dependent results");
     args.Parse();
     if (!args.Good())
     {
@@ -62,6 +63,8 @@ int main(int argc, char **argv)
         solver->Solve();
         delete solver;
     }
+
+    delete pmesh;
 
     MFEMFinalizePetsc();
     MPI_Finalize();

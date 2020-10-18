@@ -1,7 +1,3 @@
-//
-// Created by fan on 2020/10/17.
-//
-
 #ifndef MFEM_PNP_PROTEIN_TIMEDEPENDENT_HPP
 #define MFEM_PNP_PROTEIN_TIMEDEPENDENT_HPP
 
@@ -12,7 +8,6 @@
 #include "../utils/mfem_utils.hpp"
 using namespace std;
 using namespace mfem;
-
 
 int p_order             = 1; //有限元基函数的多项式次数
 const char* Linearize   = "gummel"; // newton, gummel
@@ -29,16 +24,16 @@ bool show_peclet        = false;
 double relax            = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 double schur_alpha1      = 1.0; // schur = A - alpha1 B1 A1^-1 C1 - alpha2 B2 A2^-1 C2, 这个alpha1就是该参数
 double schur_alpha2      = 1.0;
-int ode_type                    = 1; // 1: backward Euler; 11: forward Euler
-double t_init                   = 0.0; // 初始时间
-double t_final                  = 0.0003; // 最后时间
-double t_stepsize               = 0.0001; // 时间步长
+int ode_type            = 1; // 1: backward Euler; 11: forward Euler
+double t_init           = 0.0; // 初始时间
+double t_final          = 0.5; // 最后时间
+double t_stepsize       = 0.01; // 时间步长
 bool paraview            = false;
 bool skip_zero_entries = false;
+int verbose            = 2;
 
 double sigma            = -1.0; // symmetric parameter for DG
 double kappa            = 10.0; // penalty parameter for DG
-bool verbose            = false;
 
 /* 只能定义如下集中参数
  * _1MAG_2:
@@ -95,53 +90,6 @@ double c1_other    = 0.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区
 double c2_top      = 0.9 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
 double c2_bottom   = 0.1 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
 double c2_other    = 0.0 * alpha3; // 国际单位mol/L, Cl-阳离子在计算区域的 其他边界是 Neumann
-
-double phi_D_func(const Vector& x)
-{
-    if (abs(x[2] - 50.0) < 1E-10) return phi_top;
-    else if (abs(x[2] + 60.0) < 1E-10) return phi_bottom;
-    else return 0.0;
-}
-double c1_D_func(const Vector& x)
-{
-    if (abs(x[2] - 50.0) < 1E-10) return c1_top;
-    else if (abs(x[2] + 60.0) < 1E-10) return c1_bottom;
-    else return 0.0;
-}
-double c2_D_func(const Vector& x)
-{
-    if (abs(x[2] - 50.0) < 1E-10) return c2_top;
-    else if (abs(x[2] + 60.0) < 1E-10) return c2_bottom;
-    else return 0.0;
-}
-double phi_D_top(const Vector& x)
-{
-    return phi_top;
-}
-double phi_D_bottom(const Vector& x)
-{
-    return phi_bottom;
-}
-double c1_D_top(const Vector& x)
-{
-    return c1_top;
-}
-double c1_D_bottom(const Vector& x)
-{
-    return c1_bottom;
-}
-double c2_D_top(const Vector& x)
-{
-    return c2_top;
-}
-double c2_D_bottom(const Vector& x)
-{
-    return c2_bottom;
-}
-
-FunctionCoefficient phi_D_coeff(phi_D_func);
-FunctionCoefficient c1_D_coeff (c1_D_func);
-FunctionCoefficient c2_D_coeff (c2_D_func);
 
 ConstantCoefficient phi_D_top_coeff(phi_top);
 ConstantCoefficient phi_D_bottom_coeff(phi_bottom);
@@ -230,7 +178,7 @@ ConstantCoefficient c2_D_bottom_coeff(c2_bottom);
 
 // ------------------------------- other parameters independent on mesh file and pqr file -------------------------------
 const int Gummel_max_iters  = 20;
-const double Gummel_rel_tol = 1e-8;
+const double Gummel_rel_tol = 1e-10;
 const double TOL            = 1e-10;
 
 
