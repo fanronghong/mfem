@@ -29,10 +29,12 @@ bool show_peclet        = false;
 double relax            = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 double schur_alpha1      = 1.0; // schur = A - alpha1 B1 A1^-1 C1 - alpha2 B2 A2^-1 C2, 这个alpha1就是该参数
 double schur_alpha2      = 1.0;
+int ode_type                    = 1; // 1: backward Euler; 11: forward Euler
 double t_init                   = 0.0; // 初始时间
 double t_final                  = 0.0003; // 最后时间
 double t_stepsize               = 0.0001; // 时间步长
 bool paraview            = false;
+bool skip_zero_entries = false;
 
 double sigma            = -1.0; // symmetric parameter for DG
 double kappa            = 10.0; // penalty parameter for DG
@@ -273,6 +275,9 @@ ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K(neg, alpha2_prod_alpha3_prod_
 ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl(neg, alpha2_prod_alpha3_prod_v_Cl);
 ProductCoefficient neg_alpha2_prod_alpha3_prod_v_K_water(neg_alpha2_prod_alpha3_prod_v_K, mark_water_coeff);
 ProductCoefficient neg_alpha2_prod_alpha3_prod_v_Cl_water(neg_alpha2_prod_alpha3_prod_v_Cl, mark_water_coeff);
+
+ProductCoefficient water_alpha2_prod_alpha3_prod_v_K(mark_water_coeff, alpha2_prod_alpha3_prod_v_K);
+ProductCoefficient water_alpha2_prod_alpha3_prod_v_Cl(mark_water_coeff, alpha2_prod_alpha3_prod_v_Cl);
 
 ProductCoefficient sigma_D1(sigma_coeff, D_K_);
 ProductCoefficient kappa_D1(kappa_coeff, D_K_);
