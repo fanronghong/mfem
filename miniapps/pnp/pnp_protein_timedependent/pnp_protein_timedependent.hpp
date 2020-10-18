@@ -23,16 +23,16 @@ bool show_peclet        = false;
 double relax            = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 double schur_alpha1      = 1.0; // schur = A - alpha1 B1 A1^-1 C1 - alpha2 B2 A2^-1 C2, 这个alpha1就是该参数
 double schur_alpha2      = 1.0;
-int refine_mesh                 = 0; // 初始网格加密次数
+int refine_mesh                 = 1; // 初始网格加密次数
 int refine_time                 = 0;   // "加密时间次数"
 double time_scale               = 1.0; // 类似网格加密(h -> 0.5 * h): dt -> time_scale * dt
 bool TimeConvergRate            = false;
-bool SpaceConvergRate           = false; // 利用解析解计算误差阶
+bool SpaceConvergRate           = true; // 利用解析解计算误差阶
 bool SpaceConvergRate_Change_dt = false; // 为了计算误差: error = c1 dt + c2 h^2, 是否把dt设置为h^2的倍数?
 double Change_dt_factor         = 0.1; // dt = factor * h^2
 int ode_type            = 1; // 1: backward Euler; 11: forward Euler
 double t_init           = 0.0; // 初始时间
-double t_final          = 0.03; // 最后时间
+double t_final          = 0.02; // 最后时间
 double t_stepsize       = 0.01; // 时间步长
 bool paraview            = false;
 bool skip_zero_entries = false;

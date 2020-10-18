@@ -8,10 +8,10 @@ using namespace mfem;
 
 int main(int argc, char **argv)
 {
-    int num_procs, myid;
+    int num_procs, rank;
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     OptionsParser args(argc, argv);
     args.AddOption(&output, "-out", "--output", "Just for showing all commands in cluster, like bsub -o ...");
@@ -41,7 +41,7 @@ int main(int argc, char **argv)
     args.Parse();
     if (!args.Good())
     {
-        if (myid == 0)
+        if (rank == 0)
         {
             args.PrintUsage(cout);
         }
@@ -58,9 +58,48 @@ int main(int argc, char **argv)
         Test_G_gradG_cfun(); // slow
     }
 
+    Array<Return*> rets;
     if (SpaceConvergRate) // dt 不变, 改变 h
     {
         MFEM_ASSERT(!TimeConvergRate, "SpaceConvergRate and TimeConvergRate cannot be true simultaneously");
+
+        for (int i=0; i<refine_time; ++i) t_stepsize *= time_scale; // 先把时间步长 dt 确定下来
+
+        Mesh* mesh = new Mesh(mesh_file);
+        ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
+        delete mesh;
+
+        int origin_refine_mesh = refine_mesh; // save refine_mesh temporarily
+        for (int i=0; i <= refine_mesh; ++i) // 对网格加密多次
+        {
+            if (i != 0) pmesh->UniformRefinement();
+
+            refine_mesh = i; // for cout right verbose outputs
+
+            PNP_Protein_TimeDependent_Solver* solver = new PNP_Protein_TimeDependent_Solver(pmesh, ode_type);
+            Return* ret = solver->Solve();
+            rets.Append(ret);
+
+            refine_mesh = origin_refine_mesh; // reset real refine_mesh
+        }
+
+        if (rets.Size() > 1)
+        {
+            for (int i=0; i<rets.Size()-1; i++)
+            {
+                GridTransfer* gt = new InterpolationGridTransfer(*rets[i]->fes, *rets[i+1]->fes);
+//                const Operator& Prolongate = gt->ForwardOperator();
+                const Operator& Restrict   = gt->BackwardOperator();
+
+                ParGridFunction temp_f2c(rets[i]->fes); // fine to coarse
+                Restrict.Mult(*rets[i+1]->phi3, temp_f2c);
+                
+                GridFunctionCoefficient temp_f2c_coeff(&temp_f2c);
+                double L2err = rets[i]->phi3->ComputeL2Error(temp_f2c_coeff);
+
+                if (rank == 0) cout << "fffffffffffffffffff: " << L2err << endl;
+            }
+        }
 
     }
     else if (TimeConvergRate) // h 不变, 改变 dt
@@ -77,7 +116,7 @@ int main(int argc, char **argv)
         for (int i=0; i<refine_mesh; i++) pmesh->UniformRefinement(); // 确定计算网格
         for (int i=0; i<refine_time; i++) t_stepsize *= time_scale;   // 确定时间步长
 
-        PNP_Protein_TimeDependent_Solver* solver = new PNP_Protein_TimeDependent_Solver(pmesh, 1);
+        PNP_Protein_TimeDependent_Solver* solver = new PNP_Protein_TimeDependent_Solver(pmesh, ode_type);
         solver->Solve();
 
         delete solver;

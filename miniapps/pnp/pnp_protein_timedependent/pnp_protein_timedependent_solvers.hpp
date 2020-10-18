@@ -22,6 +22,13 @@
 using namespace std;
 using namespace mfem;
 
+struct Return
+{
+    ParFiniteElementSpace* fes;
+    ParGridFunction* phi3;
+    ParGridFunction* c1;
+    ParGridFunction* c2;
+};
 
 class PNP_Protein_Gummel_CG_TimeDependent: public TimeDependentOperator
 {
@@ -533,9 +540,10 @@ private:
     int num_procs, rank;
     StopWatch chrono;
     ParaViewDataCollection* pd;
+    Return* ret;
 
 public:
-    PNP_Protein_TimeDependent_Solver(ParMesh* pmesh_, int ode_solver_type): pmesh(pmesh_)
+    PNP_Protein_TimeDependent_Solver(ParMesh* pmesh_, int ode_solver_type): pmesh(pmesh_), ret(NULL)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -668,10 +676,11 @@ public:
         delete phi3c1c2;
         delete oper;
         delete ode_solver;
+        if (ret) delete ret;
         if (paraview) delete pd;
     }
 
-    void Solve()
+    Return* Solve()
     {
         double mesh_size=0.0;
         {
@@ -750,6 +759,12 @@ public:
                      << "L2 norm of  c2_h : " << c2L2err << '\n' << endl;
             }
         }
+
+        ret = new Return;
+        ret->fes  = fes;
+        ret->phi3 = phi3_gf;
+        ret->c1   = c1_gf;
+        ret->c2   = c2_gf;
     }
 };
 
