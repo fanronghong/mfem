@@ -204,7 +204,6 @@ void LinearForm::Assemble()
    {
        Mesh* mesh = fes->GetMesh();
        FaceElementTransformations* tr;
-       Vector elemvect;
        Array<int> vdofs1, vdofs2; //单元刚度向量组装到总的载荷向量时用到的自由度编号
 
        for (size_t i=0; i<mesh->GetNumFaces(); i++) // 对所有的facet循环:interior facet, boundary facet

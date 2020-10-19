@@ -83,7 +83,7 @@ int main(int argc, char **argv)
 
             refine_mesh = i; // for cout right verbose outputs
 
-            PNP_Protein_TimeDependent_Solver* solver = new PNP_Protein_TimeDependent_Solver(pmesh, ode_type);
+            auto* solver = new PNP_Protein_TimeDependent_Solver(pmesh, ode_type);
             Return* ret = solver->Solve();
             rets.Append(ret);
 
@@ -125,13 +125,13 @@ int main(int argc, char **argv)
     else
     {
         Mesh* mesh = new Mesh(mesh_file);
-        ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
+        auto* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
         delete mesh;
 
         for (int i=0; i<refine_mesh; i++) pmesh->UniformRefinement(); // 确定计算网格
         for (int i=0; i<refine_time; i++) t_stepsize *= time_scale;   // 确定时间步长
 
-        PNP_Protein_TimeDependent_Solver* solver = new PNP_Protein_TimeDependent_Solver(pmesh, ode_type);
+        auto* solver = new PNP_Protein_TimeDependent_Solver(pmesh, ode_type);
         solver->Solve();
 
         delete solver;
