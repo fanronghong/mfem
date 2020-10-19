@@ -13,6 +13,7 @@
 #include "../utils/LocalConservation.hpp"
 #include "../utils/EAFE_ModifyStiffnessMatrix.hpp"
 #include "../utils/SUPG_Integrator.hpp"
+#include "../utils/ProteinWaterInterfaceIntegrators.hpp"
 #include "./pnp_protein_timedependent.hpp"
 
 using namespace std;
@@ -275,7 +276,7 @@ public:
             // **************************************************************************************
             ParLinearForm *l0 = new ParLinearForm(fes);
             // b0: - epsilon_m <grad(phi1 + phi2).n, psi3>_{\Gamma}
-            l0->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator(&neg_epsilon_protein, grad_phi1_plus_grad_phi2, pmesh, protein_marker, water_marker)); // fff
+            l0->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator1(&neg_epsilon_protein, grad_phi1_plus_grad_phi2, pmesh, protein_marker, water_marker));
             // omit 0 Neumann bdc on \Gamma_N and \Gamma_M
             l0->Assemble();
 
