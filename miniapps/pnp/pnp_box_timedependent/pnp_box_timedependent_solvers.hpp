@@ -1223,7 +1223,7 @@ public:
     }
 
     void Solve(Array<double>& phiL2errornorms_, Array<double>& c1L2errornorms_,
-               Array<double>& c2L2errornorms_, Array<double>& meshsizes_, Array<double>& time_steps)
+               Array<double>& c2L2errornorms_, Array<double>& meshsizes, Array<double>& time_steps)
     {
         double mesh_size=0.0;
         {
@@ -1242,7 +1242,7 @@ public:
             t_stepsize = mesh_size * mesh_size * Change_dt_factor;
         }
         time_steps.Append(t_stepsize);
-        meshsizes_.Append(mesh_size);
+        meshsizes.Append(mesh_size);
 
         MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();

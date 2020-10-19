@@ -680,7 +680,7 @@ public:
         if (paraview) delete pd;
     }
 
-    Return* Solve()
+    Return* Solve(Array<double>& meshsizes, Array<double>& time_steps)
     {
         double mesh_size=0.0;
         {
@@ -693,6 +693,13 @@ public:
 
             MPI_Allreduce(&max_size, &mesh_size, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
         }
+        // 时间离散误差加上空间离散误差: error = c1 dt + c2 h^2
+        // 如果收敛, 向前向后Euler格式都是1阶, 下面算空间L^2误差范数
+        if (SpaceConvergRate_Change_dt) {
+            t_stepsize = mesh_size * mesh_size * Change_dt_factor;
+        }
+        time_steps.Append(t_stepsize);
+        meshsizes.Append(mesh_size);
 
         MPI_Barrier(MPI_COMM_WORLD);
         chrono.Clear();
