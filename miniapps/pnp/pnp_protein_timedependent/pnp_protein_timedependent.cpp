@@ -66,13 +66,20 @@ int main(int argc, char **argv)
         for (int i=0; i<refine_time; ++i) t_stepsize *= time_scale; // 先把时间步长 dt 确定下来
 
         Mesh* mesh = new Mesh(mesh_file);
-        ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
-        delete mesh;
+        Array<ParMesh*> pmeshes;
 
         int origin_refine_mesh = refine_mesh; // save refine_mesh temporarily
         for (int i=0; i <= refine_mesh; ++i) // 对网格加密多次
         {
-            if (i != 0) pmesh->UniformRefinement();
+            ParMesh *pmesh;
+            if (i == 0) {
+                pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
+            }
+            else {
+                pmesh = new ParMesh(*pmeshes[i]);
+                pmesh->UniformRefinement();
+            }
+            pmeshes.Append(pmesh);
 
             refine_mesh = i; // for cout right verbose outputs
 
@@ -83,13 +90,19 @@ int main(int argc, char **argv)
             refine_mesh = origin_refine_mesh; // reset real refine_mesh
         }
 
+        if (rank == 0) cout << "finish computing" << endl;
+
         if (rets.Size() > 1)
         {
             for (int i=0; i<rets.Size()-1; i++)
             {
+                if (rank == 0) cout << "before forming GridTransfer" << endl;
+
                 GridTransfer* gt = new InterpolationGridTransfer(*rets[i]->fes, *rets[i+1]->fes);
 //                const Operator& Prolongate = gt->ForwardOperator();
                 const Operator& Restrict   = gt->BackwardOperator();
+
+                if (rank == 0) cout << "after forming GridTransfer" << endl;
 
                 ParGridFunction temp_f2c(rets[i]->fes); // fine to coarse
                 Restrict.Mult(*rets[i+1]->phi3, temp_f2c);
@@ -100,6 +113,8 @@ int main(int argc, char **argv)
                 if (rank == 0) cout << "fffffffffffffffffff: " << L2err << endl;
             }
         }
+
+        delete mesh;
 
     }
     else if (TimeConvergRate) // h 不变, 改变 dt
