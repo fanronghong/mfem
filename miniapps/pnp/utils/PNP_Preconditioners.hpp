@@ -360,6 +360,7 @@ public:
         MatDuplicate(schur, MAT_DO_NOT_COPY_VALUES, &temp4);
         MatMatMult(temp1, sub[1][0], MAT_INITIAL_MATRIX, PETSC_DEFAULT, &temp3); // C1 diag(A1)^-1 B1 => temp3
         MatMatMult(temp2, sub[2][0], MAT_INITIAL_MATRIX, PETSC_DEFAULT, &temp4); // C2 diag(A2)^-1 B2 => temp4
+        double schur_alpha1=1, schur_alpha2=1.0; // fff 为了能够通过编译
         MatAXPY(schur, -1.0*schur_alpha1, temp3, DIFFERENT_NONZERO_PATTERN); // A - alpha C1 diag(A1)^-1 B1 => schur
         MatAXPY(schur, -1.0*schur_alpha2, temp4, DIFFERENT_NONZERO_PATTERN); // A - alpha C1 diag(A1)^-1 B1 - C2 diag(A2)^-1 B2 => schur
 
@@ -700,7 +701,6 @@ public:
         Y->ResetArray();
     }
 };
-
 
 class UzawaPreconditionerSolver: public Solver
 {

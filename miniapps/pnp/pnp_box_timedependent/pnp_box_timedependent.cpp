@@ -21,6 +21,7 @@ int main(int argc, char *argv[])
     args.AddOption(&initTol, "-initTol", "--initTol", "For obtaining initial value, Gummel iteration to satisfy the Tol");
     args.AddOption(&Gummel_rel_tol, "-GummelTol", "--GummelTol", "Gummel Tolerance");
     args.AddOption(&Discretize, "-dis", "--discretization", "Descretization method.");
+    args.AddOption(&prec_type, "-prec", "--prec_type", "Preconditioner type for Newton disretization, choose: block, uzawa, simple");
     args.AddOption(&AdvecStable, "-stable", "--stable", "Choose stabilization: none, supg, eafe");
     args.AddOption(&ode_type, "-ode", "--ode", "Use ODE Solver");
     args.AddOption(&t_init, "-t_init", "--t_init", "Initial time");

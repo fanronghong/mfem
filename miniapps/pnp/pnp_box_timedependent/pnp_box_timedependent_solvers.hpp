@@ -19,6 +19,7 @@
 //#include "../utils/python_utils.hpp" // not work in computer cluster
 #include "../utils/DGDiffusion_Edge_Symmetry_Penalty.hpp"
 #include "../utils/DGEdgeIntegrator.hpp"
+#include "../utils/PNP_Preconditioners.hpp"
 
 
 class PNP_Box_Gummel_CG_TimeDependent: public TimeDependentOperator
@@ -1086,11 +1087,12 @@ class PNP_Box_Newton_CG_Operator: public Operator
 private:
     ParFiniteElementSpace* fes;
 
-    mutable ParBilinearForm *a0, *b1, *b2, *m, *m1_dta1, *m2_dta2, *g1_, *g2_, *h1, *h2, *h1_dth1, *h2_dth2;
+    mutable ParBilinearForm *a0, *b1, *b2, *m1_dta1, *m2_dta2, *g1_, *g2_, *h1, *h2, *h1_dth1, *h2_dth2;
     mutable ParLinearForm *l0, *l1, *l2;
-    HypreParMatrix *A0, *B1, *B2, *M, *M1_dtA1, *M2_dtA2, *G1, *G2, *H1, *H2, *H1_dtH1, *H2_dtH2;
+    HypreParMatrix *A0, *B1, *B2, *M1_dtA1, *M2_dtA2, *G1, *G2, *H1, *H2, *H1_dtH1, *H2_dtH2;
 
-    ParGridFunction *c1, *c2, *phi, *dc1dt, *dc2dt;
+    const ParGridFunction *c1, *c2;
+    ParGridFunction *phi, *dc1dt, *dc2dt;
     double t, dt;
 
     int true_vsize;
@@ -1103,16 +1105,19 @@ private:
 public:
     PNP_Box_Newton_CG_Operator(ParFiniteElementSpace* fes_, int truevsize, Array<int>& offset, Array<int>& ess_tdof_list_)
         : Operator(3*truevsize), fes(fes_), true_vsize(truevsize), true_offset(offset), ess_tdof_list(ess_tdof_list_),
-          a0(NULL), b1(NULL), b2(NULL), m(NULL), m1_dta1(NULL), m2_dta2(NULL), g1_(NULL), g2_(NULL), h1(NULL), h2(NULL),
-          h1_dth1(NULL), h2_dth2(NULL)
+          a0(NULL), b1(NULL), b2(NULL), m1_dta1(NULL), m2_dta2(NULL),
+          g1_(NULL), g2_(NULL), h1(NULL), h2(NULL), h1_dth1(NULL), h2_dth2(NULL)
     {
         MPI_Comm_size(fes->GetComm(), &num_procs);
         MPI_Comm_rank(fes->GetComm(), &rank);
 
+        phi   = new ParGridFunction;
+        dc1dt = new ParGridFunction;
+        dc2dt = new ParGridFunction;
+
         A0 = new HypreParMatrix;
         B1 = new HypreParMatrix;
         B2 = new HypreParMatrix;
-        M  = new HypreParMatrix;
         G1 = new HypreParMatrix;
         G2 = new HypreParMatrix;
         H1 = new HypreParMatrix;
@@ -1126,29 +1131,31 @@ public:
         l1 = new ParLinearForm(fes);
         l2 = new ParLinearForm(fes);
 
-        rhs_k = new BlockVector(true_offset); // not block_offsets !!!
+        rhs_k = new BlockVector(true_offset);
         jac_k = new BlockOperator(true_offset);
 
     }
     ~PNP_Box_Newton_CG_Operator()
     {
+        delete phi; delete dc1dt; delete dc2dt;
+
         delete a0; delete b1; delete b2;
-        delete m; delete m1_dta1; delete m2_dta2;
         delete g1_; delete g2_;
         delete h1; delete h2;
         delete h1_dth1; delete h2_dth2;
-        delete M1_dtA1; delete M2_dtA2;
+        delete m1_dta1; delete m2_dta2;
 
         delete A0; delete B1; delete B2;
-        delete M; delete G1; delete G2;
+        delete G1; delete G2;
         delete H1; delete H2;
+        delete M1_dtA1; delete M2_dtA2;
 
         delete l0; delete l1; delete l2;
 
         delete rhs_k; delete jac_k;
     }
 
-    void UpdateParameters(double current, double dt_, ParGridFunction* c1_, ParGridFunction* c2_)
+    void UpdateParameters(double current, double dt_, const ParGridFunction* c1_, const ParGridFunction* c2_)
     {
         t  = current;
         dt = dt_;
@@ -1160,12 +1167,20 @@ public:
     {
         Vector& phi_dc1dt_dc2dt_ = const_cast<Vector&>(phi_dc1dt_dc2dt);
 
-        phi  ->MakeTRef(fes, phi_dc1dt_dc2dt_, 0*true_vsize);
-        dc1dt->MakeTRef(fes, phi_dc1dt_dc2dt_, 1*true_vsize);
-        dc2dt->MakeTRef(fes, phi_dc1dt_dc2dt_, 2*true_vsize);
+        phi  ->MakeTRef(fes, phi_dc1dt_dc2dt_, true_offset[0]);
+        dc1dt->MakeTRef(fes, phi_dc1dt_dc2dt_, true_offset[1]);
+        dc2dt->MakeTRef(fes, phi_dc1dt_dc2dt_, true_offset[2]);
         phi  ->SetFromTrueVector(); // 下面要用到 PrimalVector, 而不是 TrueVector
         dc1dt->SetFromTrueVector();
         dc2dt->SetFromTrueVector();
+
+        if (hahahaha) {
+            cout << "l2 norm of   phi: " <<   phi->Norml2() << endl;
+            cout << "l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+            cout << "l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+            cout << "l2 norm of residual: " << residual.Norml2() << '\n' << endl;
+        }
 
         rhs_k->Update(residual.GetData(), true_offset); // update residual
 
@@ -1230,6 +1245,14 @@ public:
         h2->AddMult(*phi, *l2, -1.0);        // l2 = l2 - g2 c2 - h2 phi
         m2_dta2->AddMult(*dc2dt, *l2, -1.0); // l2 = l2 - g2 c2 - h2 phi - m2_dta2 dc2dt
         l2->SetSubVector(ess_tdof_list, 0.0);
+
+        if (hahahaha) {
+            cout << "l2 norm of   phi: " <<   phi->Norml2() << endl;
+            cout << "l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+            cout << "l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+            cout << "l2 norm of residual: " << residual.Norml2() << '\n' << endl;
+        }
     }
 
     virtual Operator &GetGradient(const Vector& phi_dc1dt_dc2dt) const
@@ -1243,6 +1266,12 @@ public:
         dc1dt->SetFromTrueVector();
         dc2dt->SetFromTrueVector();
 
+        {
+            cout << "l2 norm of   phi: " << phi->Norml2() << endl;
+            cout << "l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+            cout << "l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << '\n' << endl;
+        }
 
         // **************************************************************************************
         //                                1. Poisson 方程的 Jacobian
@@ -1329,17 +1358,6 @@ private:
         b2->Finalize(skip_zero_entries);
     }
 
-    // (ci, vi), i=1,2
-    void buildm() const
-    {
-        if (m != NULL) { delete m; }
-
-        m = new ParBilinearForm(fes);
-        m->AddDomainIntegrator(new MassIntegrator);
-
-        m->Assemble(skip_zero_entries);
-    }
-
     // (c1, v1) + dt D1 (grad(c1) + z1 c1 grad(phi), grad(v1)), given phi
     void buildm1_dta1(ParGridFunction* phi) const
     {
@@ -1401,7 +1419,7 @@ private:
     }
 
     // D1 (z1 c1 grad(dphi), grad(v1)), given c1
-    void buildh1(ParGridFunction* c1) const
+    void buildh1(const ParGridFunction* c1) const
     {
         if (h1 != NULL) { delete h1; }
 
@@ -1416,7 +1434,7 @@ private:
     }
 
     // D1 (z1 (c1 + dt dc1dt) grad(dphi), grad(v1)), given c1 and dc1dt
-    void buildh1_dth1(ParGridFunction* c1, ParGridFunction* dc1dt) const
+    void buildh1_dth1(const ParGridFunction* c1, ParGridFunction* dc1dt) const
     {
         if (h1_dth1 != NULL) { delete h1_dth1; }
 
@@ -1434,7 +1452,7 @@ private:
     }
 
     // D2 (z2 c2 grad(dphi), grad(v2)), given c2
-    void buildh2(ParGridFunction* c2) const
+    void buildh2(const ParGridFunction* c2) const
     {
         if (h2 != NULL) { delete h2; }
 
@@ -1449,7 +1467,7 @@ private:
     }
 
     // D2 (z2 (c2 + dt dc2dt) grad(dphi), grad(v2)), given c2 and dc2dt
-    void buildh2_dth2(ParGridFunction* c2, ParGridFunction* dc2dt) const
+    void buildh2_dth2(const ParGridFunction* c2, ParGridFunction* dc2dt) const
     {
         if (h2_dth2 != NULL) { delete h2_dth2; }
 
@@ -1475,10 +1493,15 @@ private:
     BlockVector* phi_dc1dt_dc2dt;
     PNP_Box_Newton_CG_Operator* oper;
     PetscNonlinearSolver* newton_solver;
+    PetscPreconditionerFactory *jac_factory;
+
+    ParGridFunction old_phi, old_c1, old_c2; // 上一个时间步的解(已知)
+    ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi_dt
 
     int true_vsize;
-    mutable Array<int> true_offset, ess_tdof_list, ess_bdr, null_array; // 在H1空间中存在ess_tdof_list, 在DG空间中不存在
+    Array<int> true_offset, ess_bdr, ess_tdof_list; // 在H1空间中存在ess_tdof_list, 在DG空间中不存在
     int num_procs, rank;
+    StopWatch chrono;
 
 public:
     PNP_Box_Newton_CG_TimeDependent(int truesize, Array<int>& offset, Array<int>& ess_bdr_, ParFiniteElementSpace* fes_, double time)
@@ -1487,24 +1510,26 @@ public:
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        oper = new PNP_Box_Newton_CG_Operator(fes, true_vsize, true_offset, ess_tdof_list);
+        fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+
+        oper          = new PNP_Box_Newton_CG_Operator(fes, true_vsize, true_offset, ess_tdof_list);
+        jac_factory   = new PreconditionerFactory(*oper, prec_type);
         newton_solver = new PetscNonlinearSolver(fes->GetComm(), *oper, "newton_");
-
-
-
+        newton_solver->SetPreconditionerFactory(jac_factory);
+        newton_solver->iterative_mode = true;
     }
     ~PNP_Box_Newton_CG_TimeDependent()
     {
-
+        delete oper;
+        delete newton_solver;
+        delete jac_factory;
+        delete phi_dc1dt_dc2dt;
     }
 
     virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
     {
-        dphic1c2_dt = 0.0;
-
-        Vector* phic1c2_ptr = (Vector*) &phic1c2;
-        ParGridFunction old_phi, old_c1, old_c2; // 上一个时间步的解(已知)
         // 求解新的 old_phi 从而更新 phic1c2_ptr, 最终更新 phic1c2
+        Vector* phic1c2_ptr = (Vector*) &phic1c2;
         old_phi.MakeTRef(fes, *phic1c2_ptr, true_offset[0]);
         old_c1 .MakeTRef(fes, *phic1c2_ptr, true_offset[1]);
         old_c2 .MakeTRef(fes, *phic1c2_ptr, true_offset[2]);
@@ -1512,23 +1537,50 @@ public:
         old_c1 .SetFromTrueVector();
         old_c2 .SetFromTrueVector();
 
-        ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi_dt
         // 下面通过求解 dc1dt, dc2dt 从而更新 dphic1c2_dt
+        dphic1c2_dt = 0.0;
         dc1dt.MakeTRef(fes, dphic1c2_dt, true_offset[1]);
         dc2dt.MakeTRef(fes, dphic1c2_dt, true_offset[2]);
 
-        oper->UpdateParameters(t, dt, &old_c1, &old_c2); // 传入当前解
+        phi_exact  .SetTime(t); // t在ODE里面已经变成下一个时刻了(要求解的时刻)
+        dc1dt_exact.SetTime(t);
+        dc2dt_exact.SetTime(t);
+        old_phi.ProjectBdrCoefficient(  phi_exact, ess_bdr); // 设定解的边界条件
+        dc1dt  .ProjectBdrCoefficient(dc1dt_exact, ess_bdr);
+        dc2dt  .ProjectBdrCoefficient(dc2dt_exact, ess_bdr);
+        old_phi.SetTrueVector();
+        dc1dt  .SetTrueVector();
+        dc2dt  .SetTrueVector();
+
         // !!!引用 phi, dc1dt, dc2dt 的 TrueVector, 使得 phi_dc1dt_dc2dt 所指的内存块就是phi, dc1dt, dc2dt的内存块.
         // 从而在Newton求解器中对 phi_dc1dt_dc2dt 的修改就等同于对phi, dc1dt, dc2dt的修改, 最终达到了更新解的目的.
         phi_dc1dt_dc2dt = new BlockVector(true_offset);
-        phi_dc1dt_dc2dt->MakeRef(old_phi.GetTrueVector(), true_offset[0], true_vsize); // fff 确保指向相同的内存,true_offset[0]为0
-        phi_dc1dt_dc2dt->MakeRef(  dc1dt.GetTrueVector(), true_offset[1], true_vsize);
-        phi_dc1dt_dc2dt->MakeRef(  dc2dt.GetTrueVector(), true_offset[2], true_vsize);
+//        phi_dc1dt_dc2dt->MakeRef(old_phi.GetTrueVector(), true_offset[0], true_vsize); // fff 确保指向相同的内存,true_offset[0]为0
+//        phi_dc1dt_dc2dt->MakeRef(  dc1dt.GetTrueVector(), true_offset[1], true_vsize);
+//        phi_dc1dt_dc2dt->MakeRef(  dc2dt.GetTrueVector(), true_offset[2], true_vsize);
+        phi_dc1dt_dc2dt->SetVector(old_phi.GetTrueVector(), true_offset[0]);
+        phi_dc1dt_dc2dt->SetVector(  dc1dt.GetTrueVector(), true_offset[1]);
+        phi_dc1dt_dc2dt->SetVector(  dc2dt.GetTrueVector(), true_offset[2]);
 
+        oper->UpdateParameters(t, dt, &old_c1, &old_c2); // 传入当前解
         Vector zero_vec;
-        newton_solver->Mult(zero_vec, *phi_dc1dt_dc2dt);
-    }
+        if (hahahaha) {
+            cout.precision(14);
+            cout << "l2 norm of   phi: " <<old_phi.Norml2() << endl;
+            cout << "l2 norm of dc1dt: " <<  dc1dt.Norml2() << endl;
+            cout << "l2 norm of dc2dt: " <<  dc2dt.Norml2() << endl;
+            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << '\n' << endl;
+        }
 
+        newton_solver->Mult(zero_vec, *phi_dc1dt_dc2dt);
+        if (hahahaha) {
+            cout.precision(14);
+            cout << "l2 norm of   phi: " <<old_phi.Norml2() << endl;
+            cout << "l2 norm of dc1dt: " <<  dc1dt.Norml2() << endl;
+            cout << "l2 norm of dc2dt: " <<  dc2dt.Norml2() << endl;
+            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << '\n' << endl;
+        }
+    }
 };
 
 
@@ -1619,7 +1671,12 @@ public:
         }
         else
         {
-            MFEM_ABORT("Not support linearization");
+            MFEM_ASSERT(strcmp(Linearize, "newton") == 0, "Linearizations: Gummel or Newton.");
+            if (strcmp(Discretize, "cg") == 0)
+            {
+                oper = new PNP_Box_Newton_CG_TimeDependent(true_vsize, true_offset, ess_bdr, fes, t);
+            }
+            else MFEM_ABORT("Not support discretization");
         }
 
         switch (ode_solver_type)
@@ -1663,14 +1720,9 @@ public:
     }
     ~PNP_Box_TimeDependent_Solver()
     {
-        delete fec;
-        delete fes;
-        delete phi_gf;
-        delete c1_gf;
-        delete c2_gf;
-        delete phic1c2;
-        delete oper;
-        delete ode_solver;
+        delete fec; delete fes;
+        delete phi_gf; delete c1_gf; delete c2_gf; delete phic1c2;
+        delete oper; delete ode_solver;
         if (paraview) delete pd;
     }
 

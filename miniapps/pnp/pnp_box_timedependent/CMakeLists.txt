@@ -1,15 +1,6 @@
-configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box_timedependent/pnp_box_petsc_opts
-               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box_timedependent/pnp_box_petsc_opts
-               COPYONLY)
-
 configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box_timedependent/run.sh
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box_timedependent/run.sh
                COPYONLY)
-
-configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box_timedependent/4_4_4_translate.msh
-               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box_timedependent/4_4_4_translate.msh
-               COPYONLY)
-
 
 configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box_timedependent/gummel_amg
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box_timedependent/gummel_amg
@@ -21,10 +12,6 @@ configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box_timedependent/gummel_i
 
 configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box_timedependent/gummel_lu
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box_timedependent/gummel_lu
-               COPYONLY)
-
-configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box_timedependent/gummel_dg_lu
-               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_box_timedependent/gummel_dg_lu
                COPYONLY)
 
 configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_box_timedependent/newton_amg
