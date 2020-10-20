@@ -1080,6 +1080,458 @@ public:
 };
 
 
+
+class PNP_Box_Newton_CG_Operator: public Operator
+{
+private:
+    ParFiniteElementSpace* fes;
+
+    mutable ParBilinearForm *a0, *b1, *b2, *m, *m1_dta1, *m2_dta2, *g1_, *g2_, *h1, *h2, *h1_dth1, *h2_dth2;
+    mutable ParLinearForm *l0, *l1, *l2;
+    HypreParMatrix *A0, *B1, *B2, *M, *M1_dtA1, *M2_dtA2, *G1, *G2, *H1, *H2, *H1_dtH1, *H2_dtH2;
+
+    ParGridFunction *c1, *c2, *phi, *dc1dt, *dc2dt;
+    double t, dt;
+
+    int true_vsize;
+    Array<int> &true_offset, &ess_tdof_list, null_array;
+    mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
+    mutable BlockOperator *jac_k; // Jacobian at current solution
+
+    int num_procs, rank;
+
+public:
+    PNP_Box_Newton_CG_Operator(ParFiniteElementSpace* fes_, int truevsize, Array<int>& offset, Array<int>& ess_tdof_list_)
+        : Operator(3*truevsize), fes(fes_), true_vsize(truevsize), true_offset(offset), ess_tdof_list(ess_tdof_list_),
+          a0(NULL), b1(NULL), b2(NULL), m(NULL), m1_dta1(NULL), m2_dta2(NULL), g1_(NULL), g2_(NULL), h1(NULL), h2(NULL),
+          h1_dth1(NULL), h2_dth2(NULL)
+    {
+        MPI_Comm_size(fes->GetComm(), &num_procs);
+        MPI_Comm_rank(fes->GetComm(), &rank);
+
+        A0 = new HypreParMatrix;
+        B1 = new HypreParMatrix;
+        B2 = new HypreParMatrix;
+        M  = new HypreParMatrix;
+        G1 = new HypreParMatrix;
+        G2 = new HypreParMatrix;
+        H1 = new HypreParMatrix;
+        H2 = new HypreParMatrix;
+        H1_dtH1 = new HypreParMatrix;
+        H2_dtH2 = new HypreParMatrix;
+        M1_dtA1 = new HypreParMatrix;
+        M2_dtA2 = new HypreParMatrix;
+
+        l0 = new ParLinearForm(fes);
+        l1 = new ParLinearForm(fes);
+        l2 = new ParLinearForm(fes);
+
+        rhs_k = new BlockVector(true_offset); // not block_offsets !!!
+        jac_k = new BlockOperator(true_offset);
+
+    }
+    ~PNP_Box_Newton_CG_Operator()
+    {
+        delete a0; delete b1; delete b2;
+        delete m; delete m1_dta1; delete m2_dta2;
+        delete g1_; delete g2_;
+        delete h1; delete h2;
+        delete h1_dth1; delete h2_dth2;
+        delete M1_dtA1; delete M2_dtA2;
+
+        delete A0; delete B1; delete B2;
+        delete M; delete G1; delete G2;
+        delete H1; delete H2;
+
+        delete l0; delete l1; delete l2;
+
+        delete rhs_k; delete jac_k;
+    }
+
+    void UpdateParameters(double current, double dt_, ParGridFunction* c1_, ParGridFunction* c2_)
+    {
+        t  = current;
+        dt = dt_;
+        c1 = c1_;
+        c2 = c2_;
+    }
+
+    virtual void Mult(const Vector& phi_dc1dt_dc2dt, Vector& residual) const
+    {
+        Vector& phi_dc1dt_dc2dt_ = const_cast<Vector&>(phi_dc1dt_dc2dt);
+
+        phi  ->MakeTRef(fes, phi_dc1dt_dc2dt_, 0*true_vsize);
+        dc1dt->MakeTRef(fes, phi_dc1dt_dc2dt_, 1*true_vsize);
+        dc2dt->MakeTRef(fes, phi_dc1dt_dc2dt_, 2*true_vsize);
+        phi  ->SetFromTrueVector(); // 下面要用到 PrimalVector, 而不是 TrueVector
+        dc1dt->SetFromTrueVector();
+        dc2dt->SetFromTrueVector();
+
+        rhs_k->Update(residual.GetData(), true_offset); // update residual
+
+
+        // **************************************************************************************
+        //                                1. Poisson 方程 Residual
+        // **************************************************************************************
+        delete l0;
+        l0 = new ParLinearForm(fes);
+        l0->Update(fes, rhs_k->GetBlock(0), 0);
+        // b0: (f0, psi)
+        f0_analytic.SetTime(t);
+        l0->AddDomainIntegrator(new DomainLFIntegrator(f0_analytic));
+        l0->Assemble();
+
+        buildb1();
+        buildb2();
+        builda0();
+        b1->AddMult(*c1, *l0, 1.0);   // l0 = l0 + b1 c1
+        b2->AddMult(*c2, *l0, 1.0);   // l0 = l0 + b1 c1 + b2 c2
+        b1->AddMult(*dc1dt, *l0, dt);    // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt
+        b2->AddMult(*dc2dt, *l0, dt);    // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
+        a0->AddMult(*phi, *l0, -1.0); // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt - a0 phi
+        l0->SetSubVector(ess_tdof_list, 0.0);
+
+
+        // **************************************************************************************
+        //                                2. NP1 方程 Residual
+        // **************************************************************************************
+        delete l1;
+        l1 = new ParLinearForm(fes);
+        l1->Update(fes, rhs_k->GetBlock(1), 0);
+        // b1: (f1, v1)
+        f1_analytic.SetTime(t);
+        l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+        l1->Assemble();
+
+        buildg1_();
+        buildh1(c1);
+        buildm1_dta1(phi);
+        g1_->AddMult(*c1, *l1, -1.0);        // l1 = l1 - g1 c1
+        h1->AddMult(*phi, *l1, -1.0);        // l1 = l1 - g1 c1 - h1 phi
+        m1_dta1->AddMult(*dc1dt, *l1, -1.0); // l1 = l1 - g1 c1 - h1 phi - m1_dta1 dc1dt
+        l1->SetSubVector(ess_tdof_list, 0.0);
+
+
+        // **************************************************************************************
+        //                                3. NP2 方程 Residual
+        // **************************************************************************************
+        delete l2;
+        l2 = new ParLinearForm(fes);
+        l2->Update(fes, rhs_k->GetBlock(2), 0);
+        // b2: (f2, v2)
+        f2_analytic.SetTime(t);
+        l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
+        l2->Assemble();
+
+        buildg2_();
+        buildh2(c2);
+        buildm2_dta2(phi);
+        g2_->AddMult(*c2, *l2, -1.0);        // l2 = l2 - g2 c2
+        h2->AddMult(*phi, *l2, -1.0);        // l2 = l2 - g2 c2 - h2 phi
+        m2_dta2->AddMult(*dc2dt, *l2, -1.0); // l2 = l2 - g2 c2 - h2 phi - m2_dta2 dc2dt
+        l2->SetSubVector(ess_tdof_list, 0.0);
+    }
+
+    virtual Operator &GetGradient(const Vector& phi_dc1dt_dc2dt) const
+    {
+        Vector& phi_dc1dt_dc2dt_ = const_cast<Vector&>(phi_dc1dt_dc2dt);
+
+        phi  ->MakeTRef(fes, phi_dc1dt_dc2dt_, 0*true_vsize);
+        dc1dt->MakeTRef(fes, phi_dc1dt_dc2dt_, 1*true_vsize);
+        dc2dt->MakeTRef(fes, phi_dc1dt_dc2dt_, 2*true_vsize);
+        phi  ->SetFromTrueVector(); // 下面要用到 PrimalVector, 而不是 TrueVector
+        dc1dt->SetFromTrueVector();
+        dc2dt->SetFromTrueVector();
+
+
+        // **************************************************************************************
+        //                                1. Poisson 方程的 Jacobian
+        // **************************************************************************************
+        builda0();
+        a0->FormSystemMatrix(ess_tdof_list, *A0);
+
+        buildb1();
+        b1->FormSystemMatrix(null_array, *B1);
+        *B1 *= -1.0*dt;
+
+        buildb2();
+        b2->FormSystemMatrix(null_array, *B2);
+        *B2 *= -1.0*dt;
+
+
+        // **************************************************************************************
+        //                                2. NP1 方程的 Jacobian
+        // **************************************************************************************
+        buildh1_dth1(c1, dc1dt);
+        h1_dth1->FormSystemMatrix(null_array, *H1_dtH1);
+
+        buildm1_dta1(phi);
+        m1_dta1->FormSystemMatrix(ess_tdof_list, *M1_dtA1);
+
+
+        // **************************************************************************************
+        //                                3. NP2 方程的 Jacobian
+        // **************************************************************************************
+        buildh2_dth2(c2, dc2dt);
+        h2_dth2->FormSystemMatrix(null_array, *H2_dtH2);
+
+        buildm2_dta2(phi);
+        m2_dta2->FormSystemMatrix(ess_tdof_list, *M2_dtA2);
+
+        delete jac_k;
+        jac_k = new BlockOperator(true_offset);
+        jac_k->SetBlock(0, 0, A0);
+        jac_k->SetBlock(0, 1, B1);
+        jac_k->SetBlock(0, 2, B2);
+        jac_k->SetBlock(1, 0, H1_dtH1);
+        jac_k->SetBlock(1, 1, M1_dtA1);
+        jac_k->SetBlock(2, 0, H2_dtH2);
+        jac_k->SetBlock(2, 2, M2_dtA2);
+        return *jac_k;
+    }
+
+private:
+    // epsilon_s (grad(phi), grad(psi))
+    void builda0() const
+    {
+        if (a0 != NULL) { delete a0; }
+
+        a0 = new ParBilinearForm(fes);
+        a0->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water));
+
+        a0->Assemble(skip_zero_entries);
+        a0->Finalize(skip_zero_entries);
+    }
+
+    // alpha2 alpha3 z1 (c1, psi)
+    void buildb1() const
+    {
+        if (b1 != NULL) { delete b1; }
+
+        b1 = new ParBilinearForm(fes);
+        // alpha2 alpha3 z1 (c1, psi)
+        b1->AddDomainIntegrator(new MassIntegrator(alpha2_prod_alpha3_prod_v_K));
+
+        b1->Assemble(skip_zero_entries);
+        b1->Finalize(skip_zero_entries);
+    }
+
+    // alpha2 alpha3 z2 (c2, psi)
+    void buildb2() const
+    {
+        if (b2 != NULL) { delete b2; }
+
+        b2 = new ParBilinearForm(fes);
+        // alpha2 alpha3 z2 (c2, psi)
+        b2->AddDomainIntegrator(new MassIntegrator(alpha2_prod_alpha3_prod_v_Cl));
+
+        b2->Assemble(skip_zero_entries);
+        b2->Finalize(skip_zero_entries);
+    }
+
+    // (ci, vi), i=1,2
+    void buildm() const
+    {
+        if (m != NULL) { delete m; }
+
+        m = new ParBilinearForm(fes);
+        m->AddDomainIntegrator(new MassIntegrator);
+
+        m->Assemble(skip_zero_entries);
+    }
+
+    // (c1, v1) + dt D1 (grad(c1) + z1 c1 grad(phi), grad(v1)), given phi
+    void buildm1_dta1(ParGridFunction* phi) const
+    {
+        if (m1_dta1 != NULL) { delete m1_dta1; }
+
+        ProductCoefficient dt_D1(dt, D_K_);
+        ProductCoefficient dt_D1_z1(dt, D_K_prod_v_K);
+
+        m1_dta1 = new ParBilinearForm(fes);
+        // (c1, v1)
+        m1_dta1->AddDomainIntegrator(new MassIntegrator);
+        // dt D1 (grad(c1) + z1 c1 grad(phi), grad(v1)), given phi
+        m1_dta1->AddDomainIntegrator(new DiffusionIntegrator(dt_D1));
+        m1_dta1->AddDomainIntegrator(new GradConvection_BLFIntegrator(*phi, &dt_D1_z1));
+
+        m1_dta1->Assemble(skip_zero_entries);
+    }
+
+    // (c2, v2) + dt D2 (grad(c2) + z2 c2 grad(phi), grad(v2)), given phi
+    void buildm2_dta2(ParGridFunction* phi) const
+    {
+        if (m2_dta2 != NULL) { delete m2_dta2; }
+
+        ProductCoefficient dt_D2(dt, D_Cl_);
+        ProductCoefficient dt_D2_z2(dt, D_Cl_prod_v_Cl);
+
+        m2_dta2 = new ParBilinearForm(fes);
+        // (c2, v2)
+        m2_dta2->AddDomainIntegrator(new MassIntegrator);
+        // dt D2 (grad(c2) + z2 c2 grad(phi), grad(v2)), given phi
+        m2_dta2->AddDomainIntegrator(new DiffusionIntegrator(dt_D2));
+        m2_dta2->AddDomainIntegrator(new GradConvection_BLFIntegrator(*phi, &dt_D2_z2));
+
+        m2_dta2->Assemble(skip_zero_entries);
+    }
+
+    // D1 (grad(c1), grad(v1))
+    void buildg1_() const
+    {
+        if (g1_ != NULL) { delete g1_; }
+
+        g1_ = new ParBilinearForm(fes);
+        // D1 (grad(c1), grad(v1))
+        g1_->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+
+        g1_->Assemble(skip_zero_entries);
+    }
+
+    // D2 (grad(c2), grad(v2))
+    void buildg2_() const
+    {
+        if (g2_ != NULL) { delete g2_; }
+
+        g2_ = new ParBilinearForm(fes);
+        // D2 (grad(c2), grad(v2))
+        g2_->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
+
+        g2_->Assemble(skip_zero_entries);
+    }
+
+    // D1 (z1 c1 grad(dphi), grad(v1)), given c1
+    void buildh1(ParGridFunction* c1) const
+    {
+        if (h1 != NULL) { delete h1; }
+
+        GridFunctionCoefficient c1_coeff(c1);
+        ProductCoefficient D1_z1_c1_coeff(D_K_prod_v_K, c1_coeff);
+
+        h1 = new ParBilinearForm(fes);
+        // D1 (z1 c1 grad(dphi), grad(v1)), given c1
+        h1->AddDomainIntegrator(new DiffusionIntegrator(D1_z1_c1_coeff));
+
+        h1->Assemble(skip_zero_entries);
+    }
+
+    // D1 (z1 (c1 + dt dc1dt) grad(dphi), grad(v1)), given c1 and dc1dt
+    void buildh1_dth1(ParGridFunction* c1, ParGridFunction* dc1dt) const
+    {
+        if (h1_dth1 != NULL) { delete h1_dth1; }
+
+        GridFunctionCoefficient c1_coeff(c1), dc1dt_coeff(dc1dt);
+        ProductCoefficient D1_z1_c1_coeff(D_K_prod_v_K, c1_coeff);
+        ProductCoefficient dt_dc1dt_coeff(dt, dc1dt_coeff);
+
+        h1_dth1 = new ParBilinearForm(fes);
+        // D1 (z1 c1 grad(dphi), grad(v1)), given c1
+        h1_dth1->AddDomainIntegrator(new DiffusionIntegrator(D1_z1_c1_coeff));
+        // D1 (z1 dt dc1dt grad(dphi), grad(v1)), given dc1dt
+        h1_dth1->AddDomainIntegrator(new DiffusionIntegrator(dt_dc1dt_coeff));
+
+        h1_dth1->Assemble(skip_zero_entries);
+    }
+
+    // D2 (z2 c2 grad(dphi), grad(v2)), given c2
+    void buildh2(ParGridFunction* c2) const
+    {
+        if (h2 != NULL) { delete h2; }
+
+        GridFunctionCoefficient c2_coeff(c2);
+        ProductCoefficient D2_z2_c2_coeff(D_Cl_prod_v_Cl, c2_coeff);
+
+        h2 = new ParBilinearForm(fes);
+        // D2 (z2 c2 grad(dphi), grad(v2)), given c2
+        h2->AddDomainIntegrator(new DiffusionIntegrator(D2_z2_c2_coeff));
+
+        h2->Assemble(skip_zero_entries);
+    }
+
+    // D2 (z2 (c2 + dt dc2dt) grad(dphi), grad(v2)), given c2 and dc2dt
+    void buildh2_dth2(ParGridFunction* c2, ParGridFunction* dc2dt) const
+    {
+        if (h2_dth2 != NULL) { delete h2_dth2; }
+
+        GridFunctionCoefficient c2_coeff(c2), dc2dt_coeff(dc2dt);
+        ProductCoefficient D2_z2_c2_coeff(D_Cl_prod_v_Cl, c2_coeff);
+        ProductCoefficient dt_dc2dt_coeff(dt, dc2dt_coeff);
+
+        h2_dth2 = new ParBilinearForm(fes);
+        // D2 (z2 c2 grad(dphi), grad(v2)), given c2
+        h2_dth2->AddDomainIntegrator(new DiffusionIntegrator(D2_z2_c2_coeff));
+        // D2 (z2 dt dc2dt grad(dphi), grad(v2)), given dc2dt
+        h2_dth2->AddDomainIntegrator(new DiffusionIntegrator(dt_dc2dt_coeff));
+
+        h2_dth2->Assemble(skip_zero_entries);
+    }
+
+};
+class PNP_Box_Newton_CG_TimeDependent: public TimeDependentOperator
+{
+private:
+    ParFiniteElementSpace* fes;
+
+    BlockVector* phi_dc1dt_dc2dt;
+    PNP_Box_Newton_CG_Operator* oper;
+    PetscNonlinearSolver* newton_solver;
+
+    int true_vsize;
+    mutable Array<int> true_offset, ess_tdof_list, ess_bdr, null_array; // 在H1空间中存在ess_tdof_list, 在DG空间中不存在
+    int num_procs, rank;
+
+public:
+    PNP_Box_Newton_CG_TimeDependent(int truesize, Array<int>& offset, Array<int>& ess_bdr_, ParFiniteElementSpace* fes_, double time)
+            : TimeDependentOperator(3*truesize, time), true_vsize(truesize), true_offset(offset), ess_bdr(ess_bdr_), fes(fes_)
+    {
+        MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+        oper = new PNP_Box_Newton_CG_Operator(fes, true_vsize, true_offset, ess_tdof_list);
+        newton_solver = new PetscNonlinearSolver(fes->GetComm(), *oper, "newton_");
+
+
+
+    }
+    ~PNP_Box_Newton_CG_TimeDependent()
+    {
+
+    }
+
+    virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
+    {
+        dphic1c2_dt = 0.0;
+
+        Vector* phic1c2_ptr = (Vector*) &phic1c2;
+        ParGridFunction old_phi, old_c1, old_c2; // 上一个时间步的解(已知)
+        // 求解新的 old_phi 从而更新 phic1c2_ptr, 最终更新 phic1c2
+        old_phi.MakeTRef(fes, *phic1c2_ptr, true_offset[0]);
+        old_c1 .MakeTRef(fes, *phic1c2_ptr, true_offset[1]);
+        old_c2 .MakeTRef(fes, *phic1c2_ptr, true_offset[2]);
+        old_phi.SetFromTrueVector(); // 下面要用到PrimalVector, 而不是TrueVector
+        old_c1 .SetFromTrueVector();
+        old_c2 .SetFromTrueVector();
+
+        ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi_dt
+        // 下面通过求解 dc1dt, dc2dt 从而更新 dphic1c2_dt
+        dc1dt.MakeTRef(fes, dphic1c2_dt, true_offset[1]);
+        dc2dt.MakeTRef(fes, dphic1c2_dt, true_offset[2]);
+
+        oper->UpdateParameters(t, dt, &old_c1, &old_c2); // 传入当前解
+        // !!!引用 phi, dc1dt, dc2dt 的 TrueVector, 使得 phi_dc1dt_dc2dt 所指的内存块就是phi, dc1dt, dc2dt的内存块.
+        // 从而在Newton求解器中对 phi_dc1dt_dc2dt 的修改就等同于对phi, dc1dt, dc2dt的修改, 最终达到了更新解的目的.
+        phi_dc1dt_dc2dt = new BlockVector(true_offset);
+        phi_dc1dt_dc2dt->MakeRef(old_phi.GetTrueVector(), true_offset[0], true_vsize); // fff 确保指向相同的内存,true_offset[0]为0
+        phi_dc1dt_dc2dt->MakeRef(  dc1dt.GetTrueVector(), true_offset[1], true_vsize);
+        phi_dc1dt_dc2dt->MakeRef(  dc2dt.GetTrueVector(), true_offset[2], true_vsize);
+
+        Vector zero_vec;
+        newton_solver->Mult(zero_vec, *phi_dc1dt_dc2dt);
+    }
+
+};
+
+
 class PNP_Box_TimeDependent_Solver
 {
 private:
