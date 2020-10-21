@@ -1674,9 +1674,7 @@ public:
         phi_gf->MakeTRef(fes, *phic1c2, true_offset[0]);
         c1_gf ->MakeTRef(fes, *phic1c2, true_offset[1]);
         c2_gf ->MakeTRef(fes, *phic1c2, true_offset[2]);
-        if (hahahaha){
-            cout << "l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
-        }
+
         // 设定初值
         phi_exact.SetTime(t);
         phi_gf->ProjectCoefficient(phi_exact);
@@ -1692,9 +1690,6 @@ public:
         c2_gf->ProjectCoefficient(c2_exact);
         c2_gf->SetTrueVector();
         c2_gf->SetFromTrueVector();
-        if (hahahaha){
-            cout << "l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
-        }
 
         if (strcmp(Linearize, "gummel") == 0)
         {
@@ -1796,27 +1791,7 @@ public:
         {
             double dt_real = min(t_stepsize, t_final - t);
 
-            if (1) {
-                phi_gf->SetFromTrueVector();
-                c1_gf->SetFromTrueVector();
-                c2_gf->SetFromTrueVector();
-                cout.precision(14);
-                cout << "l2 norm of old_phi: " << phi_gf->Norml2() << endl;
-                cout << "l2 norm of  old_c1: " <<  c1_gf->Norml2() << endl;
-                cout << "l2 norm of  old_c2: " <<  c2_gf->Norml2() << endl;
-                cout << "l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
-            }
             ode_solver->Step(*phic1c2, t, dt_real); // 经过这一步之后 phic1c2(TrueVector, not PrimalVector) 和 t 都被更新了
-            if (1) {
-                phi_gf->SetFromTrueVector();
-                c1_gf->SetFromTrueVector();
-                c2_gf->SetFromTrueVector();
-                cout.precision(14);
-                cout << "l2 norm of old_phi: " << phi_gf->Norml2() << endl;
-                cout << "l2 norm of  old_c1: " <<  c1_gf->Norml2() << endl;
-                cout << "l2 norm of  old_c2: " <<  c2_gf->Norml2() << endl;
-                cout << "l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
-            }
 
             last_step = (t >= t_final - 1e-8*t_stepsize);
 
