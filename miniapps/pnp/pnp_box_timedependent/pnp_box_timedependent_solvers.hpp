@@ -1266,7 +1266,7 @@ public:
         dc1dt->SetFromTrueVector();
         dc2dt->SetFromTrueVector();
 
-        {
+        if (hahahaha) {
             cout << "l2 norm of   phi: " << phi->Norml2() << endl;
             cout << "l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
             cout << "l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
@@ -1511,7 +1511,9 @@ public:
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
-
+        if (hahahaha) {
+            ess_tdof_list.Print(cout << "ess_tdof_list: ", ess_tdof_list.Size());
+        }
         oper          = new PNP_Box_Newton_CG_Operator(fes, true_vsize, true_offset, ess_tdof_list);
         jac_factory   = new PreconditionerFactory(*oper, prec_type);
         newton_solver = new PetscNonlinearSolver(fes->GetComm(), *oper, "newton_");
@@ -1536,6 +1538,12 @@ public:
         old_phi.SetFromTrueVector(); // 下面要用到PrimalVector, 而不是TrueVector
         old_c1 .SetFromTrueVector();
         old_c2 .SetFromTrueVector();
+        if (hahahaha) {
+            cout << "l2 norm of old_phi: " <<old_phi.Norml2() << endl;
+            cout << "l2 norm of  old_c1: " <<  old_c1.Norml2() << endl;
+            cout << "l2 norm of  old_c2: " <<  old_c2.Norml2() << endl;
+            cout << "l2 norm of phic1c2: " << phic1c2.Norml2() << endl;
+        }
 
         // 下面通过求解 dc1dt, dc2dt 从而更新 dphic1c2_dt
         dphic1c2_dt = 0.0;
@@ -1548,13 +1556,29 @@ public:
         old_phi.ProjectBdrCoefficient(  phi_exact, ess_bdr); // 设定解的边界条件
         dc1dt  .ProjectBdrCoefficient(dc1dt_exact, ess_bdr);
         dc2dt  .ProjectBdrCoefficient(dc2dt_exact, ess_bdr);
+
         old_phi.SetTrueVector();
-        dc1dt  .SetTrueVector();
-        dc2dt  .SetTrueVector();
+        old_phi.SetFromTrueVector();
+        dc1dt.SetTrueVector();
+        dc1dt.SetFromTrueVector();
+        dc2dt.SetTrueVector();
+        dc2dt.SetFromTrueVector();
+
+        if (hahahaha) {
+            cout.precision(14);
+            cout << "time: " << t << endl;
+            ess_bdr.Print(cout << "ess_bdr: " , 10);
+            cout << "l2 norm of   phi: " <<old_phi.Norml2() << endl;
+            cout << "l2 norm of dc1dt: " <<  dc1dt.Norml2() << endl;
+            cout << "l2 norm of dc2dt: " <<  dc2dt.Norml2() << endl;
+        }
 
         // !!!引用 phi, dc1dt, dc2dt 的 TrueVector, 使得 phi_dc1dt_dc2dt 所指的内存块就是phi, dc1dt, dc2dt的内存块.
         // 从而在Newton求解器中对 phi_dc1dt_dc2dt 的修改就等同于对phi, dc1dt, dc2dt的修改, 最终达到了更新解的目的.
         phi_dc1dt_dc2dt = new BlockVector(true_offset);
+        old_phi.SetTrueVector();
+        dc1dt  .SetTrueVector();
+        dc2dt  .SetTrueVector();
 //        phi_dc1dt_dc2dt->MakeRef(old_phi.GetTrueVector(), true_offset[0], true_vsize); // fff 确保指向相同的内存,true_offset[0]为0
 //        phi_dc1dt_dc2dt->MakeRef(  dc1dt.GetTrueVector(), true_offset[1], true_vsize);
 //        phi_dc1dt_dc2dt->MakeRef(  dc2dt.GetTrueVector(), true_offset[2], true_vsize);
@@ -1564,7 +1588,7 @@ public:
 
         oper->UpdateParameters(t, dt, &old_c1, &old_c2); // 传入当前解
         Vector zero_vec;
-        if (hahahaha) {
+        if (1) {
             cout.precision(14);
             cout << "l2 norm of   phi: " <<old_phi.Norml2() << endl;
             cout << "l2 norm of dc1dt: " <<  dc1dt.Norml2() << endl;
@@ -1573,7 +1597,17 @@ public:
         }
 
         newton_solver->Mult(zero_vec, *phi_dc1dt_dc2dt);
-        if (hahahaha) {
+
+        old_phi.MakeTRef(fes, *phi_dc1dt_dc2dt, true_offset[0]);
+        dc1dt  .MakeTRef(fes, *phi_dc1dt_dc2dt, true_offset[1]);
+        dc2dt  .MakeTRef(fes, *phi_dc1dt_dc2dt, true_offset[2]);
+        old_phi.SetTrueVector();
+        dc1dt  .SetTrueVector();
+        dc2dt  .SetTrueVector();
+        old_phi.SetFromTrueVector();
+        dc1dt  .SetFromTrueVector();
+        dc2dt  .SetFromTrueVector();
+        if (1) {
             cout.precision(14);
             cout << "l2 norm of   phi: " <<old_phi.Norml2() << endl;
             cout << "l2 norm of dc1dt: " <<  dc1dt.Norml2() << endl;
@@ -1631,8 +1665,8 @@ public:
 
         true_vsize = fes->TrueVSize();
         true_offset.SetSize(3 + 1); // 表示 phi, c1，c2的TrueVector
-        true_offset[0] = 0;
-        true_offset[1] = true_vsize;
+        true_offset[0] = true_vsize * 0;
+        true_offset[1] = true_vsize * 1;
         true_offset[2] = true_vsize * 2;
         true_offset[3] = true_vsize * 3;
 
@@ -1640,7 +1674,9 @@ public:
         phi_gf->MakeTRef(fes, *phic1c2, true_offset[0]);
         c1_gf ->MakeTRef(fes, *phic1c2, true_offset[1]);
         c2_gf ->MakeTRef(fes, *phic1c2, true_offset[2]);
-
+        if (hahahaha){
+            cout << "l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
+        }
         // 设定初值
         phi_exact.SetTime(t);
         phi_gf->ProjectCoefficient(phi_exact);
@@ -1656,6 +1692,9 @@ public:
         c2_gf->ProjectCoefficient(c2_exact);
         c2_gf->SetTrueVector();
         c2_gf->SetFromTrueVector();
+        if (hahahaha){
+            cout << "l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
+        }
 
         if (strcmp(Linearize, "gummel") == 0)
         {
@@ -1757,7 +1796,27 @@ public:
         {
             double dt_real = min(t_stepsize, t_final - t);
 
+            if (1) {
+                phi_gf->SetFromTrueVector();
+                c1_gf->SetFromTrueVector();
+                c2_gf->SetFromTrueVector();
+                cout.precision(14);
+                cout << "l2 norm of old_phi: " << phi_gf->Norml2() << endl;
+                cout << "l2 norm of  old_c1: " <<  c1_gf->Norml2() << endl;
+                cout << "l2 norm of  old_c2: " <<  c2_gf->Norml2() << endl;
+                cout << "l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
+            }
             ode_solver->Step(*phic1c2, t, dt_real); // 经过这一步之后 phic1c2(TrueVector, not PrimalVector) 和 t 都被更新了
+            if (1) {
+                phi_gf->SetFromTrueVector();
+                c1_gf->SetFromTrueVector();
+                c2_gf->SetFromTrueVector();
+                cout.precision(14);
+                cout << "l2 norm of old_phi: " << phi_gf->Norml2() << endl;
+                cout << "l2 norm of  old_c1: " <<  c1_gf->Norml2() << endl;
+                cout << "l2 norm of  old_c2: " <<  c2_gf->Norml2() << endl;
+                cout << "l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
+            }
 
             last_step = (t >= t_final - 1e-8*t_stepsize);
 

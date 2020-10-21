@@ -7,7 +7,7 @@ using namespace std;
 using namespace mfem;
 
 //#define SELF_VERBOSE
-bool hahahaha = 0;
+bool hahahaha = 1;
 
 int p_order                     = 1; //有限元基函数的多项式次数
 const char* mesh_file           = "../pnp_data/4_4_4_translate.msh";
@@ -26,7 +26,7 @@ int max_newton                  = 20;
 double relax                    = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 int ode_type                    = 1; // 1: backward Euler; 11: forward Euler
 double t_init                   = 0.0; // 初始时间
-double t_final                  = 0.1; // 最后时间
+double t_final                  = 0.2; // 最后时间
 double t_stepsize               = 0.1; // 时间步长
 int refine_mesh                 = 0; // 初始网格加密次数
 int refine_time                 = 0;   // "加密时间次数"
