@@ -618,7 +618,10 @@ public:
 
             builda1(phi_Gummel);
             builde1(phi_Gummel);
+            HypreParVector* vvv; // ffftest
             a1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1
+            vvv = l1->ParallelAssemble();
+            cout << "after a1->AddMult(), l2 norm of vvv: " << vvv->Norml2() << endl; // ffftest
             cout << "after a1->AddMult(), l2 norm of l1: " << l1->Norml2() << endl; // ffftest
             e1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1 - e1 c1
             cout << "after e1->AddMult(), l2 norm of l1: " << l1->Norml2() << endl; // ffftest
