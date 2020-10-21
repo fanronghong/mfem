@@ -729,6 +729,7 @@ private:
         // D1 (grad(c1), grad(v1))
         a1->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
         // D1 z1 (c1 grad(phi), grad(v1))
+        phi.ExchangeFaceNbrData();
         a1->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi, &D_K_prod_v_K));
 
         a1->Assemble(skip_zero_entries);
@@ -743,6 +744,7 @@ private:
         // D2 (grad(c2), grad(v2))
         a2->AddDomainIntegrator(new DiffusionIntegrator(D_Cl_));
         // D2 z2 (c2 grad(phi), grad(v2))
+        phi.ExchangeFaceNbrData();
         a2->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi, &D_Cl_prod_v_Cl));
 
         a2->Assemble(skip_zero_entries);
@@ -759,6 +761,7 @@ private:
         e1->AddBdrFaceIntegrator(new DGDiffusion_Edge(D_K_), ess_bdr);
 
         // -<{D1 z1 c1 grad(phi)}, [v1]>
+        phi.ExchangeFaceNbrData();
         e1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_K_v_K, phi));
         e1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_K_v_K, phi), ess_bdr);
 
@@ -776,6 +779,7 @@ private:
         e2->AddBdrFaceIntegrator(new DGDiffusion_Edge(D_Cl_), ess_bdr);
 
         // -<{D2 z2 c2 grad(phi)}, [v2]>
+        phi.ExchangeFaceNbrData();
         e2->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_Cl_v_Cl, phi));
         e2->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_Cl_v_Cl, phi), ess_bdr);
 
@@ -796,6 +800,7 @@ private:
         }
 
         // -sigma <[c1], {D1 z1 v1 grad(phi)}>
+        phi.ExchangeFaceNbrData();
         s1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(neg_sigma_D_K_v_K, phi));
         if (symmetry_with_boundary)
         {
@@ -819,6 +824,7 @@ private:
         }
 
         // -sigma <[c2], {D2 z2 v2 grad(phi)}>
+        phi.ExchangeFaceNbrData();
         s2->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(neg_sigma_D_Cl_v_Cl, phi));
         if (symmetry_with_boundary)
         {
@@ -905,6 +911,7 @@ private:
     void buildm1_dta1_dte1_dts1_dtp1(double dt, ParGridFunction& phi) const
     {
         if (m1_dta1_dte1_dts1_dtp1 != NULL) { delete m1_dta1_dte1_dts1_dtp1; }
+        phi.ExchangeFaceNbrData();
 
         m1_dta1_dte1_dts1_dtp1 = new ParBilinearForm(fes);
 
@@ -958,6 +965,7 @@ private:
     void buildm2_dta2_dte2_dts2_dtp2(double dt, ParGridFunction& phi) const
     {
         if (m2_dta2_dte2_dts2_dtp2 != NULL) { delete m2_dta2_dte2_dts2_dtp2; }
+        phi.ExchangeFaceNbrData();
 
         m2_dta2_dte2_dts2_dtp2 = new ParBilinearForm(fes);
 
