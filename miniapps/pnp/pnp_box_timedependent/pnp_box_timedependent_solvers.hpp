@@ -592,6 +592,8 @@ public:
                 last_gummel_step = true;
             }
 
+            phi_Gummel.ExchangeFaceNbrData(); // 后面有可能利用其在内部边界积分, 而相邻单元有可能不再同一个进程
+
 
             // **************************************************************************************
             //                                3. 求解 NP1
@@ -617,17 +619,21 @@ public:
             builda1(phi_Gummel);
             builde1(phi_Gummel);
             a1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1
+            cout << "after a1->AddMult(), l2 norm of l1: " << l1->Norml2() << endl; // ffftest
             e1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1 - e1 c1
+            cout << "after e1->AddMult(), l2 norm of l1: " << l1->Norml2() << endl; // ffftest
             if (abs(sigma - 0.0) > 1E-10) // 添加对称项
             {
                 builds1(phi_Gummel);
                 s1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1
             }
+            cout << "after s1->AddMult(), l2 norm of l1: " << l1->Norml2() << endl; // ffftest
             if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
             {
                 buildp1();
                 p1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1 + p1 c1
             }
+            cout << "after p1->AddMult(), l2 norm of l1: " << l1->Norml2() << endl; // ffftest
 
             buildm1_dta1_dte1_dts1_dtp1(dt, phi_Gummel);
             m1_dta1_dte1_dts1_dtp1->FormLinearSystem(null_array, dc1dt_Gummel, *l1, *M1_dtA1_dtE1_dtS1_dtP1, *temp_x1, *temp_b1);
@@ -638,6 +644,7 @@ public:
             delete l1;
             delete np1_solver;
 
+            MFEM_ABORT("Stop here."); //ffftest
 
             // **************************************************************************************
             //                                4. 求解 NP2
@@ -725,11 +732,12 @@ private:
     {
         if (a1 != NULL) { delete a1; }
 
+        phi.ExchangeFaceNbrData();
+
         a1 = new ParBilinearForm(fes);
         // D1 (grad(c1), grad(v1))
         a1->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
         // D1 z1 (c1 grad(phi), grad(v1))
-        phi.ExchangeFaceNbrData();
         a1->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi, &D_K_prod_v_K));
 
         a1->Assemble(skip_zero_entries);
