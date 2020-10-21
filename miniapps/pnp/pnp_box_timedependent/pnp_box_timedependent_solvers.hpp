@@ -618,25 +618,19 @@ public:
 
             builda1(phi_Gummel);
             builde1(phi_Gummel);
-            HypreParVector* vvv; // ffftest
             a1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1
-            vvv = l1->ParallelAssemble();
-            cout << "after a1->AddMult(), l2 norm of vvv: " << vvv->Norml2() << endl; // ffftest
-            cout << "after a1->AddMult(), l2 norm of l1: " << l1->Norml2() << endl; // ffftest
             e1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1 - e1 c1
-            cout << "after e1->AddMult(), l2 norm of l1: " << l1->Norml2() << endl; // ffftest
+
             if (abs(sigma - 0.0) > 1E-10) // 添加对称项
             {
                 builds1(phi_Gummel);
                 s1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1
             }
-            cout << "after s1->AddMult(), l2 norm of l1: " << l1->Norml2() << endl; // ffftest
             if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
             {
                 buildp1();
                 p1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1 + p1 c1
             }
-            cout << "after p1->AddMult(), l2 norm of l1: " << l1->Norml2() << endl; // ffftest
 
             buildm1_dta1_dte1_dts1_dtp1(dt, phi_Gummel);
             m1_dta1_dte1_dts1_dtp1->FormLinearSystem(null_array, dc1dt_Gummel, *l1, *M1_dtA1_dtE1_dtS1_dtP1, *temp_x1, *temp_b1);
@@ -647,7 +641,6 @@ public:
             delete l1;
             delete np1_solver;
 
-            MFEM_ABORT("Stop here."); //ffftest
 
             // **************************************************************************************
             //                                4. 求解 NP2
@@ -772,7 +765,6 @@ private:
         e1->AddBdrFaceIntegrator(new DGDiffusion_Edge(D_K_), ess_bdr);
 
         // -<{D1 z1 c1 grad(phi)}, [v1]>
-        phi.ExchangeFaceNbrData();
         e1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_K_v_K, phi));
         e1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_K_v_K, phi), ess_bdr);
 
@@ -922,6 +914,7 @@ private:
     void buildm1_dta1_dte1_dts1_dtp1(double dt, ParGridFunction& phi) const
     {
         if (m1_dta1_dte1_dts1_dtp1 != NULL) { delete m1_dta1_dte1_dts1_dtp1; }
+
         phi.ExchangeFaceNbrData();
 
         m1_dta1_dte1_dts1_dtp1 = new ParBilinearForm(fes);
