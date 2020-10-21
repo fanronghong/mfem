@@ -149,8 +149,9 @@ int main(int argc, char *argv[])
 
     ParBilinearForm* e1 = new ParBilinearForm(fes);
     ConstantCoefficient one(1.0);
-    e1->AddInteriorFaceIntegrator(new DGEdgeIntegrator1(one, *phi_gf)); // error for parallel, ok for serial
-//    e1->AddBdrFaceIntegrator(new DGEdgeIntegrator1(one, *phi_gf));      // ok for serial and parallel
+    phi_gf->ExchangeFaceNbrData(); // OK without this line
+    e1->AddInteriorFaceIntegrator(new DGEdgeIntegrator1(one, *phi_gf));
+    e1->AddBdrFaceIntegrator(new DGEdgeIntegrator1(one, *phi_gf));
     e1->Assemble(0);
 
     delete e1;
