@@ -36,7 +36,7 @@ int main(int argc, char *argv[])
     args.AddOption(&TimeConvergRate, "-time_rate", "--time_rate", "-notime_rate", "--notime_rate", "Compute time convergence rate by using analytic solutions");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.AddOption(&paraview, "-para", "--paraview", "-nopara", "--noparaview", "Save time-dependent results");
-    args.AddOption(&output, "-out", "--output", "File name to save outputs", false);
+    args.AddOption(&output, "-out", "--output", "File name to save outputs");
     args.AddOption(&verbose, "-verb", "--verbose", "Print Level: 1,2");
     args.Parse();
     if (!args.Good())

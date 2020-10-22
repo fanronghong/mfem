@@ -13,9 +13,9 @@ int p_order             = 1; //有限元基函数的多项式次数
 const char* Linearize   = "gummel"; // newton, gummel
 const char* Discretize  = "cg"; // cg, dg
 const char* AdvecStable = "eafe"; // none, supg, eafe
-const char* prec_type   = "uzawa"; // preconditioner for Newton discretization: block, uzawa, simple
+const char* prec_type   = "block"; // preconditioner for Newton discretization: block, uzawa, simple
 const char* options_src = "../pnp_data/pnp_protein_petsc_opts";
-const char* output      = NULL;
+const char* output      = "";
 bool self_debug         = false; // 针对特定的条件进行一些检测
 bool visualize          = false;
 bool local_conservation = false;
@@ -23,17 +23,18 @@ bool show_peclet        = false;
 double relax            = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 double schur_alpha1      = 1.0; // schur = A - alpha1 B1 A1^-1 C1 - alpha2 B2 A2^-1 C2, 这个alpha1就是该参数
 double schur_alpha2      = 1.0;
-int refine_mesh                 = 1; // 初始网格加密次数
+int refine_mesh                 = 0; // 初始网格加密次数
 int refine_time                 = 0;   // "加密时间次数"
 double time_scale               = 1.0; // 类似网格加密(h -> 0.5 * h): dt -> time_scale * dt
 bool TimeConvergRate            = false;
-bool SpaceConvergRate           = true; // 利用解析解计算误差阶
+bool SpaceConvergRate           = false; // 利用解析解计算误差阶
 bool SpaceConvergRate_Change_dt = false; // 为了计算误差: error = c1 dt + c2 h^2, 是否把dt设置为h^2的倍数?
-double Change_dt_factor         = 0.1; // dt = factor * h^2
+double Change_dt_factor         = 1.0; // dt = factor * h^2
 int ode_type            = 1; // 1: backward Euler; 11: forward Euler
-double t_init           = 0.0; // 初始时间
-double t_final          = 0.02; // 最后时间
-double t_stepsize       = 0.01; // 时间步长
+const int alpha_time    = 10E+6; // 1s = 10E6 us = 10E12 ps, 时间尺度变换
+double t_init           = alpha_time * 0.0; // 初始时间
+double t_final          = alpha_time * 0.001; // 最后时间
+double t_stepsize       = alpha_time * 0.0001; // 时间步长
 bool paraview            = false;
 bool skip_zero_entries = false;
 int verbose            = 1;
@@ -85,14 +86,12 @@ const int top_marker       = 8;
 const int bottom_marker    = 7;
 const int Gamma_m_marker   = 5;
 
-double phi_top     = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 上边界是 Dirichlet, 乘以alpha1进行无量纲化
-double phi_bottom  = 2.5 * alpha1; // 国际单位V, 电势在计算区域的 下边界是 Dirichlet
-
-double c1_top      = 0.9 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 上边界是 Dirichlet,乘以alpha2是把mol/L换成Angstrom,单位统一
-double c1_bottom   = 0.1 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 下边界是 Dirichlet
-
-double c2_top      = 0.9 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
-double c2_bottom   = 0.1 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
+double phi_top     = 2.0 * alpha1; // 国际单位V, 电势在计算区域的 上边界是 Dirichlet, 乘以alpha1进行无量纲化
+double phi_bottom  = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 下边界是 Dirichlet
+double c1_top      = 3.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 上边界是 Dirichlet,乘以alpha2是把mol/L换成Angstrom,单位统一
+double c1_bottom   = 1.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 下边界是 Dirichlet
+double c2_top      = 3.0 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
+double c2_bottom   = 1.0 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
 
 ConstantCoefficient phi_D_top_coeff(phi_top);
 ConstantCoefficient phi_D_bottom_coeff(phi_bottom);
@@ -207,8 +206,13 @@ ProductCoefficient     kappa_water(kappa_coeff, mark_water_coeff);
 Green_func                     G_func(pqr_file);     // i.e., phi1
 gradGreen_func                 gradG_func(pqr_file); // also can be obtained from grad(phi1)
 StdFunctionCoefficient         G_coeff(G_func);
+ProductCoefficient             neg_G(neg, G_coeff);
 VectorStdFunctionCoefficient   gradG_coeff(3, gradG_func);
-ScalarVectorProductCoefficient neg_gradG_coeff(neg, gradG_coeff);
+ProductCoefficient             protein_G(mark_protein_coeff, G_coeff);
+ProductCoefficient             neg_protein_G(neg, protein_G);
+ScalarVectorProductCoefficient protein_gradG(mark_protein_coeff, gradG_coeff);
+ScalarVectorProductCoefficient neg_protein_gradG(neg, protein_gradG);
+ScalarVectorProductCoefficient neg_gradG(neg, gradG_coeff);
 
 ProductCoefficient D1_prod_z1_water(D_K_prod_v_K, mark_water_coeff);
 ProductCoefficient D2_prod_z2_water(D_Cl_prod_v_Cl, mark_water_coeff);

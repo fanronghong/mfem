@@ -27,13 +27,14 @@ struct Return
     ParGridFunction* c2;
 };
 
+
 class PNP_Protein_Gummel_CG_TimeDependent: public TimeDependentOperator
 {
 private:
     ParMesh* pmesh;
     ParFiniteElementSpace* fes;
     int true_vsize;
-    Array<int>  &true_offset, &ess_bdr, &top_bdr, &bottom_bdr, &interface_bdr;
+    Array<int>  &true_offset, &ess_bdr, &top_bdr, &bottom_bdr, &interface_bdr, &Gamma_M;
     Array<int> ess_tdof_list, top_ess_tdof_list, bottom_ess_tdof_list, interface_ess_tdof_list;
 
     mutable ParBilinearForm *a0, *b1, *b2, *m1_dta1, *a1, *m2_dta2, *a2;
@@ -53,9 +54,9 @@ private:
 public:
     PNP_Protein_Gummel_CG_TimeDependent(ParFiniteElementSpace* fes_, double time, ParGridFunction* phi1_gf_, ParGridFunction* phi2_gf_,
                                         int truevsize, Array<int>& trueoffset, Array<int>& ess_bdr_, Array<int>& top_bdr_,
-                                        Array<int>& bottom_bdr_, Array<int>& interface_bdr_)
-        : TimeDependentOperator(truevsize*3, time), fes(fes_), phi1_gf(phi1_gf_), phi2_gf(phi2_gf_),
-        true_vsize(truevsize), true_offset(trueoffset), ess_bdr(ess_bdr_), top_bdr(top_bdr_), bottom_bdr(bottom_bdr_), interface_bdr(interface_bdr_),
+                                        Array<int>& bottom_bdr_, Array<int>& interface_bdr_, Array<int>& Gamma_m)
+        : TimeDependentOperator(truevsize*3, time), fes(fes_), phi1_gf(phi1_gf_), phi2_gf(phi2_gf_), true_vsize(truevsize),
+        true_offset(trueoffset), ess_bdr(ess_bdr_), top_bdr(top_bdr_), bottom_bdr(bottom_bdr_), interface_bdr(interface_bdr_), Gamma_M(Gamma_m),
         a0(NULL), b1(NULL), b2(NULL), m1_dta1(NULL), m2_dta2(NULL), a1(NULL), a2(NULL)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
@@ -64,10 +65,11 @@ public:
         pmesh = fes->GetParMesh();
 
         Solve_Phi1();
-        Solve_Phi2();
-
         grad_phi1 = new GradientGridFunctionCoefficient(phi1_gf);
+
+        Solve_Phi2();
         grad_phi2 = new GradientGridFunctionCoefficient(phi2_gf);
+
         grad_phi1_plus_grad_phi2 = new VectorSumCoefficient(*grad_phi1, *grad_phi2);
 
         A0      = new HypreParMatrix;
@@ -86,7 +88,6 @@ public:
         fes->GetEssentialTrueDofs(top_bdr, top_ess_tdof_list);
         fes->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
         fes->GetEssentialTrueDofs(interface_bdr, interface_ess_tdof_list);
-
     }
     ~PNP_Protein_Gummel_CG_TimeDependent()
     {
@@ -108,7 +109,10 @@ public:
     // 1.求解奇异电荷部分的电势
     void Solve_Phi1()
     {
-        phi1_gf->ProjectCoefficient(G_coeff); // phi1求解完成, 直接算比较慢, 也可以从文件读取
+        // phi1 只定义在 \Omega_m
+        *phi1_gf = 0.0;
+        phi1_gf->ProjectCoefficient(protein_G); // phi1求解完成, 直接算比较慢, 也可以从文件读取
+//        phi1_gf->ProjectCoefficient(G_coeff); // 与上面在蛋白里面作投影有微小区别
 
         double norm = phi1_gf->ComputeL2Error(zero);
         if (rank == 0) {
@@ -147,41 +151,33 @@ public:
     {
         // 为了简单, 我们只使用H1空间来计算phi2
 
-        H1_FECollection* fec = new H1_FECollection(p_order, pmesh->Dimension());
-        ParFiniteElementSpace* fes = new ParFiniteElementSpace(pmesh, fec);
+        H1_FECollection* h1_fec = new H1_FECollection(p_order, pmesh->Dimension());
+        ParFiniteElementSpace* h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
 
-        Array<int> interface_bdr, interface_ess_tdof_list, Gamma_m;
-        {
-            int size = pmesh->bdr_attributes.Max();
-
-            Gamma_m.SetSize(size);
-            Gamma_m                     = 0;
-            Gamma_m[Gamma_m_marker - 1] = 1;
-
-            interface_bdr.SetSize(size);
-            interface_bdr                       = 0;
-            interface_bdr[interface_marker - 1] = 1;
-            fes->GetEssentialTrueDofs(interface_bdr, interface_ess_tdof_list);
-        }
-
-        ParBilinearForm blf(fes);
+        ParBilinearForm blf(h1_fes);
         // (grad(phi2), grad(psi2))_{\Omega_m}, \Omega_m: protein domain
         blf.AddDomainIntegrator(new DiffusionIntegrator(mark_protein_coeff));
         blf.Assemble(0);
         blf.Finalize(0);
 
-        ParLinearForm lf(fes);
+        ParLinearForm lf(h1_fes);
         // -<grad(G).n, psi2>_{\Gamma_M}, G is phi1
-        lf.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_gradG_coeff), Gamma_m);
+        lf.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_gradG), Gamma_M);
         lf.Assemble();
-
-        phi2_gf->ProjectCoefficient(G_coeff);
-        phi2_gf->Neg(); // 在interface(\Gamma)上是Dirichlet边界: -phi1
 
         HypreParMatrix* A = new HypreParMatrix;
         Vector *x = new Vector;
         Vector *b = new Vector;
-        blf.FormLinearSystem(interface_ess_tdof_list, *phi2_gf, lf, *A, *x, *b);
+
+        Array<int> interface_tdof_list_h1;
+        h1_fes->GetEssentialTrueDofs(interface_bdr, interface_tdof_list_h1);
+
+        phi2_gf->ProjectCoefficient(neg_protein_G); // phi2 只定义在 \Omega_m, 在interface(\Gamma)上是Dirichlet边界: -phi1
+//        phi2_gf->ProjectCoefficient(neg_G); // 上面一种方式应该更准确
+//        phi2_gf->ProjectCoefficient(G_coeff);
+//        phi2_gf->Neg();
+
+        blf.FormLinearSystem(interface_tdof_list_h1, *phi2_gf, lf, *A, *x, *b);
         A->EliminateZeroRows(); // 设定所有的0行的主对角元为1
 
         PetscLinearSolver* solver = new PetscLinearSolver(*A, false, "phi2_");
@@ -194,7 +190,7 @@ public:
         double norm = phi2_gf->ComputeL2Error(zero);
         if (rank == 0)
         {
-            cout << "L2 norm of phi2: " << norm << endl;
+            cout << "2 L2 norm of phi2: " << norm << endl;
         }
 
         if (verbose >= 2) {
@@ -217,8 +213,8 @@ public:
         }
 
         delete solver;
-        delete fec;
-        delete fes;
+        delete h1_fec;
+        delete h1_fes;
         delete A;
         delete x;
         delete b;
@@ -276,18 +272,20 @@ public:
             // **************************************************************************************
             ParLinearForm *l0 = new ParLinearForm(fes);
             // b0: - epsilon_m <grad(phi1 + phi2).n, psi3>_{\Gamma}
-            l0->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator1(&neg_epsilon_protein, grad_phi1_plus_grad_phi2, pmesh, protein_marker, water_marker));
+            phi1_gf->ExchangeFaceNbrData();
+            phi2_gf->ExchangeFaceNbrData();
+            l0->AddInteriorFaceIntegrator(new ProteinWaterInterfaceIntegrator1(&neg_epsilon_protein, grad_phi1_plus_grad_phi2, pmesh, protein_marker, water_marker)); // fff
             // omit 0 Neumann bdc on \Gamma_N and \Gamma_M
             l0->Assemble();
 
-            buildb1();
-            buildb2();
+            this->buildb1();
+            this->buildb2();
             b1->AddMult(old_c1, *l0, 1.0);    // l0 = l0 + b1 c1
             b2->AddMult(old_c2, *l0, 1.0);    // l0 = l0 + b1 c1 + b2 c2
             b1->AddMult(dc1dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt
             b2->AddMult(dc2dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
 
-            builda0();
+            this->builda0();
             phi3_Gummel.ProjectBdrCoefficient(phi_D_top_coeff, top_bdr); // 设定解的边界条件
             phi3_Gummel.ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
             a0->FormLinearSystem(ess_tdof_list, phi3_Gummel, *l0, *A0, *temp_x0, *temp_b0);
@@ -331,13 +329,13 @@ public:
             ParLinearForm *l1 = new ParLinearForm(fes);
             *l1 = 0.0;
 
-            builda1(phi3_Gummel);
+            this->builda1(phi3_Gummel);
             a1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1
 
-            buildm1_dta1(dt, phi3_Gummel);
-//            dc1dt_Gummel.ProjectBdrCoefficient(zero, ess_bdr); // 边界条件为0
+            this->buildm1_dta1(dt, phi3_Gummel);
+//            dc1dt_Gummel.ProjectBdrCoefficient(zero, ess_bdr); // essential 边界条件为0
             m1_dta1->FormLinearSystem(ess_tdof_list, dc1dt_Gummel, *l1, *M1_dtA1, *temp_x1, *temp_b1);
-            M1_dtA1->EliminateZeroRows(); // 把0行的主对角元素设为1
+            M1_dtA1->EliminateZeroRows(); // 把0行的主对角元素设为1(在蛋白区域里面的自由度为0)
 
             PetscLinearSolver* np1_solver = new PetscLinearSolver(*M1_dtA1, false, "np1_");
             np1_solver->Mult(*temp_b1, *temp_x1);
@@ -366,13 +364,13 @@ public:
             ParLinearForm *l2 = new ParLinearForm(fes);
             *l2 = 0.0;
 
-            builda2(phi3_Gummel);
+            this->builda2(phi3_Gummel);
             a2->AddMult(old_c2, *l2, -1.0); // l2 = l2 - a2 c2
 
-            buildm2_dta2(dt, phi3_Gummel);
-//            dc2dt_Gummel.ProjectBdrCoefficient(zero, ess_bdr); // 边界条件为0
+            this->buildm2_dta2(dt, phi3_Gummel);
+//            dc2dt_Gummel.ProjectBdrCoefficient(zero, ess_bdr); // essential 边界条件为0
             m2_dta2->FormLinearSystem(ess_tdof_list, dc2dt_Gummel, *l2, *M2_dtA2, *temp_x2, *temp_b2);
-            M2_dtA2->EliminateZeroRows(); // 把0行的主对角元素设为1
+            M2_dtA2->EliminateZeroRows(); // 把0行的主对角元素设为1(在蛋白区域里面的自由度为0)
 
             PetscLinearSolver* np2_solver = new PetscLinearSolver(*M2_dtA2, false, "np2_");
             np2_solver->Mult(*temp_b2, *temp_x2);
@@ -450,6 +448,7 @@ private:
     {
         if (m1_dta1 != NULL) { delete m1_dta1; }
 
+        phi3.ExchangeFaceNbrData();
         ProductCoefficient dt_D1(dt, D1_water);
         ProductCoefficient dt_D1_z1(dt_D1, v_K_coeff);
 
@@ -470,6 +469,8 @@ private:
     {
         if (a1 != NULL) { delete a1; }
 
+        phi3.ExchangeFaceNbrData();
+
         a1 = new ParBilinearForm(fes);
 
         // D1 (grad(c1), grad(v1))_{\Omega_s}
@@ -485,6 +486,7 @@ private:
     {
         if (m2_dta2 != NULL) { delete m2_dta2; }
 
+        phi3.ExchangeFaceNbrData();
         ProductCoefficient dt_D2(dt, D2_water);
         ProductCoefficient dt_D2_z2(dt_D2, v_Cl_coeff);
 
@@ -504,6 +506,8 @@ private:
     void builda2(ParGridFunction& phi3) const
     {
         if (a2 != NULL) { delete a2; }
+
+        phi3.ExchangeFaceNbrData();
 
         a2 = new ParBilinearForm(fes);
 
@@ -616,7 +620,7 @@ public:
         {
             if (strcmp(Discretize, "cg") == 0)
             {
-                oper = new PNP_Protein_Gummel_CG_TimeDependent(fes, t, phi1_gf, phi2_gf, true_vsize, true_offset, ess_bdr, top_bdr, bottom_bdr, interface_bdr);
+                oper = new PNP_Protein_Gummel_CG_TimeDependent(fes, t, phi1_gf, phi2_gf, true_vsize, true_offset, ess_bdr, top_bdr, bottom_bdr, interface_bdr, Gamma_m);
             }
         }
 
@@ -656,9 +660,23 @@ public:
             pd->RegisterField("c1",   c1_gf);
             pd->RegisterField("c2",   c2_gf);
 
+            (*phi3_gf) /= alpha1; // 进行单位变换之后在保存解
+            (*c1_gf)  /= alpha3;
+            (*c2_gf)  /= alpha3;
+            phi3_gf->SetTrueVector();
+            c1_gf->SetTrueVector();
+            c2_gf->SetTrueVector();
+
             pd->SetCycle(0); // 第 0 个时间步
             pd->SetTime(t); // 第 0 个时间步所表示的时间
             pd->Save();
+
+            (*phi3_gf) *= (alpha1); // 逆单位变换进行计算
+            (*c1_gf)  *= (alpha3);
+            (*c2_gf)  *= (alpha3);
+            phi3_gf->SetTrueVector();
+            c1_gf->SetTrueVector();
+            c2_gf->SetTrueVector();
         }
     }
     ~PNP_Protein_TimeDependent_Solver()
@@ -718,9 +736,23 @@ public:
 
             if (paraview)
             {
+                (*phi3_gf) /= alpha1; // 进行单位变换之后在保存解
+                (*c1_gf)  /= alpha3;
+                (*c2_gf)  /= alpha3;
+                phi3_gf->SetTrueVector();
+                c1_gf->SetTrueVector();
+                c2_gf->SetTrueVector();
+
                 pd->SetCycle(ti); // 第 i 个时间步. 注: ti为0的解就是初始时刻的解, 在构造函数中已经保存
                 pd->SetTime(t); // 第 i 个时间步所表示的时间
                 pd->Save();
+
+                (*phi3_gf) *= (alpha1); // 逆单位变换进行计算
+                (*c1_gf)  *= (alpha3);
+                (*c2_gf)  *= (alpha3);
+                phi3_gf->SetTrueVector();
+                c1_gf->SetTrueVector();
+                c2_gf->SetTrueVector();
             }
             if (verbose >= 1)
             {
@@ -729,6 +761,7 @@ public:
                 double  c2L2norm = c2_gf->ComputeL2Error(zero);
                 if (rank == 0)
                 {
+                    cout.precision(14);
                     cout << "Time: " << t << '\n'
                          << "phi L2 norm: " << phiL2norm << '\n'
                          << " c1 L2 norm: " <<  c1L2norm << '\n'

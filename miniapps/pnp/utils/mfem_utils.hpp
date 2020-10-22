@@ -441,7 +441,7 @@ public:
         else if (T.Attribute == water_marker) // 溶液区域
             return 0.0;
         else
-            throw "Something wrong with mesh markers!";
+            MFEM_ABORT("Something wrong with mesh markers!");
     }
 };
 class MarkWaterCoefficient : public Coefficient

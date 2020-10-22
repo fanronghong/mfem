@@ -1,7 +1,7 @@
 # ---------------------------------> phi2 equation Params
--phi2_ksp_type gmres
--phi2_pc_type lu
--phi2_pc_factor_mat_solver_type mumps
+-phi2_ksp_type cg
+-phi2_pc_type lu -phi2_pc_factor_mat_solver_type mumps
+#-phi2_pc_type gamg -phi3_pc_gamg_type classical -phi3_pc_gamg_agg_nsmooths 1
 -phi2_ksp_max_it 1000
 -phi2_ksp_rtol 1e-8
 -phi2_ksp_atol 1e-10
@@ -14,10 +14,9 @@
 
 
 # ----------------------------------> Gummel Params
--phi3_ksp_type gmres
--phi3_pc_type lu
--phi3_pc_factor_mat_solver_type mumps
-#-phi3_pc_type gamg -phi3_pc_gamg_type classical -phi3_pc_gamg_agg_nsmooths 1
+-phi3_ksp_type cg
+#-phi3_pc_type lu -phi3_pc_factor_mat_solver_type mumps
+-phi3_pc_type gamg -phi3_pc_gamg_type classical -phi3_pc_gamg_agg_nsmooths 1
 -phi3_ksp_max_it 1000
 -phi3_ksp_rtol 1e-10
 -phi3_ksp_atol 1e-20
@@ -29,8 +28,7 @@
 #-phi3_ksp_view
 
 -np1_ksp_type gmres
--np1_pc_type lu
--np1_pc_factor_mat_solver_type mumps
+-np1_pc_type lu -np1_pc_factor_mat_solver_type mumps
 #-np1_pc_type gamg -np1_pc_gamg_type classical -np1_pc_gamg_agg_nsmooths 1
 -np1_ksp_max_it 1000
 -np1_ksp_rtol 1e-8
@@ -43,8 +41,7 @@
 #-np1_ksp_view
 
 -np2_ksp_type gmres
--np2_pc_type lu
--np2_pc_factor_mat_solver_type mumps
+-np2_pc_type lu -np2_pc_factor_mat_solver_type mumps
 #-np2_pc_type gamg -np2_pc_gamg_type classical -np2_pc_gamg_agg_nsmooths 1
 -np2_ksp_max_it 1000
 -np2_ksp_rtol 1e-8
