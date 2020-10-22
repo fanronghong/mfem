@@ -48,6 +48,10 @@ int main(int argc, char *argv[])
         MPI_Finalize();
         return 1;
     }
+    if (rank == 0)
+    {
+        args.PrintOptions(cout);
+    }
 
     MFEMInitializePetsc(NULL, NULL, options_src, NULL);
 
