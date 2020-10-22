@@ -31,10 +31,9 @@ bool SpaceConvergRate           = false; // 利用解析解计算误差阶
 bool SpaceConvergRate_Change_dt = false; // 为了计算误差: error = c1 dt + c2 h^2, 是否把dt设置为h^2的倍数?
 double Change_dt_factor         = 1.0; // dt = factor * h^2
 int ode_type            = 1; // 1: backward Euler; 11: forward Euler
-const int alpha_time    = 10E+6; // 1s = 10E6 us = 10E12 ps, 时间尺度变换
-double t_init           = alpha_time * 0.0; // 初始时间
-double t_final          = alpha_time * 0.001; // 最后时间
-double t_stepsize       = alpha_time * 0.0001; // 时间步长
+double t_init           = 10E+6 * 0.0; // 初始时间, 单位 µs
+double t_final          = 10E+6 * 0.01; // 最后时间
+double t_stepsize       = 10E+6 * 0.001; // 时间步长
 bool paraview            = false;
 bool skip_zero_entries = false;
 int verbose            = 1;
@@ -86,12 +85,12 @@ const int top_marker       = 8;
 const int bottom_marker    = 7;
 const int Gamma_m_marker   = 5;
 
-double phi_top     = 2.0 * alpha1; // 国际单位V, 电势在计算区域的 上边界是 Dirichlet, 乘以alpha1进行无量纲化
-double phi_bottom  = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 下边界是 Dirichlet
-double c1_top      = 3.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 上边界是 Dirichlet,乘以alpha2是把mol/L换成Angstrom,单位统一
-double c1_bottom   = 1.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 下边界是 Dirichlet
-double c2_top      = 3.0 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
-double c2_bottom   = 1.0 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
+double phi_top     = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 上边界是 Dirichlet, 乘以alpha1进行无量纲化
+double phi_bottom  = -0.005 * alpha1; // 国际单位V, 电势在计算区域的 下边界是 Dirichlet
+double c1_top      = 2.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 上边界是 Dirichlet,乘以alpha2是把mol/L换成Angstrom,单位统一
+double c1_bottom   = 0.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 下边界是 Dirichlet
+double c2_top      = 2.0 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
+double c2_bottom   = 0.0 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
 
 ConstantCoefficient phi_D_top_coeff(phi_top);
 ConstantCoefficient phi_D_bottom_coeff(phi_bottom);
