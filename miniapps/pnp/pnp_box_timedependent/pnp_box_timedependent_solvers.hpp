@@ -619,17 +619,46 @@ public:
             builda1(phi_Gummel);
             builde1(phi_Gummel);
             a1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1
-            e1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1 - e1 c1
+//            e1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1 - e1 c1. error(下同): https://github.com/mfem/mfem/issues/1830
+            {
+                auto *e1_tdof = e1->ParallelAssemble();
+                auto *l1_tdof = l1->ParallelAssemble();
+                auto *Restriction = e1->GetRestriction(); // ref: https://mfem.org/pri-dual-vec/
+
+                e1_tdof->Mult(-1.0, old_c1.GetTrueVector(), 1.0, *l1_tdof);
+                Restriction->MultTranspose(*l1_tdof, *l1);
+
+                delete e1_tdof;
+                delete l1_tdof;
+            }
 
             if (abs(sigma - 0.0) > 1E-10) // 添加对称项
             {
                 builds1(phi_Gummel);
-                s1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1
+//                s1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1
+                auto* s1_tdof = s1->ParallelAssemble();
+                auto* l1_tdof = l1->ParallelAssemble();
+                auto* Restriction = s1->GetRestriction();
+
+                s1_tdof->Mult(1.0, old_c1.GetTrueVector(), 1.0, *l1_tdof);
+                Restriction->MultTranspose(*l1_tdof, *l1);
+
+                delete s1_tdof;
+                delete l1_tdof;
             }
             if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
             {
                 buildp1();
-                p1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1 + p1 c1
+//                p1->AddMult(old_c1, *l1, 1.0);  // l1 = l1 - a1 c1 - e1 c1 + s1 c1 + p1 c1
+                auto* p1_tdof = p1->ParallelAssemble();
+                auto* l1_tdof = l1->ParallelAssemble();
+                auto* Restriction = p1->GetRestriction();
+
+                p1_tdof->Mult(1.0, old_c1.GetTrueVector(), 1.0, *l1_tdof);
+                Restriction->MultTranspose(*l1_tdof, *l1);
+
+                delete p1_tdof;
+                delete l1_tdof;
             }
 
             buildm1_dta1_dte1_dts1_dtp1(dt, phi_Gummel);
@@ -666,16 +695,46 @@ public:
             builda2(phi_Gummel);
             builde2(phi_Gummel);
             a2->AddMult(old_c2, *l2, -1.0); // l2 = l2 - a2 c2
-            e2->AddMult(old_c2, *l2, -1.0); // l2 = l2 - a2 c2 - e2 c2
+//            e2->AddMult(old_c2, *l2, -1.0); // l2 = l2 - a2 c2 - e2 c2
+            {
+                auto *e2_tdof = e2->ParallelAssemble();
+                auto *l2_tdof = l2->ParallelAssemble();
+                auto *Restriction = e2->GetRestriction(); // ref: https://mfem.org/pri-dual-vec/
+
+                e2_tdof->Mult(-1.0, old_c2.GetTrueVector(), 1.0, *l2_tdof);
+                Restriction->MultTranspose(*l2_tdof, *l2);
+
+                delete e2_tdof;
+                delete l2_tdof;
+            }
+
             if (abs(sigma - 0.0) > 1E-10) // 添加对称项
             {
                 builds2(phi_Gummel);
-                s2->AddMult(old_c2, *l2, 1.0);  // l2 = l2 - a2 c2 - e2 c2 + s2 c2
+//                s2->AddMult(old_c2, *l2, 1.0);  // l2 = l2 - a2 c2 - e2 c2 + s2 c2
+                auto* s2_tdof = s2->ParallelAssemble();
+                auto* l2_tdof = l2->ParallelAssemble();
+                auto* Restriction = s2->GetRestriction();
+
+                s2_tdof->Mult(1.0, old_c2.GetTrueVector(), 1.0, *l2_tdof);
+                Restriction->MultTranspose(*l2_tdof, *l2);
+
+                delete s2_tdof;
+                delete l2_tdof;
             }
             if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
             {
                 buildp2();
-                p2->AddMult(old_c2, *l2, 1.0);  // l2 = l2 - a2 c2 - e2 c2 + s2 c2 + p2 c2
+//                p2->AddMult(old_c2, *l2, 1.0);  // l2 = l2 - a2 c2 - e2 c2 + s2 c2 + p2 c2
+                auto* p2_tdof = p2->ParallelAssemble();
+                auto* l2_tdof = l2->ParallelAssemble();
+                auto* Restriction = p2->GetRestriction();
+
+                p2_tdof->Mult(1.0, old_c2.GetTrueVector(), 1.0, *l2_tdof);
+                Restriction->MultTranspose(*l2_tdof, *l2);
+
+                delete p2_tdof;
+                delete l2_tdof;
             }
 
             buildm2_dta2_dte2_dts2_dtp2(dt, phi_Gummel);
@@ -769,6 +828,7 @@ private:
         e1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_K_v_K, phi), ess_bdr);
 
         e1->Assemble(skip_zero_entries);
+        e1->Finalize(skip_zero_entries);
     }
 
     // -<{D2 (grad(c2) + z2 c2 grad(phi))}, [v2]>, given phi
@@ -787,6 +847,7 @@ private:
         e2->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_Cl_v_Cl, phi), ess_bdr);
 
         e2->Assemble(skip_zero_entries);
+        e2->Finalize(skip_zero_entries);
     }
 
     // - sigma <[c1], {D1 (grad(v1) + z1 v1 grad(phi))}>, given phi
@@ -811,6 +872,7 @@ private:
         }
 
         s1->Assemble(skip_zero_entries);
+        s1->Finalize(skip_zero_entries);
     }
 
     // -sigma <[c2], {D2 (grad(v2) + z2 v2 grad(phi))}>, given phi
@@ -835,6 +897,7 @@ private:
         }
 
         s2->Assemble(skip_zero_entries);
+        s2->Finalize(skip_zero_entries);
     }
 
     // -kappa <{h^{-1}} [c1], [v1]>
@@ -851,6 +914,7 @@ private:
         }
 
         p1->Assemble(skip_zero_entries);
+        p1->Finalize(skip_zero_entries);
     }
 
     // -kappa <{h^{-1}} [c2], [v2]>
@@ -867,6 +931,7 @@ private:
         }
 
         p2->Assemble(skip_zero_entries);
+        p2->Finalize(skip_zero_entries);
     }
 
     void builda0_e0_s0_p0() const

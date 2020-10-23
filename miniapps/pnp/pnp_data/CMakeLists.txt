@@ -22,3 +22,22 @@ configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_data/gummel_dg_lu
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_data/gummel_dg_lu
                COPYONLY)
 
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_data/gummel_amg
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_data/gummel_amg
+               COPYONLY)
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_data/gummel_ilu
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_data/gummel_ilu
+               COPYONLY)
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_data/newton_amg
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_data/newton_amg
+               COPYONLY)
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_data/newton_ilu
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_data/newton_ilu
+               COPYONLY)
+
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_data/newton_lu
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_data/newton_lu
+               COPYONLY)
