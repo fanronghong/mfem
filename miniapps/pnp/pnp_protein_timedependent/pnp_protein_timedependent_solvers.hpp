@@ -193,7 +193,7 @@ public:
             cout << "2 L2 norm of phi2: " << norm << endl;
         }
 
-        if (verbose >= 2) {
+        if (verbose >= 2 && rank == 0) {
             if (solver->GetConverged() == 1 && rank == 0)
                 cout << "phi2 solver: successfully converged by iterating " << solver->GetNumIterations()
                      << " times, taking " << chrono.RealTime() << " s." << endl;
@@ -296,16 +296,6 @@ public:
             delete l0;
             delete poisson_solver;
 
-            if (0)
-            {
-                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
-                dc->RegisterField("phi3_Gummel", &phi3_Gummel);
-
-                Visualize(*dc, "phi3_Gummel", "phi3_Gummel_DG");
-
-                delete dc;
-            }
-
 
             // **************************************************************************************
             //                                2. 计算Gummel迭代相对误差
@@ -343,20 +333,6 @@ public:
             delete l1;
             delete np1_solver;
 
-            if (0)
-            {
-                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
-                ParGridFunction c1_Gummel(fes);
-                c1_Gummel = old_c1;
-                c1_Gummel.Add(dt, dc1dt_Gummel);
-
-                dc->RegisterField("c1_Gummel", &c1_Gummel);
-
-                Visualize(*dc, "c1_Gummel", "c1_Gummel");
-
-                delete dc;
-            }
-
 
             // **************************************************************************************
             //                                4. 求解 NP2
@@ -377,20 +353,6 @@ public:
             m2_dta2->RecoverFEMSolution(*temp_x2, *l2, dc2dt_Gummel); // 更新 dc2dt
             delete l2;
             delete np2_solver;
-
-            if (0)
-            {
-                VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
-                ParGridFunction c2_Gummel(fes);
-                c2_Gummel = old_c1;
-                c2_Gummel.Add(dt, dc1dt_Gummel);
-
-                dc->RegisterField("c2_Gummel", &c2_Gummel);
-
-                Visualize(*dc, "c2_Gummel", "c2_Gummel");
-
-                delete dc;
-            }
         }
 
         // 用最终Gummel迭代的解更新要求解的3个未知量

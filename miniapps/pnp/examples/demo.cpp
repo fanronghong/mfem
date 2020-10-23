@@ -151,12 +151,16 @@ int main(int argc, char **argv)
     u->ExchangeFaceNbrData();
     blf->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator1(*u));
     blf->Assemble(0);
+    blf->Finalize(0);
 
     auto* lf = new ParLinearForm(fes);
     *lf = 2.0;
 
     auto* gf = new ParGridFunction(fes);
     *gf = 3.0;
+
+//    auto *A = blf->ParallelAssemble();
+//    A->Mult(1.0, *gf, 1.0, *lf); // Mult(a, x, b, y) performs: a*A*x + b*y -> y
 
     blf->AddMult(*gf, *lf);
 
