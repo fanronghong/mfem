@@ -6,6 +6,10 @@ add_mfem_miniapp(example
         MAIN example.cpp
         LIBRARIES mfem)
 
+add_mfem_miniapp(Mult_TrueMult
+        MAIN Mult_TrueMult.cpp
+        LIBRARIES mfem)
+
 add_mfem_miniapp(demo
         MAIN demo.cpp
         LIBRARIES mfem)
