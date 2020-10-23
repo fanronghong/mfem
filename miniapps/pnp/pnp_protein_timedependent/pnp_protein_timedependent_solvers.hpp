@@ -64,12 +64,8 @@ public:
 
         pmesh = fes->GetParMesh();
 
-        Solve_Phi1();
         grad_phi1 = new GradientGridFunctionCoefficient(phi1_gf);
-
-        Solve_Phi2();
         grad_phi2 = new GradientGridFunctionCoefficient(phi2_gf);
-
         grad_phi1_plus_grad_phi2 = new VectorSumCoefficient(*grad_phi1, *grad_phi2);
 
         A0      = new HypreParMatrix;
@@ -104,120 +100,6 @@ public:
         delete temp_x1; delete temp_b1;
         delete temp_x2; delete temp_b2;
 
-    }
-
-    // 1.求解奇异电荷部分的电势
-    void Solve_Phi1()
-    {
-        // phi1 只定义在 \Omega_m
-        *phi1_gf = 0.0;
-        phi1_gf->ProjectCoefficient(protein_G); // phi1求解完成, 直接算比较慢, 也可以从文件读取
-//        phi1_gf->ProjectCoefficient(G_coeff); // 与上面在蛋白里面作投影有微小区别
-
-        double norm = phi1_gf->ComputeL2Error(zero);
-        if (rank == 0) {
-            cout << "L2 norm of phi1: " << norm << endl;
-        }
-
-        if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
-        {
-            /* Only need a pqr file, we can compute singular electrostatic potential phi1, no need for mesh file.
-             * Here for pqr file "../data/1MAG.pqr", we do a simple test for phi1. Data is provided by Zhang Qianru.
-             */
-            Vector zero_(3);
-            zero_ = 0.0;
-            VectorConstantCoefficient zero_vec(zero_);
-
-            double L2norm = phi1_gf->ComputeL2Error(zero);
-            assert(abs(L2norm - 2.1067E+03) < 10); //数据由张倩如提供
-            cout << "======> Test Pass: L2 norm of phi1 (no units)" << endl;
-
-            H1_FECollection*  temp_fec = new H1_FECollection(1, pmesh->Dimension());
-            ParFiniteElementSpace* temp_fes = new ParFiniteElementSpace(pmesh, temp_fec, 3);
-
-            GridFunction grad_phi1(temp_fes);
-            grad_phi1.ProjectCoefficient(gradG_coeff);
-
-            double L2norm_ = grad_phi1.ComputeL2Error(zero_vec);
-            assert(abs(L2norm_ - 9.2879E+03) < 10); //数据由张倩如提供
-            cout << "======> Test Pass: L2 norm of grad(phi1) (no units)" << endl;
-            delete temp_fec;
-            delete temp_fes;
-        }
-    }
-
-    // 2.求解调和方程部分的电势
-    void Solve_Phi2()
-    {
-        // 为了简单, 我们只使用H1空间来计算phi2
-
-        H1_FECollection* h1_fec = new H1_FECollection(p_order, pmesh->Dimension());
-        ParFiniteElementSpace* h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
-
-        ParBilinearForm blf(h1_fes);
-        // (grad(phi2), grad(psi2))_{\Omega_m}, \Omega_m: protein domain
-        blf.AddDomainIntegrator(new DiffusionIntegrator(mark_protein_coeff));
-        blf.Assemble(0);
-        blf.Finalize(0);
-
-        ParLinearForm lf(h1_fes);
-        // -<grad(G).n, psi2>_{\Gamma_M}, G is phi1
-        lf.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_gradG), Gamma_M);
-        lf.Assemble();
-
-        HypreParMatrix* A = new HypreParMatrix;
-        Vector *x = new Vector;
-        Vector *b = new Vector;
-
-        Array<int> interface_tdof_list_h1;
-        h1_fes->GetEssentialTrueDofs(interface_bdr, interface_tdof_list_h1);
-
-        phi2_gf->ProjectCoefficient(neg_protein_G); // phi2 只定义在 \Omega_m, 在interface(\Gamma)上是Dirichlet边界: -phi1
-//        phi2_gf->ProjectCoefficient(neg_G); // 上面一种方式应该更准确
-//        phi2_gf->ProjectCoefficient(G_coeff);
-//        phi2_gf->Neg();
-
-        blf.FormLinearSystem(interface_tdof_list_h1, *phi2_gf, lf, *A, *x, *b);
-        A->EliminateZeroRows(); // 设定所有的0行的主对角元为1
-
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, false, "phi2_");
-        chrono.Clear();
-        chrono.Start();
-        solver->Mult(*b, *x);
-        chrono.Stop();
-        blf.RecoverFEMSolution(*x, lf, *phi2_gf);
-
-        double norm = phi2_gf->ComputeL2Error(zero);
-        if (rank == 0)
-        {
-            cout << "2 L2 norm of phi2: " << norm << endl;
-        }
-
-        if (verbose >= 2 && rank == 0) {
-            if (solver->GetConverged() == 1 && rank == 0)
-                cout << "phi2 solver: successfully converged by iterating " << solver->GetNumIterations()
-                     << " times, taking " << chrono.RealTime() << " s." << endl;
-            else if (solver->GetConverged() != 1)
-                cerr << "phi2 solver: failed to converged" << endl;
-        }
-
-        if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
-        {
-            /* Only for pqr file "1MAG.pqr" and mesh file "1MAG_2.msh", we do below tests.
-                Only need pqr file (to compute singluar electrostatic potential phi1)
-                and mesh file, we can compute phi2.
-                Data is provided by Zhang Qianru */
-            double L2norm = phi2_gf->ComputeL2Error(zero);
-            assert(abs(L2norm - 7.2139E+02) < 1); //数据由张倩如提供
-            cout << "======> Test Pass: L2 norm of phi2 (no units)" << endl;
-        }
-
-        delete solver;
-        delete h1_fec;
-        delete h1_fes;
-        delete A;
-        delete x;
-        delete b;
     }
 
     virtual void ImplicitSolve(const double dt, const Vector &phi3c1c2, Vector &dphi3c1c2_dt)
@@ -476,22 +358,23 @@ private:
     HypreParMatrix *A0, *B1, *B2, *M1_dtA1, *M2_dtA2, *G1, *G2, *H1, *H2, *H1_dtH1, *H2_dtH2;
     ParGridFunction *phi3, *dc1dt, *dc2dt;
 
+    mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
+    mutable BlockOperator *jac_k; // Jacobian at current solution
     ParGridFunction *c1, *c2, *phi1_gf, *phi2_gf;
     VectorCoefficient *grad_phi1, *grad_phi2, *grad_phi1_plus_grad_phi2; // grad(phi1 + phi2)
 
     double t, dt;
     int true_vsize;
     Array<int> &true_offset, &ess_tdof_list, null_array;
-    mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
-    mutable BlockOperator *jac_k; // Jacobian at current solution
 
     int num_procs, rank;
 
 public:
-    PNP_Protein_Newton_CG_Operator(ParFiniteElementSpace* fes_, int truevsize, Array<int>& offset, Array<int>& ess_tdof_list_)
-    : Operator(3*truevsize), fes(fes_), true_vsize(truevsize), true_offset(offset), ess_tdof_list(ess_tdof_list_),
-            a0(NULL), b1(NULL), b2(NULL), m1_dta1(NULL), m2_dta2(NULL),
-    g1_(NULL), g2_(NULL), h1(NULL), h2(NULL), h1_dth1(NULL), h2_dth2(NULL)
+    PNP_Protein_Newton_CG_Operator(ParFiniteElementSpace* fes_, int truevsize, Array<int>& offset, Array<int>& ess_tdof_list_,
+                                   ParGridFunction* phi1, ParGridFunction* phi2)
+    : Operator(3*truevsize), fes(fes_), true_vsize(truevsize), true_offset(offset), ess_tdof_list(ess_tdof_list_), phi1_gf(phi1), phi2_gf(phi2),
+      a0(NULL), b1(NULL), b2(NULL), m1_dta1(NULL), m2_dta2(NULL),
+      g1_(NULL), g2_(NULL), h1(NULL), h2(NULL), h1_dth1(NULL), h2_dth2(NULL)
     {
         MPI_Comm_size(fes->GetComm(), &num_procs);
         MPI_Comm_rank(fes->GetComm(), &rank);
@@ -500,6 +383,7 @@ public:
 
         grad_phi1 = new GradientGridFunctionCoefficient(phi1_gf);
         grad_phi2 = new GradientGridFunctionCoefficient(phi2_gf);
+        grad_phi1_plus_grad_phi2 = new VectorSumCoefficient(*grad_phi1, *grad_phi2);
 
         phi3  = new ParGridFunction;
         dc1dt = new ParGridFunction;
@@ -566,13 +450,40 @@ public:
         dc1dt->SetFromTrueVector();
         dc2dt->SetFromTrueVector();
 
-//        if (hahahaha) {
-//            cout << "l2 norm of   phi: " <<   phi->Norml2() << endl;
-//            cout << "l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
-//            cout << "l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
-//            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
-//            cout << "l2 norm of residual: " << residual.Norml2() << '\n' << endl;
-//        }
+        if (0) {
+            if (rank == 0) {
+                cout << "In Newton::Mult(), l2 norm of   phi: " << phi3->Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << '\n' << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "In Newton::Mult(), l2 norm of   phi: " << phi3->Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << '\n' << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 2) {
+                cout << "In Newton::Mult(), l2 norm of   phi: " << phi3->Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << '\n' << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 3) {
+                cout << "In Newton::Mult(), l2 norm of   phi: " << phi3->Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << '\n' << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
 
         rhs_k->Update(residual.GetData(), true_offset); // update residual
 
@@ -610,7 +521,7 @@ public:
 
         buildg1_();
         buildh1(c1);
-        buildm1_dta1(dt, *phi3);
+        buildm1_dta1(*phi3);
         g1_->AddMult(*c1, *l1, -1.0);        // l1 = l1 - g1 c1
         h1->AddMult(*phi3, *l1, -1.0);       // l1 = l1 - g1 c1 - h1 phi
         m1_dta1->AddMult(*dc1dt, *l1, -1.0); // l1 = l1 - g1 c1 - h1 phi - m1_dta1 dc1dt
@@ -627,19 +538,11 @@ public:
 
         buildg2_();
         buildh2(c2);
-        buildm2_dta2(dt, *phi3);
+        buildm2_dta2(*phi3);
         g2_->AddMult(*c2, *l2, -1.0);        // l2 = l2 - g2 c2
         h2->AddMult(*phi3, *l2, -1.0);       // l2 = l2 - g2 c2 - h2 phi
         m2_dta2->AddMult(*dc2dt, *l2, -1.0); // l2 = l2 - g2 c2 - h2 phi - m2_dta2 dc2dt
         l2->SetSubVector(ess_tdof_list, 0.0);
-
-//        if (hahahaha) {
-//            cout << "l2 norm of   phi: " <<   phi->Norml2() << endl;
-//            cout << "l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
-//            cout << "l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
-//            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
-//            cout << "l2 norm of residual: " << residual.Norml2() << '\n' << endl;
-//        }
     }
 
     virtual Operator &GetGradient(const Vector& phi_dc1dt_dc2dt) const
@@ -653,12 +556,6 @@ public:
         dc1dt->SetFromTrueVector();
         dc2dt->SetFromTrueVector();
 
-//        if (hahahaha) {
-//            cout << "l2 norm of   phi: " << phi->Norml2() << endl;
-//            cout << "l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
-//            cout << "l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
-//            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << '\n' << endl;
-//        }
 
         // **************************************************************************************
         //                                1. Poisson 方程的 Jacobian
@@ -681,8 +578,9 @@ public:
         buildh1_dth1(c1, dc1dt);
         h1_dth1->FormSystemMatrix(null_array, *H1_dtH1);
 
-        buildm1_dta1(dt, *phi3);
+        buildm1_dta1(*phi3);
         m1_dta1->FormSystemMatrix(ess_tdof_list, *M1_dtA1);
+        M1_dtA1->EliminateZeroRows();
 
 
         // **************************************************************************************
@@ -691,8 +589,39 @@ public:
         buildh2_dth2(c2, dc2dt);
         h2_dth2->FormSystemMatrix(null_array, *H2_dtH2);
 
-        buildm2_dta2(dt, *phi3);
+        buildm2_dta2(*phi3);
         m2_dta2->FormSystemMatrix(ess_tdof_list, *M2_dtA2);
+        M2_dtA2->EliminateZeroRows();
+
+        if (1) {
+            if (rank == 0) {
+                cout << "In Newton::GetGradient(), l2 norm of   phi: " << phi3->Norml2() << endl;
+                cout << "In Newton::GetGradient(), l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "In Newton::GetGradient(), l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "In Newton::GetGradient(), l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "In Newton::GetGradient(), l2 norm of   phi: " << phi3->Norml2() << endl;
+                cout << "In Newton::GetGradient(), l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "In Newton::GetGradient(), l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "In Newton::GetGradient(), l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 2) {
+                cout << "In Newton::GetGradient(), l2 norm of   phi: " << phi3->Norml2() << endl;
+                cout << "In Newton::GetGradient(), l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "In Newton::GetGradient(), l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "In Newton::GetGradient(), l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 3) {
+                cout << "In Newton::GetGradient(), l2 norm of   phi: " << phi3->Norml2() << endl;
+                cout << "In Newton::GetGradient(), l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "In Newton::GetGradient(), l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "In Newton::GetGradient(), l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+            }
+        }
 
         delete jac_k;
         jac_k = new BlockOperator(true_offset);
@@ -703,6 +632,28 @@ public:
         jac_k->SetBlock(1, 1, M1_dtA1);
         jac_k->SetBlock(2, 0, H2_dtH2);
         jac_k->SetBlock(2, 2, M2_dtA2);
+
+        Vector temp(true_vsize * 3);
+        jac_k->Mult(phi_dc1dt_dc2dt, temp);
+
+        if (1) {
+            if (rank == 0) {
+                cout << "In Newton::GetGradient(), l2 norm of temp: " << temp.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "In Newton::GetGradient(), l2 norm of temp: " << temp.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 2) {
+                cout << "In Newton::GetGradient(), l2 norm of temp: " << temp.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 3) {
+                cout << "In Newton::GetGradient(), l2 norm of temp: " << temp.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
         return *jac_k;
     }
 
@@ -745,11 +696,11 @@ private:
     }
 
     // (c1, v1)_{\Omega_s} + dt D1 (grad(c1) + z1 c1 grad(phi3), grad(v1))_{\Omega_s}, given dt and phi3
-    void buildm1_dta1(double dt, ParGridFunction& phi3) const
+    void buildm1_dta1(ParGridFunction& phi3_) const
     {
         if (m1_dta1 != NULL) { delete m1_dta1; }
 
-        phi3.ExchangeFaceNbrData();
+        phi3_.ExchangeFaceNbrData();
         ProductCoefficient dt_D1(dt, D1_water);
         ProductCoefficient dt_D1_z1(dt_D1, v_K_coeff);
 
@@ -760,17 +711,17 @@ private:
         // dt D1 (grad(c1), grad(v1))_{\Omega_s}
         m1_dta1->AddDomainIntegrator(new DiffusionIntegrator(dt_D1));
         // dt D1 z1 (c1 grad(phi3), grad(v1))_{\Omega_s}
-        m1_dta1->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi3, &dt_D1_z1));
+        m1_dta1->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi3_, &dt_D1_z1));
 
         m1_dta1->Assemble(skip_zero_entries);
     }
 
     // (c2, v2)_{\Omega_s} + dt D2 (grad(c2) + z2 c2 grad(phi3), grad(v2))_{\Omega_s}, given dt and phi3
-    void buildm2_dta2(double dt, ParGridFunction& phi3) const
+    void buildm2_dta2(ParGridFunction& phi3_) const
     {
         if (m2_dta2 != NULL) { delete m2_dta2; }
 
-        phi3.ExchangeFaceNbrData();
+        phi3_.ExchangeFaceNbrData();
         ProductCoefficient dt_D2(dt, D2_water);
         ProductCoefficient dt_D2_z2(dt_D2, v_Cl_coeff);
 
@@ -781,7 +732,7 @@ private:
         // dt D2 (grad(c2), grad(v2))_{\Omega_s}
         m2_dta2->AddDomainIntegrator(new DiffusionIntegrator(dt_D2));
         // dt D2 z2 (c2 grad(phi3), grad(v2))_{\Omega_s}
-        m2_dta2->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi3, &dt_D2_z2));
+        m2_dta2->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi3_, &dt_D2_z2));
 
         m2_dta2->Assemble(skip_zero_entries);
     }
@@ -811,11 +762,11 @@ private:
     }
 
     // D1 (z1 c1 grad(dphi), grad(v1))_{\Omega_s}, given c1
-    void buildh1(const ParGridFunction* c1) const
+    void buildh1(const ParGridFunction* c1_) const
     {
         if (h1 != NULL) { delete h1; }
 
-        GridFunctionCoefficient c1_coeff(c1);
+        GridFunctionCoefficient c1_coeff(c1_);
         ProductCoefficient water_D1_z1_c1_coeff(D1_prod_z1_water, c1_coeff);
 
         h1 = new ParBilinearForm(fes);
@@ -826,11 +777,11 @@ private:
     }
 
     // D2 (z2 c2 grad(dphi), grad(v2))_{\Omega_s}, given c2
-    void buildh2(const ParGridFunction* c2) const
+    void buildh2(const ParGridFunction* c2_) const
     {
         if (h2 != NULL) { delete h2; }
 
-        GridFunctionCoefficient c2_coeff(c2);
+        GridFunctionCoefficient c2_coeff(c2_);
         ProductCoefficient water_D2_z2_c2_coeff(D2_prod_z2_water, c2_coeff);
 
         h2 = new ParBilinearForm(fes);
@@ -841,11 +792,11 @@ private:
     }
 
     // D1 (z1 (c1 + dt dc1dt) grad(dphi), grad(v1))_{\Omega_s}, given c1 and dc1dt
-    void buildh1_dth1(const ParGridFunction* c1, ParGridFunction* dc1dt) const
+    void buildh1_dth1(const ParGridFunction* c1_, ParGridFunction* dc1dt_) const
     {
         if (h1_dth1 != NULL) { delete h1_dth1; }
 
-        GridFunctionCoefficient c1_coeff(c1), dc1dt_coeff(dc1dt);
+        GridFunctionCoefficient c1_coeff(c1_), dc1dt_coeff(dc1dt_);
         ProductCoefficient water_D1_z1_c1_coeff(D1_prod_z1_water, c1_coeff);
         ProductCoefficient dt_dc1dt_coeff(dt, dc1dt_coeff);
         ProductCoefficient water_D1_z1_dt_dc1dt_coeff(D1_prod_z1_water, dt_dc1dt_coeff);
@@ -860,11 +811,11 @@ private:
     }
 
     // D2 (z2 (c2 + dt dc2dt) grad(dphi), grad(v2))_{\Omega_s}, given c2 and dc2dt
-    void buildh2_dth2(const ParGridFunction* c2, ParGridFunction* dc2dt) const
+    void buildh2_dth2(const ParGridFunction* c2_, ParGridFunction* dc2dt_) const
     {
         if (h2_dth2 != NULL) { delete h2_dth2; }
 
-        GridFunctionCoefficient c2_coeff(c2), dc2dt_coeff(dc2dt);
+        GridFunctionCoefficient c2_coeff(c2_), dc2dt_coeff(dc2dt_);
         ProductCoefficient water_D2_z2_c2_coeff(D2_prod_z2_water, c2_coeff);
         ProductCoefficient dt_dc2dt_coeff(dt, dc2dt_coeff);
         ProductCoefficient water_D2_z2_dt_dc2dt_coeff(D2_prod_z2_water, dt_dc2dt_coeff);
@@ -896,8 +847,7 @@ private:
     ParGridFunction *phi1_gf, *phi2_gf;
 
     int true_vsize;
-    Array<int>  &true_offset, &ess_bdr, &top_bdr, &bottom_bdr, &interface_bdr, &Gamma_M;
-    Array<int> ess_tdof_list, top_ess_tdof_list, bottom_ess_tdof_list, interface_ess_tdof_list;
+    Array<int>  &true_offset, &ess_bdr, ess_tdof_list, &top_bdr, &bottom_bdr, &interface_bdr, &Gamma_M;
     int num_procs, rank;
     StopWatch chrono;
 
@@ -905,8 +855,8 @@ public:
     PNP_Protein_Newton_CG_TimeDependent(ParFiniteElementSpace* fes_, double time, ParGridFunction* phi1_gf_, ParGridFunction* phi2_gf_,
                                         int truevsize, Array<int>& trueoffset, Array<int>& ess_bdr_, Array<int>& top_bdr_,
                                         Array<int>& bottom_bdr_, Array<int>& interface_bdr_, Array<int>& Gamma_m)
-        : TimeDependentOperator(truevsize*3, time), fes(fes_), phi1_gf(phi1_gf_), phi2_gf(phi2_gf_),
-        true_vsize(truevsize), true_offset(trueoffset), ess_bdr(ess_bdr_), top_bdr(top_bdr_), bottom_bdr(bottom_bdr_), interface_bdr(interface_bdr_), Gamma_M(Gamma_m)
+      : TimeDependentOperator(truevsize*3, time), fes(fes_), phi1_gf(phi1_gf_), phi2_gf(phi2_gf_), true_vsize(truevsize),
+        true_offset(trueoffset), ess_bdr(ess_bdr_), top_bdr(top_bdr_), bottom_bdr(bottom_bdr_), interface_bdr(interface_bdr_), Gamma_M(Gamma_m)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -914,7 +864,7 @@ public:
         pmesh = fes->GetParMesh();
         fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
-        oper          = new PNP_Protein_Newton_CG_Operator(fes, true_vsize, true_offset, ess_tdof_list);
+        oper          = new PNP_Protein_Newton_CG_Operator(fes, true_vsize, true_offset, ess_tdof_list, phi1_gf, phi2_gf);
         jac_factory   = new PreconditionerFactory(*oper, prec_type);
         newton_solver = new PetscNonlinearSolver(fes->GetComm(), *oper, "newton_");
         newton_solver->SetPreconditionerFactory(jac_factory);
@@ -928,120 +878,6 @@ public:
         delete phi_dc1dt_dc2dt;
     }
 
-    // 1.求解奇异电荷部分的电势
-    void Solve_Phi1()
-    {
-        // phi1 只定义在 \Omega_m
-        *phi1_gf = 0.0;
-        phi1_gf->ProjectCoefficient(protein_G); // phi1求解完成, 直接算比较慢, 也可以从文件读取
-//        phi1_gf->ProjectCoefficient(G_coeff); // 与上面在蛋白里面作投影有微小区别
-
-        double norm = phi1_gf->ComputeL2Error(zero);
-        if (rank == 0) {
-            cout << "L2 norm of phi1: " << norm << endl;
-        }
-
-        if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
-        {
-            /* Only need a pqr file, we can compute singular electrostatic potential phi1, no need for mesh file.
-             * Here for pqr file "../data/1MAG.pqr", we do a simple test for phi1. Data is provided by Zhang Qianru.
-             */
-            Vector zero_(3);
-            zero_ = 0.0;
-            VectorConstantCoefficient zero_vec(zero_);
-
-            double L2norm = phi1_gf->ComputeL2Error(zero);
-            assert(abs(L2norm - 2.1067E+03) < 10); //数据由张倩如提供
-            cout << "======> Test Pass: L2 norm of phi1 (no units)" << endl;
-
-            H1_FECollection*  temp_fec = new H1_FECollection(1, pmesh->Dimension());
-            ParFiniteElementSpace* temp_fes = new ParFiniteElementSpace(pmesh, temp_fec, 3);
-
-            GridFunction grad_phi1(temp_fes);
-            grad_phi1.ProjectCoefficient(gradG_coeff);
-
-            double L2norm_ = grad_phi1.ComputeL2Error(zero_vec);
-            assert(abs(L2norm_ - 9.2879E+03) < 10); //数据由张倩如提供
-            cout << "======> Test Pass: L2 norm of grad(phi1) (no units)" << endl;
-            delete temp_fec;
-            delete temp_fes;
-        }
-    }
-
-    // 2.求解调和方程部分的电势
-    void Solve_Phi2()
-    {
-        // 为了简单, 我们只使用H1空间来计算phi2
-
-        H1_FECollection* h1_fec = new H1_FECollection(p_order, pmesh->Dimension());
-        ParFiniteElementSpace* h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
-
-        ParBilinearForm blf(h1_fes);
-        // (grad(phi2), grad(psi2))_{\Omega_m}, \Omega_m: protein domain
-        blf.AddDomainIntegrator(new DiffusionIntegrator(mark_protein_coeff));
-        blf.Assemble(0);
-        blf.Finalize(0);
-
-        ParLinearForm lf(h1_fes);
-        // -<grad(G).n, psi2>_{\Gamma_M}, G is phi1
-        lf.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_gradG), Gamma_M);
-        lf.Assemble();
-
-        HypreParMatrix* A = new HypreParMatrix;
-        Vector *x = new Vector;
-        Vector *b = new Vector;
-
-        Array<int> interface_tdof_list_h1;
-        h1_fes->GetEssentialTrueDofs(interface_bdr, interface_tdof_list_h1);
-
-        phi2_gf->ProjectCoefficient(neg_protein_G); // phi2 只定义在 \Omega_m, 在interface(\Gamma)上是Dirichlet边界: -phi1
-//        phi2_gf->ProjectCoefficient(neg_G); // 上面一种方式应该更准确
-//        phi2_gf->ProjectCoefficient(G_coeff);
-//        phi2_gf->Neg();
-
-        blf.FormLinearSystem(interface_tdof_list_h1, *phi2_gf, lf, *A, *x, *b);
-        A->EliminateZeroRows(); // 设定所有的0行的主对角元为1
-
-        PetscLinearSolver* solver = new PetscLinearSolver(*A, false, "phi2_");
-        chrono.Clear();
-        chrono.Start();
-        solver->Mult(*b, *x);
-        chrono.Stop();
-        blf.RecoverFEMSolution(*x, lf, *phi2_gf);
-
-        double norm = phi2_gf->ComputeL2Error(zero);
-        if (rank == 0)
-        {
-            cout << "2 L2 norm of phi2: " << norm << endl;
-        }
-
-        if (verbose >= 2 && rank == 0) {
-            if (solver->GetConverged() == 1 && rank == 0)
-                cout << "phi2 solver: successfully converged by iterating " << solver->GetNumIterations()
-                     << " times, taking " << chrono.RealTime() << " s." << endl;
-            else if (solver->GetConverged() != 1)
-                cerr << "phi2 solver: failed to converged" << endl;
-        }
-
-        if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
-        {
-            /* Only for pqr file "1MAG.pqr" and mesh file "1MAG_2.msh", we do below tests.
-                Only need pqr file (to compute singluar electrostatic potential phi1)
-                and mesh file, we can compute phi2.
-                Data is provided by Zhang Qianru */
-            double L2norm = phi2_gf->ComputeL2Error(zero);
-            assert(abs(L2norm - 7.2139E+02) < 1); //数据由张倩如提供
-            cout << "======> Test Pass: L2 norm of phi2 (no units)" << endl;
-        }
-
-        delete solver;
-        delete h1_fec;
-        delete h1_fes;
-        delete A;
-        delete x;
-        delete b;
-    }
-
     virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
     {
         // 求解新的 old_phi 从而更新 phic1c2_ptr, 最终更新 phic1c2
@@ -1052,12 +888,6 @@ public:
         old_phi.SetFromTrueVector(); // 下面要用到PrimalVector, 而不是TrueVector
         old_c1 .SetFromTrueVector();
         old_c2 .SetFromTrueVector();
-//        if (hahahaha) {
-//            cout << "l2 norm of old_phi: " <<old_phi.Norml2() << endl;
-//            cout << "l2 norm of  old_c1: " <<  old_c1.Norml2() << endl;
-//            cout << "l2 norm of  old_c2: " <<  old_c2.Norml2() << endl;
-//            cout << "l2 norm of phic1c2: " << phic1c2.Norml2() << endl;
-//        }
 
         // 下面通过求解 dc1dt, dc2dt 从而更新 dphic1c2_dt
         dphic1c2_dt = 0.0;
@@ -1068,11 +898,7 @@ public:
         old_phi.ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
         dc1dt.ProjectBdrCoefficient(zero, ess_bdr); // 其实上面初始化dphic1c2_dt为0的时候已经隐含设定了0边界条件
         dc2dt.ProjectBdrCoefficient(zero, ess_bdr);
-        old_phi.SetTrueVector();
-        old_phi.SetFromTrueVector();
-        dc1dt.SetTrueVector();
         dc1dt.SetFromTrueVector();
-        dc2dt.SetTrueVector();
         dc2dt.SetFromTrueVector();
 
         // !!!引用 phi, dc1dt, dc2dt 的 TrueVector, 使得 phi_dc1dt_dc2dt 所指的内存块就是phi, dc1dt, dc2dt的内存块.
@@ -1090,14 +916,40 @@ public:
 
         oper->UpdateParameters(t, dt, &old_c1, &old_c2); // 传入当前解
         Vector zero_vec;
-//        if (1) {
-//            cout.precision(14);
-//            cout << "l2 norm of   phi: " <<old_phi.Norml2() << endl;
-//            cout << "l2 norm of dc1dt: " <<  dc1dt.Norml2() << endl;
-//            cout << "l2 norm of dc2dt: " <<  dc2dt.Norml2() << endl;
-//            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << '\n' << endl;
-//        }
-
+        if (0) {
+            if (rank == 0) {
+                cout.precision(14);
+                cout << "l2 norm of   phi: " << old_phi.Norml2() << endl;
+                cout << "l2 norm of dc1dt: " << dc1dt.Norml2() << endl;
+                cout << "l2 norm of dc2dt: " << dc2dt.Norml2() << endl;
+                cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << '\n' << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout.precision(14);
+                cout << "l2 norm of   phi: " << old_phi.Norml2() << endl;
+                cout << "l2 norm of dc1dt: " << dc1dt.Norml2() << endl;
+                cout << "l2 norm of dc2dt: " << dc2dt.Norml2() << endl;
+                cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << '\n' << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 2) {
+                cout.precision(14);
+                cout << "l2 norm of   phi: " << old_phi.Norml2() << endl;
+                cout << "l2 norm of dc1dt: " << dc1dt.Norml2() << endl;
+                cout << "l2 norm of dc2dt: " << dc2dt.Norml2() << endl;
+                cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << '\n' << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 3) {
+                cout.precision(14);
+                cout << "l2 norm of   phi: " << old_phi.Norml2() << endl;
+                cout << "l2 norm of dc1dt: " << dc1dt.Norml2() << endl;
+                cout << "l2 norm of dc2dt: " << dc2dt.Norml2() << endl;
+                cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << '\n' << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
         newton_solver->Mult(zero_vec, *phi_dc1dt_dc2dt);
 
         old_phi.MakeTRef(fes, *phi_dc1dt_dc2dt, true_offset[0]);
@@ -1109,13 +961,6 @@ public:
         old_phi.SetFromTrueVector();
         dc1dt  .SetFromTrueVector();
         dc2dt  .SetFromTrueVector();
-//        if (1) {
-//            cout.precision(14);
-//            cout << "l2 norm of   phi: " <<old_phi.Norml2() << endl;
-//            cout << "l2 norm of dc1dt: " <<  dc1dt.Norml2() << endl;
-//            cout << "l2 norm of dc2dt: " <<  dc2dt.Norml2() << endl;
-//            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << '\n' << endl;
-//        }
     }
 };
 
@@ -1181,18 +1026,21 @@ public:
             Gamma_m[Gamma_m_marker - 1] = 1;
         }
 
-        phi1_gf = new ParGridFunction(fes); *phi1_gf = 0.0;
-        phi2_gf = new ParGridFunction(fes); *phi2_gf = 0.0;
-        phi3_gf = new ParGridFunction(fes); *phi3_gf = 0.0;
-        c1_gf   = new ParGridFunction(fes); *c1_gf   = 0.0;
-        c2_gf   = new ParGridFunction(fes); *c2_gf   = 0.0;
-
         true_vsize = fes->TrueVSize();
         true_offset.SetSize(3 + 1); // 表示 phi, c1，c2的TrueVector
         true_offset[0] = 0;
         true_offset[1] = true_vsize;
         true_offset[2] = true_vsize * 2;
         true_offset[3] = true_vsize * 3;
+
+        phi1_gf = new ParGridFunction(fes);
+        Solve_Phi1();
+        phi2_gf = new ParGridFunction(fes);
+        Solve_Phi2();
+
+        phi3_gf = new ParGridFunction(fes); *phi3_gf = 0.0;
+        c1_gf   = new ParGridFunction(fes); *c1_gf   = 0.0;
+        c2_gf   = new ParGridFunction(fes); *c2_gf   = 0.0;
 
         phi3c1c2 = new BlockVector(true_offset); *phi3c1c2 = 0.0; // TrueVector, not PrimalVector
         phi3_gf->MakeTRef(fes, *phi3c1c2, true_offset[0]);
@@ -1255,6 +1103,7 @@ public:
         if (paraview)
         {
             total_phi_gf = new ParGridFunction(fes);
+            *total_phi_gf = 0.0;
             *total_phi_gf += *phi1_gf;
             *total_phi_gf += *phi2_gf;
             *total_phi_gf += *phi3_gf;
@@ -1312,6 +1161,120 @@ public:
         }
     }
 
+    // 求解奇异电荷部分的电势: phi1
+    void Solve_Phi1()
+    {
+        // phi1 只定义在 \Omega_m
+        *phi1_gf = 0.0;
+        phi1_gf->ProjectCoefficient(protein_G); // phi1求解完成, 直接算比较慢, 也可以从文件读取
+//        phi1_gf->ProjectCoefficient(G_coeff); // 与上面在蛋白里面作投影有微小区别
+
+        double norm = phi1_gf->ComputeL2Error(zero);
+        if (rank == 0) {
+            cout << "L2 norm of phi1: " << norm << endl;
+        }
+
+        if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
+        {
+            /* Only need a pqr file, we can compute singular electrostatic potential phi1, no need for mesh file.
+             * Here for pqr file "../data/1MAG.pqr", we do a simple test for phi1. Data is provided by Zhang Qianru.
+             */
+            Vector zero_(3);
+            zero_ = 0.0;
+            VectorConstantCoefficient zero_vec(zero_);
+
+            double L2norm = phi1_gf->ComputeL2Error(zero);
+            assert(abs(L2norm - 2.1067E+03) < 10); //数据由张倩如提供
+            cout << "======> Test Pass: L2 norm of phi1 (no units)" << endl;
+
+            H1_FECollection*  temp_fec = new H1_FECollection(1, pmesh->Dimension());
+            ParFiniteElementSpace* temp_fes = new ParFiniteElementSpace(pmesh, temp_fec, 3);
+
+            GridFunction grad_phi1(temp_fes);
+            grad_phi1.ProjectCoefficient(gradG_coeff);
+
+            double L2norm_ = grad_phi1.ComputeL2Error(zero_vec);
+            assert(abs(L2norm_ - 9.2879E+03) < 10); //数据由张倩如提供
+            cout << "======> Test Pass: L2 norm of grad(phi1) (no units)" << endl;
+            delete temp_fec;
+            delete temp_fes;
+        }
+    }
+
+    // 求解调和方程部分的电势: phi2
+    void Solve_Phi2()
+    {
+        // 为了简单, 我们只使用H1空间来计算phi2
+
+        H1_FECollection* h1_fec = new H1_FECollection(p_order, pmesh->Dimension());
+        ParFiniteElementSpace* h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
+
+        ParBilinearForm blf(h1_fes);
+        // (grad(phi2), grad(psi2))_{\Omega_m}, \Omega_m: protein domain
+        blf.AddDomainIntegrator(new DiffusionIntegrator(mark_protein_coeff));
+        blf.Assemble(0);
+        blf.Finalize(0);
+
+        ParLinearForm lf(h1_fes);
+        // -<grad(G).n, psi2>_{\Gamma_M}, G is phi1
+        lf.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_gradG), Gamma_m);
+        lf.Assemble();
+
+        HypreParMatrix* A = new HypreParMatrix;
+        Vector *x = new Vector;
+        Vector *b = new Vector;
+
+        Array<int> interface_tdof_list_h1;
+        h1_fes->GetEssentialTrueDofs(interface_bdr, interface_tdof_list_h1);
+
+        phi2_gf->ProjectCoefficient(neg_protein_G); // phi2 只定义在 \Omega_m, 在interface(\Gamma)上是Dirichlet边界: -phi1
+//        phi2_gf->ProjectCoefficient(neg_G); // 上面一种方式应该更准确
+//        phi2_gf->ProjectCoefficient(G_coeff);
+//        phi2_gf->Neg();
+
+        blf.FormLinearSystem(interface_tdof_list_h1, *phi2_gf, lf, *A, *x, *b);
+        A->EliminateZeroRows(); // 设定所有的0行的主对角元为1
+
+        PetscLinearSolver* solver = new PetscLinearSolver(*A, false, "phi2_");
+        chrono.Clear();
+        chrono.Start();
+        solver->Mult(*b, *x);
+        chrono.Stop();
+        blf.RecoverFEMSolution(*x, lf, *phi2_gf);
+
+        double norm = phi2_gf->ComputeL2Error(zero);
+        if (rank == 0)
+        {
+            cout << "2 L2 norm of phi2: " << norm << endl;
+        }
+
+        if (verbose >= 2 && rank == 0) {
+            if (solver->GetConverged() == 1 && rank == 0)
+                cout << "phi2 solver: successfully converged by iterating " << solver->GetNumIterations()
+                     << " times, taking " << chrono.RealTime() << " s." << endl;
+            else if (solver->GetConverged() != 1)
+                cerr << "phi2 solver: failed to converged" << endl;
+        }
+
+        if (self_debug && strcmp(pqr_file, "./1MAG.pqr") == 0 && strcmp(mesh_file, "./1MAG_2.msh") == 0)
+        {
+            /* Only for pqr file "1MAG.pqr" and mesh file "1MAG_2.msh", we do below tests.
+                Only need pqr file (to compute singluar electrostatic potential phi1)
+                and mesh file, we can compute phi2.
+                Data is provided by Zhang Qianru */
+            double L2norm = phi2_gf->ComputeL2Error(zero);
+            assert(abs(L2norm - 7.2139E+02) < 1); //数据由张倩如提供
+            cout << "======> Test Pass: L2 norm of phi2 (no units)" << endl;
+        }
+
+        delete solver;
+        delete h1_fec;
+        delete h1_fes;
+        delete A;
+        delete x;
+        delete b;
+    }
+
     Return* Solve(Array<double>& meshsizes, Array<double>& time_steps)
     {
         double mesh_size=0.0;
@@ -1353,9 +1316,15 @@ public:
 
             if (paraview)
             {
+                *total_phi_gf = 0.0;
+                *total_phi_gf += *phi1_gf;
+                *total_phi_gf += *phi2_gf;
+                *total_phi_gf += *phi3_gf;
+
                 (*phi3_gf) /= alpha1; // 进行单位变换之后在保存解
                 (*c1_gf)  /= alpha3;
                 (*c2_gf)  /= alpha3;
+                *total_phi_gf /= alpha1;
                 phi3_gf->SetTrueVector();
                 c1_gf->SetTrueVector();
                 c2_gf->SetTrueVector();

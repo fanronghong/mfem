@@ -68,8 +68,8 @@ public:
 
         X->PlaceArray(x.GetData()); // no copy, only the data pointer is passed to PETSc
         Y->PlaceArray(y.GetData());
-        // solve 3 equations
-        for (int i=0; i<3; ++i)
+
+        for (int i=0; i<3; ++i) // solve 3 equations
         {
             VecGetSubVector(*X, index_set[i], &blockx);
             VecGetSubVector(*Y, index_set[i], &blocky);
