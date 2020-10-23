@@ -1382,12 +1382,13 @@ private:
         GridFunctionCoefficient c1_coeff(c1), dc1dt_coeff(dc1dt);
         ProductCoefficient D1_z1_c1_coeff(D_K_prod_v_K, c1_coeff);
         ProductCoefficient dt_dc1dt_coeff(dt, dc1dt_coeff);
+        ProductCoefficient D1_z1_dt_dc1dt_coeff(D_K_prod_v_K, dt_dc1dt_coeff);
 
         h1_dth1 = new ParBilinearForm(fes);
         // D1 (z1 c1 grad(dphi), grad(v1)), given c1
         h1_dth1->AddDomainIntegrator(new DiffusionIntegrator(D1_z1_c1_coeff));
         // D1 (z1 dt dc1dt grad(dphi), grad(v1)), given dc1dt
-        h1_dth1->AddDomainIntegrator(new DiffusionIntegrator(dt_dc1dt_coeff));
+        h1_dth1->AddDomainIntegrator(new DiffusionIntegrator(D1_z1_dt_dc1dt_coeff));
 
         h1_dth1->Assemble(skip_zero_entries);
     }
@@ -1415,12 +1416,13 @@ private:
         GridFunctionCoefficient c2_coeff(c2), dc2dt_coeff(dc2dt);
         ProductCoefficient D2_z2_c2_coeff(D_Cl_prod_v_Cl, c2_coeff);
         ProductCoefficient dt_dc2dt_coeff(dt, dc2dt_coeff);
+        ProductCoefficient D2_z2_dt_dc2dt_coeff(D_Cl_prod_v_Cl, dt_dc2dt_coeff);
 
         h2_dth2 = new ParBilinearForm(fes);
         // D2 (z2 c2 grad(dphi), grad(v2)), given c2
         h2_dth2->AddDomainIntegrator(new DiffusionIntegrator(D2_z2_c2_coeff));
         // D2 (z2 dt dc2dt grad(dphi), grad(v2)), given dc2dt
-        h2_dth2->AddDomainIntegrator(new DiffusionIntegrator(dt_dc2dt_coeff));
+        h2_dth2->AddDomainIntegrator(new DiffusionIntegrator(D2_z2_dt_dc2dt_coeff));
 
         h2_dth2->Assemble(skip_zero_entries);
     }
@@ -1452,9 +1454,7 @@ public:
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
-        if (hahahaha) {
-            ess_tdof_list.Print(cout << "ess_tdof_list: ", ess_tdof_list.Size());
-        }
+
         oper          = new PNP_Box_Newton_CG_Operator(fes, true_vsize, true_offset, ess_tdof_list);
         jac_factory   = new PreconditionerFactory(*oper, prec_type);
         newton_solver = new PetscNonlinearSolver(fes->GetComm(), *oper, "newton_");
