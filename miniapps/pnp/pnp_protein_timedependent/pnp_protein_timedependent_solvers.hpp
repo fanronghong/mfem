@@ -234,24 +234,6 @@ public:
         old_c1  .SetFromTrueVector();
         old_c2  .SetFromTrueVector();
 
-        if (0)
-        {
-            VisItDataCollection* dc = new VisItDataCollection("data collection", fes->GetMesh());
-            dc->RegisterField("old_phi3", &old_phi3);
-            dc->RegisterField("old_c1", &old_c1);
-            dc->RegisterField("old_c2", &old_c2);
-
-            cout << "l2 norm of phi3: " << old_phi3.Norml2() << endl;
-            cout << "l2 norm of   c1: " << old_c1.Norml2() << endl;
-            cout << "l2 norm of   c2: " << old_c2.Norml2() << endl;
-
-            Visualize(*dc, "old_phi3", "phi3");
-            Visualize(*dc, "old_c1", "old_c1");
-            Visualize(*dc, "old_c2", "old_c2");
-
-            delete dc;
-        }
-
         ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi3_dt
         // 下面通过求解 dc1dt, dc2dt 从而更新 dphi3c1c2_dt
         dc1dt.MakeTRef(fes, dphi3c1c2_dt, true_offset[1]);
@@ -305,7 +287,8 @@ public:
             diff -= old_phi3; // 用到的是old_phi的PrimalVector
             double tol = diff.ComputeL2Error(zero) / phi3_Gummel.ComputeL2Error(zero); // 这里不能把diff设为Vector类型, 如果是Vector类型, 这里计算Norml2()时各个进程得到的值不一样
             old_phi3 = phi3_Gummel; // 算完本次Gummel迭代的tol就可以更新phi_Gummel
-            if (rank == 0 && verbose >= 2) {
+//            if (rank == 0 && verbose >= 2)
+            if (rank == 0 && 1) {
                 cout << "Gummel step: " << gummel_step << ", Relative Tol: " << tol << endl;
             }
             if (tol < Gummel_rel_tol) { // Gummel迭代停止
@@ -491,7 +474,7 @@ private:
     ParFiniteElementSpace* fes;
 
     BlockVector* phi3c1c2;
-    ParGridFunction *phi1_gf, *phi2_gf, *phi3_gf, *c1_gf, *c2_gf;
+    ParGridFunction *phi1_gf, *phi2_gf, *phi3_gf, *total_phi_gf, *c1_gf, *c2_gf;
 
     double t; // 当前时间
     TimeDependentOperator* oper;
@@ -610,7 +593,12 @@ public:
 
         if (paraview)
         {
-            string paraview_title = string("PNP_Protein_") + Discretize + "_" + Linearize + "_Time_Dependent";
+            total_phi_gf = new ParGridFunction(fes);
+            *total_phi_gf += *phi1_gf;
+            *total_phi_gf += *phi2_gf;
+            *total_phi_gf += *phi3_gf;
+
+            string paraview_title = string("PNP_Protein_") + Discretize + "_" + Linearize + "_Time_Dependent" + paraview_dir;
             pd = new ParaViewDataCollection(paraview_title, pmesh);
             pd->SetPrefixPath("Paraview");
             pd->SetLevelsOfDetail(p_order);
@@ -619,12 +607,14 @@ public:
             pd->RegisterField("phi1", phi1_gf);
             pd->RegisterField("phi2", phi2_gf);
             pd->RegisterField("phi3", phi3_gf);
+            pd->RegisterField("total_phi", total_phi_gf);
             pd->RegisterField("c1",   c1_gf);
             pd->RegisterField("c2",   c2_gf);
 
             (*phi3_gf) /= alpha1; // 进行单位变换之后在保存解
             (*c1_gf)  /= alpha3;
             (*c2_gf)  /= alpha3;
+            *total_phi_gf /= alpha1;
             phi3_gf->SetTrueVector();
             c1_gf->SetTrueVector();
             c2_gf->SetTrueVector();
@@ -636,6 +626,7 @@ public:
             (*phi3_gf) *= (alpha1); // 逆单位变换进行计算
             (*c1_gf)  *= (alpha3);
             (*c2_gf)  *= (alpha3);
+            *total_phi_gf *= alpha1;
             phi3_gf->SetTrueVector();
             c1_gf->SetTrueVector();
             c2_gf->SetTrueVector();
@@ -654,7 +645,10 @@ public:
         delete oper;
         delete ode_solver;
         if (ret) delete ret;
-        if (paraview) delete pd;
+        if (paraview) {
+            delete pd;
+            delete total_phi_gf;
+        }
     }
 
     Return* Solve(Array<double>& meshsizes, Array<double>& time_steps)

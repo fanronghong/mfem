@@ -36,8 +36,12 @@ int main(int argc, char **argv)
     args.AddOption(&prec_type, "-prec", "--prec_type", "Preconditioner type for Newton disretization, choose: block, uzawa, simple");
     args.AddOption(&schur_alpha1, "-schur1", "--schur1", "1st parameter for Schur Complement");
     args.AddOption(&schur_alpha2, "-schur2", "--schur2", "2nd parameter for Schur Complement");
+    args.AddOption(&t_init, "-t_init", "--t_init", "Initial time");
+    args.AddOption(&t_final, "-t_final", "--t_final", "Final time");
+    args.AddOption(&t_stepsize, "-dt", "--dt", "Time Step");
     args.AddOption(&options_src, "-opts", "--petscopts", "Petsc options file");
     args.AddOption(&paraview, "-para", "--paraview", "-nopara", "--noparaview", "Save time-dependent results");
+    args.AddOption(&paraview_dir, "-para_dir", "--paraview_directory", "Directory name for saving Paraview outputs.");
     args.Parse();
     if (!args.Good())
     {

@@ -161,9 +161,12 @@ int main(int argc, char **argv)
 
 //    auto *A = blf->ParallelAssemble();
 //    A->Mult(1.0, *gf, 1.0, *lf); // Mult(a, x, b, y) performs: a*A*x + b*y -> y
+        blf->AddMult(*gf, *lf);
 
-    blf->AddMult(*gf, *lf);
+    gf->ParallelAssemble();
 
-    cout << "hahah" << endl;
+    cout.precision(14);
+    cout << "l2 norm of lf: " << lf->Norml2() << endl;
+
     MPI_Finalize();
 }
