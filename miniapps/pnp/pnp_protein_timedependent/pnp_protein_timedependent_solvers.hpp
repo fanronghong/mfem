@@ -358,7 +358,6 @@ private:
     HypreParMatrix *A0, *B1, *B2, *M1_dtA1, *M2_dtA2, *G1, *G2, *H1, *H2, *H1_dtH1, *H2_dtH2;
     ParGridFunction *phi3, *dc1dt, *dc2dt;
 
-    mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
     mutable BlockOperator *jac_k; // Jacobian at current solution
     ParGridFunction *c1, *c2, *phi1_gf, *phi2_gf;
     VectorCoefficient *grad_phi1, *grad_phi2, *grad_phi1_plus_grad_phi2; // grad(phi1 + phi2)
@@ -405,7 +404,6 @@ public:
         l1 = new ParLinearForm(fes);
         l2 = new ParLinearForm(fes);
 
-        rhs_k = new BlockVector(true_offset);
         jac_k = new BlockOperator(true_offset);
 
     }
@@ -428,7 +426,7 @@ public:
 
         delete l0; delete l1; delete l2;
 
-        delete rhs_k; delete jac_k;
+        delete jac_k;
     }
 
     void UpdateParameters(double current, double dt_, ParGridFunction* c1_, ParGridFunction* c2_)
@@ -485,14 +483,16 @@ public:
             MPI_Barrier(MPI_COMM_WORLD);
         }
 
-        rhs_k->Update(residual.GetData(), true_offset); // update residual
+        Vector y0(residual.GetData() + 0 * true_vsize, true_vsize);
+        Vector y1(residual.GetData() + 1 * true_vsize, true_vsize);
+        Vector y2(residual.GetData() + 2 * true_vsize, true_vsize);
+
 
         // **************************************************************************************
         //                                1. Poisson 方程 Residual
         // **************************************************************************************
         delete l0;
         l0 = new ParLinearForm(fes);
-        l0->Update(fes, rhs_k->GetBlock(0), 0);
         // b0: - epsilon_m <grad(phi1 + phi2).n, psi3>_{\Gamma}
         phi1_gf->ExchangeFaceNbrData();
         phi2_gf->ExchangeFaceNbrData();
@@ -516,7 +516,6 @@ public:
         // **************************************************************************************
         delete l1;
         l1 = new ParLinearForm(fes);
-        l1->Update(fes, rhs_k->GetBlock(1), 0);
         *l1 = 0.0;
 
         buildg1_();
@@ -533,7 +532,6 @@ public:
         // **************************************************************************************
         delete l2;
         l2 = new ParLinearForm(fes);
-        l2->Update(fes, rhs_k->GetBlock(2), 0);
         *l2 = 0.0;
 
         buildg2_();
@@ -543,6 +541,10 @@ public:
         h2->AddMult(*phi3, *l2, -1.0);       // l2 = l2 - g2 c2 - h2 phi
         m2_dta2->AddMult(*dc2dt, *l2, -1.0); // l2 = l2 - g2 c2 - h2 phi - m2_dta2 dc2dt
         l2->SetSubVector(ess_tdof_list, 0.0);
+
+        y0 = *l0;
+        y1 = *l1;
+        y2 = *l2;
     }
 
     virtual Operator &GetGradient(const Vector& phi_dc1dt_dc2dt) const

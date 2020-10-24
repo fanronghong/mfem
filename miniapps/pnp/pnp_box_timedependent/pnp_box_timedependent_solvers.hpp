@@ -20,7 +20,7 @@
 #include "../utils/DGDiffusion_Edge_Symmetry_Penalty.hpp"
 #include "../utils/DGEdgeIntegrator.hpp"
 #include "../utils/PNP_Preconditioners.hpp"
-
+#include "../utils/PNP_BCHandler.hpp"
 
 class PNP_Box_Gummel_CG_TimeDependent: public TimeDependentOperator
 {
@@ -1097,15 +1097,14 @@ private:
     mutable ParLinearForm *l0, *l1, *l2;
     HypreParMatrix *A0, *B1, *B2, *M1_dtA1, *M2_dtA2, *G1, *G2, *H1, *H2, *H1_dtH1, *H2_dtH2;
 
-    const ParGridFunction *c1, *c2;
+    mutable BlockOperator *jac_k; // Jacobian at current solution
     ParGridFunction *phi, *dc1dt, *dc2dt;
+
+    ParGridFunction *c1, *c2;
     double t, dt;
 
     int true_vsize;
     Array<int> &true_offset, &ess_tdof_list, null_array;
-    mutable BlockVector *rhs_k; // current rhs corresponding to the current solution
-    mutable BlockOperator *jac_k; // Jacobian at current solution
-
     int num_procs, rank;
 
 public:
@@ -1137,7 +1136,6 @@ public:
         l1 = new ParLinearForm(fes);
         l2 = new ParLinearForm(fes);
 
-        rhs_k = new BlockVector(true_offset);
         jac_k = new BlockOperator(true_offset);
 
     }
@@ -1158,20 +1156,25 @@ public:
 
         delete l0; delete l1; delete l2;
 
-        delete rhs_k; delete jac_k;
+        delete jac_k;
     }
 
-    void UpdateParameters(double current, double dt_, const ParGridFunction* c1_, const ParGridFunction* c2_)
+    void UpdateParameters(double current, double dt_, ParGridFunction* c1_, ParGridFunction* c2_)
     {
         t  = current;
         dt = dt_;
         c1 = c1_;
         c2 = c2_;
+
+        c1->SetTrueVector(); // 后面有可能要用到TrueVector
+        c2->SetTrueVector();
     }
 
-    virtual void Mult(const Vector& phi_dc1dt_dc2dt, Vector& residual) const
+    // 以PrimalVector为计算核心
+    virtual void Mult_(const Vector& phi_dc1dt_dc2dt, Vector& residual) const
     {
         Vector& phi_dc1dt_dc2dt_ = const_cast<Vector&>(phi_dc1dt_dc2dt);
+        bool show_more = true;
 
         phi  ->MakeTRef(fes, phi_dc1dt_dc2dt_, true_offset[0]);
         dc1dt->MakeTRef(fes, phi_dc1dt_dc2dt_, true_offset[1]);
@@ -1180,15 +1183,28 @@ public:
         dc1dt->SetFromTrueVector();
         dc2dt->SetFromTrueVector();
 
-        if (hahahaha) {
-            cout << "l2 norm of   phi: " <<   phi->Norml2() << endl;
-            cout << "l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
-            cout << "l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
-            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
-            cout << "l2 norm of residual: " << residual.Norml2() << '\n' << endl;
+        if (show_more) {
+            if (rank == 0) {
+                cout << "\n1. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of  dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of  dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n1. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of  old_c1: " << dc1dt->Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of  old_c2: " << dc2dt->Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
         }
 
-        rhs_k->Update(residual.GetData(), true_offset); // update residual
+        Vector y0(residual.GetData() + 0 * true_vsize, true_vsize);
+        Vector y1(residual.GetData() + 1 * true_vsize, true_vsize);
+        Vector y2(residual.GetData() + 2 * true_vsize, true_vsize);
 
 
         // **************************************************************************************
@@ -1196,7 +1212,6 @@ public:
         // **************************************************************************************
         delete l0;
         l0 = new ParLinearForm(fes);
-        l0->Update(fes, rhs_k->GetBlock(0), 0);
         // b0: (f0, psi)
         f0_analytic.SetTime(t);
         l0->AddDomainIntegrator(new DomainLFIntegrator(f0_analytic));
@@ -1210,7 +1225,29 @@ public:
         b1->AddMult(*dc1dt, *l0, dt);    // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt
         b2->AddMult(*dc2dt, *l0, dt);    // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
         a0->AddMult(*phi, *l0, -1.0); // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt - a0 phi
-        l0->SetSubVector(ess_tdof_list, 0.0);
+
+        l0->ParallelAssemble(y0); // PrimalVector转换为TrueVector. 好像不要这个转换才是对的
+        y0.SetSubVector(ess_tdof_list, 0.0);
+//        l0->SetSubVector(ess_tdof_list, 0.0); // fff这样设定边界对吗?
+//        y0 = *l0;
+        if (show_more) {
+            if (rank == 0) {
+//                cout << "\n2. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+//                cout << "2. In Newton::Mult(), l2 norm of  dc1dt: " << dc1dt->Norml2() << endl;
+//                cout << "2. In Newton::Mult(), l2 norm of  dc2dt: " << dc2dt->Norml2() << endl;
+//                cout << "2. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "2. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n2. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "2. In Newton::Mult(), l2 norm of  old_c1: " << dc1dt->Norml2() << endl;
+                cout << "2. In Newton::Mult(), l2 norm of  old_c2: " << dc2dt->Norml2() << endl;
+                cout << "2. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "2. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
 
 
         // **************************************************************************************
@@ -1218,19 +1255,38 @@ public:
         // **************************************************************************************
         delete l1;
         l1 = new ParLinearForm(fes);
-        l1->Update(fes, rhs_k->GetBlock(1), 0);
         // b1: (f1, v1)
         f1_analytic.SetTime(t);
         l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
         l1->Assemble();
 
         buildg1_();
-        buildh1(c1);
+        buildh1();
         buildm1_dta1(phi);
         g1_->AddMult(*c1, *l1, -1.0);        // l1 = l1 - g1 c1
         h1->AddMult(*phi, *l1, -1.0);        // l1 = l1 - g1 c1 - h1 phi
         m1_dta1->AddMult(*dc1dt, *l1, -1.0); // l1 = l1 - g1 c1 - h1 phi - m1_dta1 dc1dt
-        l1->SetSubVector(ess_tdof_list, 0.0);
+        l1->SetSubVector(ess_tdof_list, 0.0); // fff
+//        l1->ParallelAssemble(y1); // PrimalVector转换为TrueVectorfff
+        y1 = *l1;
+        if (show_more) {
+            if (rank == 0) {
+//                cout << "\n3. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+//                cout << "3. In Newton::Mult(), l2 norm of  dc1dt: " << dc1dt->Norml2() << endl;
+//                cout << "3. In Newton::Mult(), l2 norm of  dc2dt: " << dc2dt->Norml2() << endl;
+//                cout << "3. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "3. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n3. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "3. In Newton::Mult(), l2 norm of  old_c1: " << dc1dt->Norml2() << endl;
+                cout << "3. In Newton::Mult(), l2 norm of  old_c2: " << dc2dt->Norml2() << endl;
+                cout << "3. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "3. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
 
 
         // **************************************************************************************
@@ -1238,31 +1294,213 @@ public:
         // **************************************************************************************
         delete l2;
         l2 = new ParLinearForm(fes);
-        l2->Update(fes, rhs_k->GetBlock(2), 0);
         // b2: (f2, v2)
         f2_analytic.SetTime(t);
         l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
         l2->Assemble();
 
         buildg2_();
-        buildh2(c2);
+        buildh2();
         buildm2_dta2(phi);
         g2_->AddMult(*c2, *l2, -1.0);        // l2 = l2 - g2 c2
         h2->AddMult(*phi, *l2, -1.0);        // l2 = l2 - g2 c2 - h2 phi
         m2_dta2->AddMult(*dc2dt, *l2, -1.0); // l2 = l2 - g2 c2 - h2 phi - m2_dta2 dc2dt
-        l2->SetSubVector(ess_tdof_list, 0.0);
-
-        if (hahahaha) {
-            cout << "l2 norm of   phi: " <<   phi->Norml2() << endl;
-            cout << "l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
-            cout << "l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
-            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
-            cout << "l2 norm of residual: " << residual.Norml2() << '\n' << endl;
+        l2->SetSubVector(ess_tdof_list, 0.0); // fff
+//        l2->ParallelAssemble(y2); // PrimalVector转换为TrueVector fff
+        y2 = *l2;
+        if (show_more) {
+            if (rank == 0) {
+                cout << "\n4. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of  dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of  dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n4. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of  old_c1: " << dc1dt->Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of  old_c2: " << dc2dt->Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
         }
     }
 
+    // 以TrueVector为计算核心
+    virtual void Mult(const Vector& phi_dc1dt_dc2dt, Vector& residual) const
+    {
+        bool show_more = true;
+
+        if (show_more) {
+            if (rank == 0) {
+                cout << "\n1. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of  dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of  dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n1. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of  old_c1: " << dc1dt->Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of  old_c2: " << dc2dt->Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "1. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+
+        Vector& phi_dc1dt_dc2dt_ = const_cast<Vector&>(phi_dc1dt_dc2dt);
+        phi  ->MakeTRef(fes, phi_dc1dt_dc2dt_, true_offset[0]);
+        dc1dt->MakeTRef(fes, phi_dc1dt_dc2dt_, true_offset[1]);
+        dc2dt->MakeTRef(fes, phi_dc1dt_dc2dt_, true_offset[2]);
+        phi  ->SetFromTrueVector(); // 下面要用到 PrimalVector, 而不是 TrueVector
+        dc1dt->SetFromTrueVector();
+        dc2dt->SetFromTrueVector();
+
+        Vector   phi_tdof(phi_dc1dt_dc2dt.GetData() + 0*true_vsize, true_vsize);
+        Vector dc1dt_tdof(phi_dc1dt_dc2dt.GetData() + 1*true_vsize, true_vsize);
+        Vector dc2dt_tdof(phi_dc1dt_dc2dt.GetData() + 2*true_vsize, true_vsize);
+
+        Vector y0(residual.GetData() + 0 * true_vsize, true_vsize);
+        Vector y1(residual.GetData() + 1 * true_vsize, true_vsize);
+        Vector y2(residual.GetData() + 2 * true_vsize, true_vsize);
+
+
+        // **************************************************************************************
+        //                                1. Poisson 方程 Residual
+        // **************************************************************************************
+        delete l0;
+        l0 = new ParLinearForm(fes);
+        // b0: (f0, psi)
+        f0_analytic.SetTime(t);
+        l0->AddDomainIntegrator(new DomainLFIntegrator(f0_analytic));
+        l0->Assemble();
+        l0->ParallelAssemble(y0);
+
+        buildb1();
+        buildb2();
+        builda0();
+        b1->TrueAddMult(c1->GetTrueVector(), y0, 1.0);   // l0 = l0 + b1 c1
+        b2->TrueAddMult(c2->GetTrueVector(), y0, 1.0);   // l0 = l0 + b1 c1 + b2 c2
+        b1->TrueAddMult(dc1dt_tdof, y0, dt);    // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt
+        b2->TrueAddMult(dc2dt_tdof, y0, dt);    // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
+        a0->TrueAddMult(phi_tdof, y0, -1.0); // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt - a0 phi
+
+        y0.SetSubVector(ess_tdof_list, 0.0); // fff这样设定边界对吗?
+
+        if (show_more) {
+            if (rank == 0) {
+//                cout << "\n2. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+//                cout << "2. In Newton::Mult(), l2 norm of  dc1dt: " << dc1dt->Norml2() << endl;
+//                cout << "2. In Newton::Mult(), l2 norm of  dc2dt: " << dc2dt->Norml2() << endl;
+//                cout << "2. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "2. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n2. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "2. In Newton::Mult(), l2 norm of  old_c1: " << dc1dt->Norml2() << endl;
+                cout << "2. In Newton::Mult(), l2 norm of  old_c2: " << dc2dt->Norml2() << endl;
+                cout << "2. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "2. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+
+
+        // **************************************************************************************
+        //                                2. NP1 方程 Residual
+        // **************************************************************************************
+        delete l1;
+        l1 = new ParLinearForm(fes);
+        // b1: (f1, v1)
+        f1_analytic.SetTime(t);
+        l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+        l1->Assemble();
+        l1->ParallelAssemble(y1);
+
+        buildg1_();
+        buildh1();
+        buildm1_dta1(phi);
+        g1_->TrueAddMult(c1->GetTrueVector(), y1, -1.0); // l1 = l1 - g1 c1
+        h1->TrueAddMult(phi_tdof, y1, -1.0);        // l1 = l1 - g1 c1 - h1 phi
+        m1_dta1->TrueAddMult(dc1dt_tdof, y1, -1.0); // l1 = l1 - g1 c1 - h1 phi - m1_dta1 dc1dt
+
+        y1.SetSubVector(ess_tdof_list, 0.0); // fff
+
+        if (show_more) {
+            if (rank == 0) {
+//                cout << "\n3. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+//                cout << "3. In Newton::Mult(), l2 norm of  dc1dt: " << dc1dt->Norml2() << endl;
+//                cout << "3. In Newton::Mult(), l2 norm of  dc2dt: " << dc2dt->Norml2() << endl;
+//                cout << "3. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "3. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n3. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "3. In Newton::Mult(), l2 norm of  old_c1: " << dc1dt->Norml2() << endl;
+                cout << "3. In Newton::Mult(), l2 norm of  old_c2: " << dc2dt->Norml2() << endl;
+                cout << "3. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "3. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+
+
+        // **************************************************************************************
+        //                                3. NP2 方程 Residual
+        // **************************************************************************************
+        delete l2;
+        l2 = new ParLinearForm(fes);
+        // b2: (f2, v2)
+        f2_analytic.SetTime(t);
+        l2->AddDomainIntegrator(new DomainLFIntegrator(f2_analytic));
+        l2->Assemble();
+        l2->ParallelAssemble(y2);
+
+        buildg2_();
+        buildh2();
+        buildm2_dta2(phi);
+        g2_->TrueAddMult(c2->GetTrueVector(), y2, -1.0);        // l2 = l2 - g2 c2
+        h2->TrueAddMult(phi_tdof, y2, -1.0);        // l2 = l2 - g2 c2 - h2 phi
+        m2_dta2->TrueAddMult(dc2dt_tdof, y2, -1.0); // l2 = l2 - g2 c2 - h2 phi - m2_dta2 dc2dt
+
+        y2.SetSubVector(ess_tdof_list, 0.0); // fff
+
+        if (show_more) {
+            if (rank == 0) {
+                cout << "\n4. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of  dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of  dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n4. In Newton::Mult(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of  old_c1: " << dc1dt->Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of  old_c2: " << dc2dt->Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+                cout << "4. In Newton::Mult(), l2 norm of residual: " << residual.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+
+        residual.Neg(); // 残量取负
+    }
+
+
     virtual Operator &GetGradient(const Vector& phi_dc1dt_dc2dt) const
     {
+        bool show_more = true;
+
+        delete jac_k;
+        jac_k = new BlockOperator(true_offset);
+
         Vector& phi_dc1dt_dc2dt_ = const_cast<Vector&>(phi_dc1dt_dc2dt);
 
         phi  ->MakeTRef(fes, phi_dc1dt_dc2dt_, 0*true_vsize);
@@ -1272,11 +1510,21 @@ public:
         dc1dt->SetFromTrueVector();
         dc2dt->SetFromTrueVector();
 
-        if (hahahaha) {
-            cout << "l2 norm of   phi: " << phi->Norml2() << endl;
-            cout << "l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
-            cout << "l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
-            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << '\n' << endl;
+        if (show_more) {
+            if (rank == 0) {
+                cout << "\n2. In Newton::GetGradient(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "2. In Newton::GetGradient(), l2 norm of  dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "2. In Newton::GetGradient(), l2 norm of  dc2dt: " << dc2dt->Norml2() << endl;
+                cout << "2. In Newton::GetGradient(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n2. In Newton::GetGradient(), l2 norm of old_phi: " << phi->Norml2() << endl;
+                cout << "2. In Newton::GetGradient(), l2 norm of  old_c1: " << dc1dt->Norml2() << endl;
+                cout << "2. In Newton::GetGradient(), l2 norm of  old_c2: " << dc2dt->Norml2() << endl;
+                cout << "2. In Newton::GetGradient(), l2 norm of  phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
         }
 
         // **************************************************************************************
@@ -1293,35 +1541,38 @@ public:
         b2->FormSystemMatrix(null_array, *B2);
         *B2 *= -1.0*dt;
 
+        jac_k->SetBlock(0, 0, A0);
+        jac_k->SetBlock(0, 1, B1);
+        jac_k->SetBlock(0, 2, B2);
+
+        Vector approx_Residual(true_vsize * 3);
+        jac_k->Mult(phi_dc1dt_dc2dt, approx_Residual);
+        cout << "l2 norm of approximate Residual: " << approx_Residual.Norml2() << endl;
+        MFEM_ABORT("Stop for checking Jacobian.");
 
         // **************************************************************************************
         //                                2. NP1 方程的 Jacobian
         // **************************************************************************************
-        buildh1_dth1(c1, dc1dt);
+        buildh1_dth1(dc1dt);
         h1_dth1->FormSystemMatrix(null_array, *H1_dtH1);
+        jac_k->SetBlock(1, 0, H1_dtH1);
 
         buildm1_dta1(phi);
         m1_dta1->FormSystemMatrix(ess_tdof_list, *M1_dtA1);
+        jac_k->SetBlock(1, 1, M1_dtA1);
 
 
         // **************************************************************************************
         //                                3. NP2 方程的 Jacobian
         // **************************************************************************************
-        buildh2_dth2(c2, dc2dt);
+        buildh2_dth2(dc2dt);
         h2_dth2->FormSystemMatrix(null_array, *H2_dtH2);
 
         buildm2_dta2(phi);
         m2_dta2->FormSystemMatrix(ess_tdof_list, *M2_dtA2);
-
-        delete jac_k;
-        jac_k = new BlockOperator(true_offset);
-        jac_k->SetBlock(0, 0, A0);
-        jac_k->SetBlock(0, 1, B1);
-        jac_k->SetBlock(0, 2, B2);
-        jac_k->SetBlock(1, 0, H1_dtH1);
-        jac_k->SetBlock(1, 1, M1_dtA1);
         jac_k->SetBlock(2, 0, H2_dtH2);
         jac_k->SetBlock(2, 2, M2_dtA2);
+
         return *jac_k;
     }
 
@@ -1365,7 +1616,7 @@ private:
     }
 
     // (c1, v1) + dt D1 (grad(c1) + z1 c1 grad(phi), grad(v1)), given phi
-    void buildm1_dta1(ParGridFunction* phi) const
+    void buildm1_dta1(const ParGridFunction* phi_) const
     {
         if (m1_dta1 != NULL) { delete m1_dta1; }
 
@@ -1377,13 +1628,13 @@ private:
         m1_dta1->AddDomainIntegrator(new MassIntegrator);
         // dt D1 (grad(c1) + z1 c1 grad(phi), grad(v1)), given phi
         m1_dta1->AddDomainIntegrator(new DiffusionIntegrator(dt_D1));
-        m1_dta1->AddDomainIntegrator(new GradConvection_BLFIntegrator(*phi, &dt_D1_z1));
+        m1_dta1->AddDomainIntegrator(new GradConvection_BLFIntegrator(*phi_, &dt_D1_z1));
 
         m1_dta1->Assemble(skip_zero_entries);
     }
 
     // (c2, v2) + dt D2 (grad(c2) + z2 c2 grad(phi), grad(v2)), given phi
-    void buildm2_dta2(ParGridFunction* phi) const
+    void buildm2_dta2(const ParGridFunction* phi_) const
     {
         if (m2_dta2 != NULL) { delete m2_dta2; }
 
@@ -1395,7 +1646,7 @@ private:
         m2_dta2->AddDomainIntegrator(new MassIntegrator);
         // dt D2 (grad(c2) + z2 c2 grad(phi), grad(v2)), given phi
         m2_dta2->AddDomainIntegrator(new DiffusionIntegrator(dt_D2));
-        m2_dta2->AddDomainIntegrator(new GradConvection_BLFIntegrator(*phi, &dt_D2_z2));
+        m2_dta2->AddDomainIntegrator(new GradConvection_BLFIntegrator(*phi_, &dt_D2_z2));
 
         m2_dta2->Assemble(skip_zero_entries);
     }
@@ -1425,7 +1676,7 @@ private:
     }
 
     // D1 (z1 c1 grad(dphi), grad(v1)), given c1
-    void buildh1(const ParGridFunction* c1) const
+    void buildh1() const
     {
         if (h1 != NULL) { delete h1; }
 
@@ -1440,11 +1691,11 @@ private:
     }
 
     // D1 (z1 (c1 + dt dc1dt) grad(dphi), grad(v1)), given c1 and dc1dt
-    void buildh1_dth1(const ParGridFunction* c1, ParGridFunction* dc1dt) const
+    void buildh1_dth1(const ParGridFunction* dc1dt_) const
     {
         if (h1_dth1 != NULL) { delete h1_dth1; }
 
-        GridFunctionCoefficient c1_coeff(c1), dc1dt_coeff(dc1dt);
+        GridFunctionCoefficient c1_coeff(c1), dc1dt_coeff(dc1dt_);
         ProductCoefficient D1_z1_c1_coeff(D_K_prod_v_K, c1_coeff);
         ProductCoefficient dt_dc1dt_coeff(dt, dc1dt_coeff);
         ProductCoefficient D1_z1_dt_dc1dt_coeff(D_K_prod_v_K, dt_dc1dt_coeff);
@@ -1459,7 +1710,7 @@ private:
     }
 
     // D2 (z2 c2 grad(dphi), grad(v2)), given c2
-    void buildh2(const ParGridFunction* c2) const
+    void buildh2() const
     {
         if (h2 != NULL) { delete h2; }
 
@@ -1474,11 +1725,11 @@ private:
     }
 
     // D2 (z2 (c2 + dt dc2dt) grad(dphi), grad(v2)), given c2 and dc2dt
-    void buildh2_dth2(const ParGridFunction* c2, ParGridFunction* dc2dt) const
+    void buildh2_dth2(const ParGridFunction* dc2dt_) const
     {
         if (h2_dth2 != NULL) { delete h2_dth2; }
 
-        GridFunctionCoefficient c2_coeff(c2), dc2dt_coeff(dc2dt);
+        GridFunctionCoefficient c2_coeff(c2), dc2dt_coeff(dc2dt_);
         ProductCoefficient D2_z2_c2_coeff(D_Cl_prod_v_Cl, c2_coeff);
         ProductCoefficient dt_dc2dt_coeff(dt, dc2dt_coeff);
         ProductCoefficient D2_z2_dt_dc2dt_coeff(D_Cl_prod_v_Cl, dt_dc2dt_coeff);
@@ -1491,15 +1742,14 @@ private:
 
         h2_dth2->Assemble(skip_zero_entries);
     }
-
 };
 class PNP_Box_Newton_CG_TimeDependent: public TimeDependentOperator
 {
 private:
     ParFiniteElementSpace* fes;
 
-    BlockVector* phi_dc1dt_dc2dt;
     PNP_Box_Newton_CG_Operator* oper;
+    PNP_Newton_BCHandler* bchandler;
     PetscNonlinearSolver* newton_solver;
     PetscPreconditionerFactory *jac_factory;
 
@@ -1521,21 +1771,24 @@ public:
         fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
         oper          = new PNP_Box_Newton_CG_Operator(fes, true_vsize, true_offset, ess_tdof_list);
+        bchandler     = new PNP_Newton_BCHandler(PetscBCHandler::CONSTANT, ess_tdof_list, 3, true_vsize); // 3表示3个变量:phi,c1,c2
         jac_factory   = new PreconditionerFactory(*oper, prec_type);
         newton_solver = new PetscNonlinearSolver(fes->GetComm(), *oper, "newton_");
         newton_solver->SetPreconditionerFactory(jac_factory);
+//        newton_solver->SetBCHandler(bchandler);
         newton_solver->iterative_mode = true;
     }
     ~PNP_Box_Newton_CG_TimeDependent()
     {
         delete oper;
-        delete newton_solver;
         delete jac_factory;
-        delete phi_dc1dt_dc2dt;
+        delete newton_solver;
     }
 
     virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
     {
+        bool show_more = false;
+
         // 求解新的 old_phi 从而更新 phic1c2_ptr, 最终更新 phic1c2
         Vector* phic1c2_ptr = (Vector*) &phic1c2;
         old_phi.MakeTRef(fes, *phic1c2_ptr, true_offset[0]);
@@ -1544,11 +1797,22 @@ public:
         old_phi.SetFromTrueVector(); // 下面要用到PrimalVector, 而不是TrueVector
         old_c1 .SetFromTrueVector();
         old_c2 .SetFromTrueVector();
-        if (hahahaha) {
-            cout << "l2 norm of old_phi: " <<old_phi.Norml2() << endl;
-            cout << "l2 norm of  old_c1: " <<  old_c1.Norml2() << endl;
-            cout << "l2 norm of  old_c2: " <<  old_c2.Norml2() << endl;
-            cout << "l2 norm of phic1c2: " << phic1c2.Norml2() << endl;
+        if (show_more) {
+            cout.precision(14);
+            if (rank == 0) {
+                cout << "\n1. In ImplicitSolve(), l2 norm of old_phi: " << old_phi.Norml2() << endl;
+                cout << "1. In ImplicitSolve(), l2 norm of  old_c1: " << old_c1.Norml2() << endl;
+                cout << "1. In ImplicitSolve(), l2 norm of  old_c2: " << old_c2.Norml2() << endl;
+                cout << "1. In ImplicitSolve(), l2 norm of phic1c2: " << phic1c2.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n1. In ImplicitSolve(), l2 norm of old_phi: " << old_phi.Norml2() << endl;
+                cout << "1. In ImplicitSolve(), l2 norm of  old_c1: " << old_c1.Norml2() << endl;
+                cout << "1. In ImplicitSolve(), l2 norm of  old_c2: " << old_c2.Norml2() << endl;
+                cout << "1. In ImplicitSolve(), l2 norm of phic1c2: " << phic1c2.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
         }
 
         // 下面通过求解 dc1dt, dc2dt 从而更新 dphic1c2_dt
@@ -1559,66 +1823,101 @@ public:
         phi_exact  .SetTime(t); // t在ODE里面已经变成下一个时刻了(要求解的时刻)
         dc1dt_exact.SetTime(t);
         dc2dt_exact.SetTime(t);
-        old_phi.ProjectBdrCoefficient(  phi_exact, ess_bdr); // 设定解的边界条件
-        dc1dt  .ProjectBdrCoefficient(dc1dt_exact, ess_bdr);
-        dc2dt  .ProjectBdrCoefficient(dc2dt_exact, ess_bdr);
-
+//        old_phi.ProjectBdrCoefficient(  phi_exact, ess_bdr); // 设定解的边界条件
+//        dc1dt  .ProjectBdrCoefficient(dc1dt_exact, ess_bdr);
+//        dc2dt  .ProjectBdrCoefficient(dc2dt_exact, ess_bdr);
+        old_phi.ProjectCoefficient(  phi_exact); // 设定解的边界条件
+        dc1dt  .ProjectCoefficient(dc1dt_exact);
+        dc2dt  .ProjectCoefficient(dc2dt_exact);
         old_phi.SetTrueVector();
-        old_phi.SetFromTrueVector();
         dc1dt.SetTrueVector();
-        dc1dt.SetFromTrueVector();
         dc2dt.SetTrueVector();
-        dc2dt.SetFromTrueVector();
 
-        if (hahahaha) {
-            cout.precision(14);
-            cout << "time: " << t << endl;
-            ess_bdr.Print(cout << "ess_bdr: " , 10);
-            cout << "l2 norm of   phi: " <<old_phi.Norml2() << endl;
-            cout << "l2 norm of dc1dt: " <<  dc1dt.Norml2() << endl;
-            cout << "l2 norm of dc2dt: " <<  dc2dt.Norml2() << endl;
+        if (show_more) {
+            if (rank == 0) {
+                cout << "\n2. In ImplicitSolve(), l2 norm of old_phi: " << old_phi.Norml2() << endl;
+                cout << "2. In ImplicitSolve(), l2 norm of  old_c1: " << old_c1.Norml2() << endl;
+                cout << "2. In ImplicitSolve(), l2 norm of  old_c2: " << old_c2.Norml2() << endl;
+                cout << "2. In ImplicitSolve(), l2 norm of phic1c2: " << phic1c2.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n2. In ImplicitSolve(), l2 norm of old_phi: " << old_phi.Norml2() << endl;
+                cout << "2. In ImplicitSolve(), l2 norm of  old_c1: " << old_c1.Norml2() << endl;
+                cout << "2. In ImplicitSolve(), l2 norm of  old_c2: " << old_c2.Norml2() << endl;
+                cout << "2. In ImplicitSolve(), l2 norm of phic1c2: " << phic1c2.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
         }
 
         // !!!引用 phi, dc1dt, dc2dt 的 TrueVector, 使得 phi_dc1dt_dc2dt 所指的内存块就是phi, dc1dt, dc2dt的内存块.
         // 从而在Newton求解器中对 phi_dc1dt_dc2dt 的修改就等同于对phi, dc1dt, dc2dt的修改, 最终达到了更新解的目的.
-        phi_dc1dt_dc2dt = new BlockVector(true_offset);
-        old_phi.SetTrueVector();
-        dc1dt  .SetTrueVector();
-        dc2dt  .SetTrueVector();
-//        phi_dc1dt_dc2dt->MakeRef(old_phi.GetTrueVector(), true_offset[0], true_vsize); // fff 确保指向相同的内存,true_offset[0]为0
-//        phi_dc1dt_dc2dt->MakeRef(  dc1dt.GetTrueVector(), true_offset[1], true_vsize);
-//        phi_dc1dt_dc2dt->MakeRef(  dc2dt.GetTrueVector(), true_offset[2], true_vsize);
+        auto* phi_dc1dt_dc2dt = new BlockVector(true_offset);
+        *phi_dc1dt_dc2dt = 0.0;
         phi_dc1dt_dc2dt->SetVector(old_phi.GetTrueVector(), true_offset[0]);
         phi_dc1dt_dc2dt->SetVector(  dc1dt.GetTrueVector(), true_offset[1]);
         phi_dc1dt_dc2dt->SetVector(  dc2dt.GetTrueVector(), true_offset[2]);
 
         oper->UpdateParameters(t, dt, &old_c1, &old_c2); // 传入当前解
+
+//        bchandler->SetBoundarValues(*phi_dc1dt_dc2dt); // 设定BCHandler
+
         Vector zero_vec;
         if (1) {
             cout.precision(14);
-            cout << "l2 norm of   phi: " <<old_phi.Norml2() << endl;
-            cout << "l2 norm of dc1dt: " <<  dc1dt.Norml2() << endl;
-            cout << "l2 norm of dc2dt: " <<  dc2dt.Norml2() << endl;
-            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << '\n' << endl;
+            if (rank == 0) {
+                cout << "\n5. In ImplicitSolve(), l2 norm of old_phi: " << old_phi.Norml2() << endl;
+                cout << "5. In ImplicitSolve(), l2 norm of  dc1dt: " << dc1dt.Norml2() << endl;
+                cout << "5. In ImplicitSolve(), l2 norm of  dc2dt: " << dc2dt.Norml2() << endl;
+                cout << "5. l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n5. In ImplicitSolve(), l2 norm of old_phi: " << old_phi.Norml2() << endl;
+                cout << "5. In ImplicitSolve(), l2 norm of  dc1dt: " << dc1dt.Norml2() << endl;
+                cout << "5. In ImplicitSolve(), l2 norm of  dc2dt: " << dc2dt.Norml2() << endl;
+                cout << "5. l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+//            MFEM_ABORT("fff");
         }
-
         newton_solver->Mult(zero_vec, *phi_dc1dt_dc2dt);
+        if (!newton_solver->GetConverged()) MFEM_ABORT("Newton solver did not converge!!!");
+
+        if (show_more) {
+            if (rank == 0) {
+                cout << "\n4. l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n4. l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
 
         old_phi.MakeTRef(fes, *phi_dc1dt_dc2dt, true_offset[0]);
         dc1dt  .MakeTRef(fes, *phi_dc1dt_dc2dt, true_offset[1]);
         dc2dt  .MakeTRef(fes, *phi_dc1dt_dc2dt, true_offset[2]);
-        old_phi.SetTrueVector();
-        dc1dt  .SetTrueVector();
-        dc2dt  .SetTrueVector();
-        old_phi.SetFromTrueVector();
-        dc1dt  .SetFromTrueVector();
-        dc2dt  .SetFromTrueVector();
-        if (1) {
-            cout.precision(14);
-            cout << "l2 norm of   phi: " <<old_phi.Norml2() << endl;
-            cout << "l2 norm of dc1dt: " <<  dc1dt.Norml2() << endl;
-            cout << "l2 norm of dc2dt: " <<  dc2dt.Norml2() << endl;
-            cout << "l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << '\n' << endl;
+        old_phi.SetFromTrueDofs(phi_dc1dt_dc2dt->GetBlock(0));
+        dc1dt  .SetFromTrueDofs(phi_dc1dt_dc2dt->GetBlock(1));
+        dc2dt  .SetFromTrueDofs(phi_dc1dt_dc2dt->GetBlock(2));
+        delete phi_dc1dt_dc2dt;
+        if (show_more) {
+            if (rank == 0) {
+                cout << "\n5. In ImplicitSolve(), l2 norm of old_phi: " << old_phi.Norml2() << endl;
+                cout << "5. In ImplicitSolve(), l2 norm of  old_c1: " << old_c1.Norml2() << endl;
+                cout << "5. In ImplicitSolve(), l2 norm of  old_c2: " << old_c2.Norml2() << endl;
+                cout << "5. l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "\n5. In ImplicitSolve(), l2 norm of old_phi: " << old_phi.Norml2() << endl;
+                cout << "5. In ImplicitSolve(), l2 norm of  old_c1: " << old_c1.Norml2() << endl;
+                cout << "5. In ImplicitSolve(), l2 norm of  old_c2: " << old_c2.Norml2() << endl;
+                cout << "5. l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+//            MFEM_ABORT("fff");
         }
     }
 };
@@ -1696,6 +1995,22 @@ public:
         c2_gf->ProjectCoefficient(c2_exact);
         c2_gf->SetTrueVector();
         c2_gf->SetFromTrueVector();
+        if (0) {
+            if (rank == 0) {
+                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of old_phi: " << phi_gf->Norml2() << endl;
+                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of  old_c1: " << c1_gf->Norml2() << endl;
+                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of  old_c2: " << c2_gf->Norml2() << endl;
+                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of old_phi: " << phi_gf->Norml2() << endl;
+                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of  old_c1: " << c1_gf->Norml2() << endl;
+                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of  old_c2: " << c2_gf->Norml2() << endl;
+                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
 
         if (strcmp(Linearize, "gummel") == 0)
         {
@@ -1762,7 +2077,8 @@ public:
     {
         delete fec; delete fes;
         delete phi_gf; delete c1_gf; delete c2_gf; delete phic1c2;
-        delete oper; delete ode_solver;
+        delete oper;
+        delete ode_solver;
         if (paraview) delete pd;
     }
 

@@ -511,6 +511,7 @@ protected:
    enum Type bctype;
    bool setup;
 
+   // eval_g 就是用来保存 eval_t 时刻 this->Eval() 算出来的值
    double eval_t;
    double eval_t_cached;
    Vector eval_g;

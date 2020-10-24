@@ -7,15 +7,14 @@ using namespace std;
 using namespace mfem;
 
 //#define SELF_VERBOSE
-bool hahahaha = 0;
 
 int p_order                     = 1; //有限元基函数的多项式次数
 const char* mesh_file           = "../pnp_data/4_4_4_translate.msh";
-const char* Linearize           = "gummel"; // newton, gummel
-const char* Discretize          = "dg"; // cg, dg
+const char* Linearize           = "newton"; // newton, gummel
+const char* Discretize          = "cg"; // cg, dg
 const char* prec_type           = "block"; // preconditioner for Newton discretization: block, uzawa, simple
 const char* AdvecStable         = "none"; // none, eafe, supg
-const char* options_src         = "../pnp_data/gummel_dg_lu";
+const char* options_src         = "../pnp_data/newton_lu";
 bool zero_initial               = true; // 非线性迭代的初值是否为0
 double initTol                  = 1e-3; // 为得到非线性迭代的初值所需Gummel迭代
 bool local_conservation         = false;
@@ -26,14 +25,14 @@ int max_newton                  = 20;
 double relax                    = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 int ode_type                    = 1; // 1: backward Euler; 11: forward Euler
 double t_init                   = 0.0; // 初始时间
-double t_final                  = 0.4; // 最后时间
+double t_final                  = 0.2; // 最后时间
 double t_stepsize               = 0.1; // 时间步长
 int refine_mesh                 = 0; // 初始网格加密次数
 int refine_time                 = 0;   // "加密时间次数"
 double time_scale               = 1.0; // 类似网格加密(h -> 0.5 * h): dt -> time_scale * dt
 bool TimeConvergRate            = false;
 bool SpaceConvergRate           = false; // 利用解析解计算误差阶
-bool SpaceConvergRate_Change_dt = true; // 为了计算误差: error = c1 dt + c2 h^2, 是否把dt设置为h^2的倍数?
+bool SpaceConvergRate_Change_dt = false; // 为了计算误差: error = c1 dt + c2 h^2, 是否把dt设置为h^2的倍数?
 double Change_dt_factor         = 1; // dt = factor * h^2
 const int skip_zero_entries     = 0; // 为了保证某些矩阵的sparsity pattern一致
 int mpi_debug                   = 1;

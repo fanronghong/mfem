@@ -35,7 +35,7 @@ public:
     Array<double> local_peclet; // for more info
 
 public:
-    GradConvection_BLFIntegrator(GridFunction& w_, Coefficient* Q_, Coefficient* diff_=NULL): Q(Q_), diff(diff_)
+    GradConvection_BLFIntegrator(const GridFunction& w_, Coefficient* Q_, Coefficient* diff_=NULL): Q(Q_), diff(diff_)
     { grad_w = new GradientGridFunctionCoefficient(&w_); }
     GradConvection_BLFIntegrator(VectorCoefficient* adv_, Coefficient* Q_, Coefficient* diff_=NULL)
         : Q(Q_), adv(adv_), diff(diff_) { param = true; }
