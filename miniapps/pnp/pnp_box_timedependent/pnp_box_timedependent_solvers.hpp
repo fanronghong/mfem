@@ -572,7 +572,7 @@ public:
 
             PetscLinearSolver* poisson_solver = new PetscLinearSolver(*A0_E0_S0_P0, false, "phi_");
             poisson_solver->Mult(*temp_b0, *temp_x0);
-            a0_e0_s0_p0->RecoverFEMSolution(*temp_x0, *l0, phi_Gummel);
+            a0_e0_s0_p0->RecoverFEMSolution(*temp_x0, *l0, phi_Gummel); // fff不能用迭代法amg求解, 只能用直接法. 经检测: 应该是edge和symmetry导致矩阵难解
             delete l0;
             delete poisson_solver;
 
