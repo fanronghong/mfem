@@ -10,8 +10,8 @@ using namespace mfem;
 
 int p_order                     = 1; //有限元基函数的多项式次数
 const char* mesh_file           = "../pnp_data/4_4_4_translate.msh";
-const char* Linearize           = "newton"; // newton, gummel
-const char* Discretize          = "cg"; // cg, dg
+const char* Linearize           = "gummel"; // newton, gummel
+const char* Discretize          = "dg"; // cg, dg
 const char* prec_type           = "block"; // preconditioner for Newton discretization: block, uzawa, simple
 const char* AdvecStable         = "none"; // none, eafe, supg
 const char* options_src         = "../pnp_data/newton_amg";
@@ -25,7 +25,7 @@ int max_newton                  = 20;
 double relax                    = 0.2; //松弛因子: relax * phi^{k-1} + (1 - relax) * phi^k -> phi^k, 浓度 c_2^k 做同样处理. 取0表示不用松弛方法.
 int ode_type                    = 1; // 1: backward Euler; 11: forward Euler
 double t_init                   = 0.0; // 初始时间
-double t_final                  = 0.04; // 最后时间
+double t_final                  = 0.02; // 最后时间
 double t_stepsize               = 0.01; // 时间步长
 int refine_mesh                 = 0; // 初始网格加密次数
 int refine_time                 = 0;   // "加密时间次数"
@@ -50,7 +50,7 @@ const int back_attr             = 4;
 const int right_attr            = 3;
 
 const int Gummel_max_iters      = 50;
-double Gummel_rel_tol           = 1e-10;
+double Gummel_rel_tol           = 1e-8;
 const double TOL                = 1e-20;
 
 /* 可以定义如下模型参数: 前三个宏定义参数在其他头文件定义

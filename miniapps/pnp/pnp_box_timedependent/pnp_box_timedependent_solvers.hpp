@@ -22,6 +22,7 @@
 #include "../utils/PNP_Preconditioners.hpp"
 #include "../utils/PNP_BCHandler.hpp"
 
+
 class PNP_Box_Gummel_CG_TimeDependent: public TimeDependentOperator
 {
 private:
@@ -429,7 +430,7 @@ private:
 };
 
 
-class PNP_Box_Gummel_DG_TimeDependent: public TimeDependentOperator
+class PNP_Box_Gummel_DG_Operator: public Operator
 {
 private:
     ParFiniteElementSpace* fes;
@@ -437,22 +438,26 @@ private:
 //    H1_FECollection* h1_fec;
 //    ParFiniteElementSpace* h1;
 
-    mutable ParBilinearForm *a0_e0_s0_p0, *m1_dta1_dte1_dts1_dtp1, *m2_dta2_dte2_dts2_dtp2,
-                            *a1, *e1, *s1, *p1,
-                            *a2, *e2, *s2, *p2,
-                            *b1, *b2;
-    mutable HypreParMatrix *A0_E0_S0_P0,
-                           *M1_dtA1_dtE1_dtS1_dtP1,
-                           *M2_dtA2_dtE2_dtS2_dtP2;
-
-    Vector *temp_x0, *temp_b0, *temp_x1, *temp_b1, *temp_x2, *temp_b2;
+    ParGridFunction *c1, *c2;
+    double t, dt;
     int true_vsize;
     mutable Array<int> true_offset, ess_bdr, null_array; // 在H1空间中存在ess_tdof_list, 在DG空间中不存在
+
+    mutable ParBilinearForm *a0_e0_s0_p0, *m1_dta1_dte1_dts1_dtp1, *m2_dta2_dte2_dts2_dtp2,
+            *a1, *e1, *s1, *p1,
+            *a2, *e2, *s2, *p2,
+            *b1, *b2;
+    mutable HypreParMatrix *A0_E0_S0_P0,
+            *M1_dtA1_dtE1_dtS1_dtP1,
+            *M2_dtA2_dtE2_dtS2_dtP2;
+
+    Vector *temp_x0, *temp_b0, *temp_x1, *temp_b1, *temp_x2, *temp_b2;
+
     int num_procs, rank;
 
 public:
-    PNP_Box_Gummel_DG_TimeDependent(int truesize, Array<int>& offset, Array<int>& ess_bdr_, ParFiniteElementSpace* fes_, double time)
-            : TimeDependentOperator(3*truesize, time), true_vsize(truesize), true_offset(offset), ess_bdr(ess_bdr_), fes(fes_),
+    PNP_Box_Gummel_DG_Operator(ParFiniteElementSpace* fes_, int truevsize, Array<int>& offset, Array<int>& ess_bdr_)
+            : Operator(3 * truevsize), fes(fes_), true_vsize(truevsize), true_offset(offset), ess_bdr(ess_bdr_),
               a0_e0_s0_p0(NULL),
               a1(NULL), e1(NULL), s1(NULL), p1(NULL), m1_dta1_dte1_dts1_dtp1(NULL),
               a2(NULL), e2(NULL), s2(NULL), p2(NULL), m2_dta2_dte2_dts2_dtp2(NULL),
@@ -461,8 +466,7 @@ public:
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-//         fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list); // 在H1空间中存在, 在DG空间中不存在
-
+//        fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list); // 在H1空间中存在, 在DG空间中不存在
 //        h1_fec = new H1_FECollection(p_order, fes->GetParMesh()->Dimension());
 //        h1 = new ParFiniteElementSpace(fes->GetParMesh(), h1_fec);
 
@@ -477,8 +481,9 @@ public:
         temp_x2 = new Vector;
         temp_b2 = new Vector;
 
+
     }
-    virtual ~PNP_Box_Gummel_DG_TimeDependent()
+    ~PNP_Box_Gummel_DG_Operator()
     {
         delete b1; delete b2; delete a1; delete a2;
         delete e1; delete e2;
@@ -493,31 +498,26 @@ public:
         delete temp_x0; delete temp_b0;
         delete temp_x1; delete temp_b1;
         delete temp_x2; delete temp_b2;
+
     }
 
-    virtual void Mult(const Vector &phic1c2, Vector &dphic1c2_dt) const
+    void UpdateParameters(double t_, double dt_, ParGridFunction* c1_, ParGridFunction* c2_)
     {
-        MFEM_ABORT("Not supported now.");
+        t = t_;
+        dt = dt_;
+        c1 = c1_;
+        c2 = c2_;
     }
 
-    virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
+    virtual void Mult(const Vector& b, Vector& phi_dc1dt_dc2dt) const
     {
-        dphic1c2_dt = 0.0;
-
-        Vector* phic1c2_ptr = (Vector*) &phic1c2;
-        ParGridFunction old_phi, old_c1, old_c2; // 上一个时间步的解(已知)
-        // 求解新的 old_phi 从而更新 phic1c2_ptr, 最终更新 phic1c2
-        old_phi.MakeTRef(fes, *phic1c2_ptr, true_offset[0]);
-        old_c1 .MakeTRef(fes, *phic1c2_ptr, true_offset[1]);
-        old_c2 .MakeTRef(fes, *phic1c2_ptr, true_offset[2]);
-        old_phi.SetFromTrueVector(); // 下面要用到PrimalVector, 而不是TrueVector
-        old_c1 .SetFromTrueVector();
-        old_c2 .SetFromTrueVector();
-
-        ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi_dt
-        // 下面通过求解 dc1dt, dc2dt 从而更新 dphic1c2_dt
-        dc1dt.MakeTRef(fes, dphic1c2_dt, true_offset[1]);
-        dc2dt.MakeTRef(fes, dphic1c2_dt, true_offset[2]);
+        ParGridFunction phi, dc1dt, dc2dt;
+        phi  .MakeTRef(fes, phi_dc1dt_dc2dt, true_offset[0]);
+        dc1dt.MakeTRef(fes, phi_dc1dt_dc2dt, true_offset[1]);
+        dc2dt.MakeTRef(fes, phi_dc1dt_dc2dt, true_offset[2]);
+        phi  .SetFromTrueVector(); // 下面要用到 PrimalVector, 而不是 TrueVector
+        dc1dt.SetFromTrueVector();
+        dc2dt.SetFromTrueVector();
 
         // 变量*_Gummel用于Gummel迭代过程中
         ParGridFunction phi_Gummel(fes), dc1dt_Gummel(fes), dc2dt_Gummel(fes);
@@ -562,8 +562,8 @@ public:
 
             buildb1();
             buildb2();
-            b1->AddMult(old_c1, *l0, 1.0);    // l0 = l0 + b1 c1
-            b2->AddMult(old_c2, *l0, 1.0);    // l0 = l0 + b1 c1 + b2 c2
+            b1->AddMult(*c1, *l0, 1.0);    // l0 = l0 + b1 c1
+            b2->AddMult(*c2, *l0, 1.0);    // l0 = l0 + b1 c1 + b2 c2
             b1->AddMult(dc1dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt
             b2->AddMult(dc2dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
 
@@ -582,14 +582,16 @@ public:
             // **************************************************************************************
             diff  = 0.0;
             diff += phi_Gummel;
-            diff -= old_phi; // 用到的是old_phi的PrimalVector
+            diff -= phi; // 用到的是old_phi的PrimalVector
             double tol = diff.ComputeL2Error(zero) / phi_Gummel.ComputeL2Error(zero); // 这里不能把diff设为Vector类型, 如果是Vector类型, 这里计算Norml2()时各个进程得到的值不一样
-            old_phi = phi_Gummel; // 算完本次Gummel迭代的tol就可以更新phi_Gummel
+            phi = phi_Gummel; // 算完本次Gummel迭代的tol就可以更新phi_Gummel
             if (rank == 0 && verbose >= 2) {
                 cout << "Gummel step: " << gummel_step << ", Relative Tol: " << tol << endl;
             }
-            if (tol < Gummel_rel_tol) { // Gummel迭代停止
+            if (tol < Gummel_rel_tol || gummel_step >= Gummel_max_iters) { // Gummel迭代停止
                 last_gummel_step = true;
+                if (gummel_step >= Gummel_max_iters && rank == 0)
+                MFEM_ABORT("Gummel iteration not converge!!!");
             }
 
             phi_Gummel.ExchangeFaceNbrData(); // 后面有可能利用其在内部边界积分, 而相邻单元有可能不再同一个进程
@@ -618,14 +620,14 @@ public:
 
             builda1(phi_Gummel);
             builde1(phi_Gummel);
-            a1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1
+            a1->AddMult(*c1, *l1, -1.0); // l1 = l1 - a1 c1
 //            e1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1 - e1 c1. error(下同): https://github.com/mfem/mfem/issues/1830
             {
                 auto *e1_tdof = e1->ParallelAssemble();
                 auto *l1_tdof = l1->ParallelAssemble();
                 auto *Restriction = e1->GetRestriction(); // ref: https://mfem.org/pri-dual-vec/
 
-                e1_tdof->Mult(-1.0, old_c1.GetTrueVector(), 1.0, *l1_tdof);
+                e1_tdof->Mult(-1.0, c1->GetTrueVector(), 1.0, *l1_tdof);
                 Restriction->MultTranspose(*l1_tdof, *l1);
 
                 delete e1_tdof;
@@ -640,7 +642,7 @@ public:
                 auto* l1_tdof = l1->ParallelAssemble();
                 auto* Restriction = s1->GetRestriction();
 
-                s1_tdof->Mult(1.0, old_c1.GetTrueVector(), 1.0, *l1_tdof);
+                s1_tdof->Mult(1.0, c1->GetTrueVector(), 1.0, *l1_tdof);
                 Restriction->MultTranspose(*l1_tdof, *l1);
 
                 delete s1_tdof;
@@ -654,14 +656,14 @@ public:
                 auto* l1_tdof = l1->ParallelAssemble();
                 auto* Restriction = p1->GetRestriction();
 
-                p1_tdof->Mult(1.0, old_c1.GetTrueVector(), 1.0, *l1_tdof);
+                p1_tdof->Mult(1.0, c1->GetTrueVector(), 1.0, *l1_tdof);
                 Restriction->MultTranspose(*l1_tdof, *l1);
 
                 delete p1_tdof;
                 delete l1_tdof;
             }
 
-            buildm1_dta1_dte1_dts1_dtp1(dt, phi_Gummel);
+            buildm1_dta1_dte1_dts1_dtp1(phi_Gummel);
             m1_dta1_dte1_dts1_dtp1->FormLinearSystem(null_array, dc1dt_Gummel, *l1, *M1_dtA1_dtE1_dtS1_dtP1, *temp_x1, *temp_b1);
 
             PetscLinearSolver* np1_solver = new PetscLinearSolver(*M1_dtA1_dtE1_dtS1_dtP1, false, "np1_");
@@ -694,14 +696,14 @@ public:
 
             builda2(phi_Gummel);
             builde2(phi_Gummel);
-            a2->AddMult(old_c2, *l2, -1.0); // l2 = l2 - a2 c2
+            a2->AddMult(*c2, *l2, -1.0); // l2 = l2 - a2 c2
 //            e2->AddMult(old_c2, *l2, -1.0); // l2 = l2 - a2 c2 - e2 c2
             {
                 auto *e2_tdof = e2->ParallelAssemble();
                 auto *l2_tdof = l2->ParallelAssemble();
                 auto *Restriction = e2->GetRestriction(); // ref: https://mfem.org/pri-dual-vec/
 
-                e2_tdof->Mult(-1.0, old_c2.GetTrueVector(), 1.0, *l2_tdof);
+                e2_tdof->Mult(-1.0, c2->GetTrueVector(), 1.0, *l2_tdof);
                 Restriction->MultTranspose(*l2_tdof, *l2);
 
                 delete e2_tdof;
@@ -716,7 +718,7 @@ public:
                 auto* l2_tdof = l2->ParallelAssemble();
                 auto* Restriction = s2->GetRestriction();
 
-                s2_tdof->Mult(1.0, old_c2.GetTrueVector(), 1.0, *l2_tdof);
+                s2_tdof->Mult(1.0, c2->GetTrueVector(), 1.0, *l2_tdof);
                 Restriction->MultTranspose(*l2_tdof, *l2);
 
                 delete s2_tdof;
@@ -730,14 +732,14 @@ public:
                 auto* l2_tdof = l2->ParallelAssemble();
                 auto* Restriction = p2->GetRestriction();
 
-                p2_tdof->Mult(1.0, old_c2.GetTrueVector(), 1.0, *l2_tdof);
+                p2_tdof->Mult(1.0, c2->GetTrueVector(), 1.0, *l2_tdof);
                 Restriction->MultTranspose(*l2_tdof, *l2);
 
                 delete p2_tdof;
                 delete l2_tdof;
             }
 
-            buildm2_dta2_dte2_dts2_dtp2(dt, phi_Gummel);
+            buildm2_dta2_dte2_dts2_dtp2(phi_Gummel);
             m2_dta2_dte2_dts2_dtp2->FormLinearSystem(null_array, dc2dt_Gummel, *l2, *M2_dtA2_dtE2_dtS2_dtP2, *temp_x2, *temp_b2);
 
             PetscLinearSolver* np2_solver = new PetscLinearSolver(*M2_dtA2_dtE2_dtS2_dtP2, false, "np2_");
@@ -748,13 +750,13 @@ public:
         }
 
         // 用最终Gummel迭代的解更新要求解的3个未知量
-        old_phi = phi_Gummel;
-        dc1dt   = dc1dt_Gummel;
-        dc2dt   = dc2dt_Gummel;
+        phi   = phi_Gummel; // 这3步可以放到Gummel迭代里面去
+        dc1dt = dc1dt_Gummel;
+        dc2dt = dc2dt_Gummel;
         // 而我们要返回的TrueVector, 而不是PrimalVector
-        old_phi.SetTrueVector();
-        dc1dt  .SetTrueVector();
-        dc2dt  .SetTrueVector();
+        phi  .SetTrueVector();
+        dc1dt.SetTrueVector();
+        dc2dt.SetTrueVector();
     }
 
 private:
@@ -976,7 +978,7 @@ private:
         a0_e0_s0_p0->Assemble(skip_zero_entries);
     }
 
-    void buildm1_dta1_dte1_dts1_dtp1(double dt, ParGridFunction& phi) const
+    void buildm1_dta1_dte1_dts1_dtp1(ParGridFunction& phi) const
     {
         if (m1_dta1_dte1_dts1_dtp1 != NULL) { delete m1_dta1_dte1_dts1_dtp1; }
 
@@ -1031,7 +1033,7 @@ private:
         m1_dta1_dte1_dts1_dtp1->Assemble(skip_zero_entries);
     }
 
-    void buildm2_dta2_dte2_dts2_dtp2(double dt, ParGridFunction& phi) const
+    void buildm2_dta2_dte2_dts2_dtp2(ParGridFunction& phi) const
     {
         if (m2_dta2_dte2_dts2_dtp2 != NULL) { delete m2_dta2_dte2_dts2_dtp2; }
         phi.ExchangeFaceNbrData();
@@ -1083,6 +1085,71 @@ private:
         }
 
         m2_dta2_dte2_dts2_dtp2->Assemble(skip_zero_entries);
+    }
+};
+class PNP_Box_Gummel_DG_TimeDependent: public TimeDependentOperator
+{
+private:
+    ParFiniteElementSpace* fes;
+
+    PNP_Box_Gummel_DG_Operator* oper;
+
+    mutable Array<int> true_offset; // 在H1空间中存在ess_tdof_list, 在DG空间中不存在
+
+public:
+    PNP_Box_Gummel_DG_TimeDependent(int truesize, Array<int>& offset, Array<int>& ess_bdr_, ParFiniteElementSpace* fes_, double time)
+            : TimeDependentOperator(3*truesize, time), true_offset(offset), fes(fes_)
+    {
+
+        oper = new PNP_Box_Gummel_DG_Operator(fes_, truesize, offset, ess_bdr_);
+
+    }
+    virtual ~PNP_Box_Gummel_DG_TimeDependent()
+    {
+        delete oper;
+    }
+
+    virtual void Mult(const Vector &phic1c2, Vector &dphic1c2_dt) const
+    {
+        MFEM_ABORT("Not supported now.");
+    }
+
+    virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
+    {
+        dphic1c2_dt = 0.0;
+
+        Vector* phic1c2_ptr = (Vector*) &phic1c2;
+        ParGridFunction old_phi, old_c1, old_c2; // 上一个时间步的解(已知)
+        // 求解新的 old_phi 从而更新 phic1c2_ptr, 最终更新 phic1c2
+        old_phi.MakeTRef(fes, *phic1c2_ptr, true_offset[0]);
+        old_c1 .MakeTRef(fes, *phic1c2_ptr, true_offset[1]);
+        old_c2 .MakeTRef(fes, *phic1c2_ptr, true_offset[2]);
+        old_phi.SetFromTrueVector(); // 下面要用到PrimalVector, 而不是TrueVector
+        old_c1 .SetFromTrueVector();
+        old_c2 .SetFromTrueVector();
+
+        ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi_dt
+        // 下面通过求解 dc1dt, dc2dt 从而更新 dphic1c2_dt
+        dc1dt.MakeTRef(fes, dphic1c2_dt, true_offset[1]);
+        dc2dt.MakeTRef(fes, dphic1c2_dt, true_offset[2]);
+
+        auto* phi_dc1dt_dc2dt = new BlockVector(true_offset);
+        *phi_dc1dt_dc2dt = 0.0;
+        dc1dt.SetTrueVector();
+        dc2dt.SetTrueVector();
+        phi_dc1dt_dc2dt->SetVector(old_phi.GetTrueVector(), true_offset[0]);
+        phi_dc1dt_dc2dt->SetVector(  dc1dt.GetTrueVector(), true_offset[1]);
+        phi_dc1dt_dc2dt->SetVector(  dc2dt.GetTrueVector(), true_offset[2]);
+
+        oper->UpdateParameters(t, dt, &old_c1, &old_c2); // 传入当前解
+
+        Vector zero_vec;
+        oper->Mult(zero_vec, *phi_dc1dt_dc2dt);
+
+        phic1c2_ptr->SetVector(phi_dc1dt_dc2dt->GetBlock(0), true_offset[0]);
+        dphic1c2_dt .SetVector(phi_dc1dt_dc2dt->GetBlock(1), true_offset[1]);
+        dphic1c2_dt .SetVector(phi_dc1dt_dc2dt->GetBlock(2), true_offset[2]);
+        delete phi_dc1dt_dc2dt;
     }
 };
 
