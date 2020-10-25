@@ -54,10 +54,11 @@ private:
 
 public:
     PNP_Protein_Gummel_CG_Operator(ParFiniteElementSpace* fes_, ParGridFunction* phi1_gf_, ParGridFunction* phi2_gf_,
-            int truevsize, Array<int>& trueoffset, Array<int>& ess_bdr_, Array<int>& top_bdr_,
+                                   int truevsize, Array<int>& trueoffset, Array<int>& ess_bdr_, Array<int>& top_bdr_,
                                    Array<int>& bottom_bdr_, Array<int>& interface_bdr_, Array<int>& Gamma_m)
     : Operator(truevsize * 3), true_vsize(truevsize), fes(fes_), phi1_gf(phi1_gf_), phi2_gf(phi2_gf_),
-      true_offset(trueoffset), ess_bdr(ess_bdr_), top_bdr(top_bdr_), bottom_bdr(bottom_bdr_), interface_bdr(interface_bdr_), Gamma_M(Gamma_m),
+      true_offset(trueoffset), ess_bdr(ess_bdr_), top_bdr(top_bdr_),
+      bottom_bdr(bottom_bdr_), interface_bdr(interface_bdr_), Gamma_M(Gamma_m),
       a0(NULL), b1(NULL), b2(NULL), m1_dta1(NULL), m2_dta2(NULL), a1(NULL), a2(NULL)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
@@ -114,9 +115,8 @@ public:
     virtual void Mult(const Vector& b, Vector& phi3_dc1dt_dc2dt) const
     {
 //        Vector& phi3_dc1dt_dc2dt_ = const_cast<Vector&>(phi3_dc1dt_dc2dt);
-        cout << "1. l2 norm of phi3_dc1dt_dc2dt: " << phi3_dc1dt_dc2dt.Norml2() << endl;
 
-        ParGridFunction phi3(fes), dc1dt(fes), dc2dt(fes);
+        ParGridFunction phi3, dc1dt, dc2dt;
         phi3 .MakeTRef(fes, phi3_dc1dt_dc2dt, true_offset[0]);
         dc1dt.MakeTRef(fes, phi3_dc1dt_dc2dt, true_offset[1]);
         dc2dt.MakeTRef(fes, phi3_dc1dt_dc2dt, true_offset[2]);
@@ -222,16 +222,14 @@ public:
             delete np2_solver;
         }
 
-
         // 用最终Gummel迭代的解更新要求解的3个未知量
-        phi3  = phi3_Gummel;
+        phi3  = phi3_Gummel; // 这3步可以放到Gummel迭代里面去
         dc1dt = dc1dt_Gummel;
         dc2dt = dc2dt_Gummel;
         // 而我们要返回的TrueVector, 而不是PrimalVector
         phi3 .SetTrueVector();
         dc1dt.SetTrueVector();
         dc2dt.SetTrueVector();
-        cout << "2. l2 norm of phi3_dc1dt_dc2dt: " << phi3_dc1dt_dc2dt.Norml2() << endl;
     }
 
 private:
@@ -395,9 +393,8 @@ public:
         dc2dt.MakeTRef(fes, dphi3c1c2_dt, true_offset[2]);
 
         auto* phi_dc1dt_dc2dt = new BlockVector(true_offset); // 在求解器中作为tdof的数据流
-        old_phi3.SetTrueVector();
-        dc1dt   .SetTrueVector();
-        dc2dt   .SetTrueVector();
+        dc1dt.SetTrueVector();
+        dc2dt.SetTrueVector();
         phi_dc1dt_dc2dt->SetVector(old_phi3.GetTrueVector(), true_offset[0]);
         phi_dc1dt_dc2dt->SetVector(   dc1dt.GetTrueVector(), true_offset[1]);
         phi_dc1dt_dc2dt->SetVector(   dc2dt.GetTrueVector(), true_offset[2]);
@@ -405,9 +402,7 @@ public:
         oper->UpdateParameters(t, dt, &old_c1, &old_c2);
 
         Vector zero_vec;
-        cout << "0. l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << endl;
         oper->Mult(zero_vec, *phi_dc1dt_dc2dt); // zero_vec是dummy. 求得的解仍然保存在 phi_dc1dt_dc2dt 中
-        cout << "3. l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << endl;
 
         phi3c1c2_ptr->SetVector(phi_dc1dt_dc2dt->GetBlock(0), true_offset[0]);
         dphi3c1c2_dt .SetVector(phi_dc1dt_dc2dt->GetBlock(1), true_offset[1]);
