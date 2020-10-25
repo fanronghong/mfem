@@ -1170,7 +1170,7 @@ public:
     }
 
     // 以PrimalVector为计算核心, 与 以TrueVector为计算核心 等价
-    virtual void Mult(const Vector& phi_dc1dt_dc2dt, Vector& residual) const
+    virtual void Mult_(const Vector& phi_dc1dt_dc2dt, Vector& residual) const
     {
         Vector& phi_dc1dt_dc2dt_ = const_cast<Vector&>(phi_dc1dt_dc2dt);
 
@@ -1181,6 +1181,7 @@ public:
         dc1dt->SetFromTrueVector();
         dc2dt->SetFromTrueVector();
 
+        residual = 0.0;
         Vector y0(residual.GetData() + 0 * true_vsize, true_vsize);
         Vector y1(residual.GetData() + 1 * true_vsize, true_vsize);
         Vector y2(residual.GetData() + 2 * true_vsize, true_vsize);
@@ -1254,7 +1255,7 @@ public:
     }
 
     // 以TrueVector为计算核心, 与 以PrimalVector为计算核心 等价
-    virtual void Mult_(const Vector& phi_dc1dt_dc2dt, Vector& residual) const
+    virtual void Mult(const Vector& phi_dc1dt_dc2dt, Vector& residual) const
     {
         Vector& phi_dc1dt_dc2dt_ = const_cast<Vector&>(phi_dc1dt_dc2dt);
         phi  ->MakeTRef(fes, phi_dc1dt_dc2dt_, true_offset[0]);
@@ -1577,7 +1578,6 @@ private:
     PetscPreconditionerFactory *jac_factory;
 
     ParGridFunction old_phi, old_c1, old_c2; // 上一个时间步的解(已知)
-    ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi_dt
 
     int true_vsize;
     Array<int> true_offset, ess_bdr, ess_tdof_list; // 在H1空间中存在ess_tdof_list, 在DG空间中不存在
@@ -1620,15 +1620,18 @@ public:
         old_c2 .SetFromTrueVector();
 
         // 下面通过求解 dc1dt, dc2dt 从而更新 dphic1c2_dt
+        ParGridFunction dc1dt, dc2dt;
         dphic1c2_dt = 0.0;
         dc1dt.MakeTRef(fes, dphic1c2_dt, true_offset[1]);
         dc2dt.MakeTRef(fes, dphic1c2_dt, true_offset[2]);
+        dc1dt.SetFromTrueVector();
+        dc2dt.SetFromTrueVector();
 
         phi_exact  .SetTime(t); // t在ODE里面已经变成下一个时刻了(要求解的时刻)
         dc1dt_exact.SetTime(t);
         dc2dt_exact.SetTime(t);
         old_phi.ProjectBdrCoefficient(  phi_exact, ess_bdr); // 设定解的边界条件
-        dc1dt  .ProjectBdrCoefficient(dc1dt_exact, ess_bdr);
+        dc1dt  .ProjectBdrCoefficient(dc1dt_exact, ess_bdr); // 这里做ProjectBdrCoefficient()是把dc1dt当成PrimalVector, 所以上面一定要有dc1dt.SetFromTrueVector()
         dc2dt  .ProjectBdrCoefficient(dc2dt_exact, ess_bdr);
 
         // !!!引用 phi, dc1dt, dc2dt 的 TrueVector, 使得 phi_dc1dt_dc2dt 所指的内存块就是phi, dc1dt, dc2dt的内存块.
