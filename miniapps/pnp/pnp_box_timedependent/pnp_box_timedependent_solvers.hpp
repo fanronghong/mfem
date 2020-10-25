@@ -1205,7 +1205,7 @@ public:
         b2->AddMult(*dc2dt, *l0, dt);    // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
         a0->AddMult(*phi, *l0, -1.0); // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt - a0 phi
 
-        l0->ParallelAssemble(y0); // PrimalVector转换为TrueVector. 好像不要这个转换才是对的
+        l0->ParallelAssemble(y0); // PrimalVector转换为TrueVector
         y0.SetSubVector(ess_tdof_list, 0.0);
 
 
@@ -1630,44 +1630,30 @@ public:
         old_phi.ProjectBdrCoefficient(  phi_exact, ess_bdr); // 设定解的边界条件
         dc1dt  .ProjectBdrCoefficient(dc1dt_exact, ess_bdr);
         dc2dt  .ProjectBdrCoefficient(dc2dt_exact, ess_bdr);
-        {//        old_phi.ProjectCoefficient(  phi_exact); // 设定解的边界条件
-//        dc1dt  .ProjectCoefficient(dc1dt_exact);
-//        dc2dt  .ProjectCoefficient(dc2dt_exact);
-        }
-        old_phi.SetTrueVector();
-        dc1dt.SetTrueVector();
-        dc2dt.SetTrueVector();
-
 
         // !!!引用 phi, dc1dt, dc2dt 的 TrueVector, 使得 phi_dc1dt_dc2dt 所指的内存块就是phi, dc1dt, dc2dt的内存块.
         // 从而在Newton求解器中对 phi_dc1dt_dc2dt 的修改就等同于对phi, dc1dt, dc2dt的修改, 最终达到了更新解的目的.
         auto* phi_dc1dt_dc2dt = new BlockVector(true_offset);
         *phi_dc1dt_dc2dt = 0.0;
+        old_phi.SetTrueVector();
+        dc1dt.SetTrueVector();
+        dc2dt.SetTrueVector();
         phi_dc1dt_dc2dt->SetVector(old_phi.GetTrueVector(), true_offset[0]);
         phi_dc1dt_dc2dt->SetVector(  dc1dt.GetTrueVector(), true_offset[1]);
         phi_dc1dt_dc2dt->SetVector(  dc2dt.GetTrueVector(), true_offset[2]);
 
         oper->UpdateParameters(t, dt, &old_c1, &old_c2); // 传入当前解
-
 //        bchandler->SetBoundarValues(*phi_dc1dt_dc2dt); // 设定BCHandler
 
         Vector zero_vec;
         newton_solver->Mult(zero_vec, *phi_dc1dt_dc2dt);
-        if (!newton_solver->GetConverged())
-            MFEM_ABORT("Newton solver did not converge!!!");
-
-        old_phi.MakeTRef(fes, *phi_dc1dt_dc2dt, true_offset[0]);
-        dc1dt  .MakeTRef(fes, *phi_dc1dt_dc2dt, true_offset[1]);
-        dc2dt  .MakeTRef(fes, *phi_dc1dt_dc2dt, true_offset[2]);
-        old_phi.SetFromTrueDofs(phi_dc1dt_dc2dt->GetBlock(0));
-        dc1dt  .SetFromTrueDofs(phi_dc1dt_dc2dt->GetBlock(1));
-        dc2dt  .SetFromTrueDofs(phi_dc1dt_dc2dt->GetBlock(2));
-        delete phi_dc1dt_dc2dt;
+        if (!newton_solver->GetConverged()) MFEM_ABORT("Newton solver did not converge!!!");
 
         // 设定新的解向量
-        phic1c2_ptr->SetVector(old_phi.GetTrueVector(), 0);
-        dphic1c2_dt.SetVector(dc1dt.GetTrueVector(), true_vsize);
-        dphic1c2_dt.SetVector(dc2dt.GetTrueVector(), 2*true_vsize);
+        phic1c2_ptr->SetVector(phi_dc1dt_dc2dt->GetBlock(0), true_offset[0]);
+        dphic1c2_dt .SetVector(phi_dc1dt_dc2dt->GetBlock(1), true_offset[1]);
+        dphic1c2_dt .SetVector(phi_dc1dt_dc2dt->GetBlock(2), true_offset[2]);
+        delete phi_dc1dt_dc2dt;
     }
 };
 

@@ -33,7 +33,7 @@ bool SpaceConvergRate_Change_dt = false; // 为了计算误差: error = c1 dt + 
 double Change_dt_factor         = 1.0; // dt = factor * h^2
 int ode_type                    = 1; // 1: backward Euler; 11: forward Euler
 double t_init                   = 0.0; // 初始时间, 单位 µs
-double t_final                  = 200; // 最后时间
+double t_final                  = 300; // 最后时间
 double t_stepsize               = 100; // 时间步长
 bool paraview                   = false;
 const char* paraview_dir        = "";
