@@ -27,7 +27,6 @@ struct Return
     ParGridFunction* c2;
 };
 
-
 class PNP_Protein_Gummel_CG_TimeDependent: public TimeDependentOperator
 {
 private:
@@ -748,7 +747,6 @@ private:
 
         h2_dth2->Assemble(skip_zero_entries);
     }
-
 };
 class PNP_Protein_Newton_CG_TimeDependent: public TimeDependentOperator
 {
@@ -986,7 +984,7 @@ public:
             *total_phi_gf += *phi2_gf;
             *total_phi_gf += *phi3_gf;
 
-            string paraview_title = string("PNP_Protein_") + Discretize + "_" + Linearize + "_Time_Dependent" + paraview_dir;
+            string paraview_title = string("PNP_Protein_") + Discretize + "_" + Linearize + "_Time_Dependent_" + paraview_dir;
             pd = new ParaViewDataCollection(paraview_title, pmesh);
             pd->SetPrefixPath("Paraview");
             pd->SetLevelsOfDetail(p_order);
