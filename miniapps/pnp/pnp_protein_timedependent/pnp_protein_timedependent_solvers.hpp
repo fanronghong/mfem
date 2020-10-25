@@ -34,7 +34,7 @@ private:
     ParFiniteElementSpace* fes;
     ParMesh* pmesh;
 
-    int true_vsize;
+    int true_vsize, max_GummelSteps;
     mutable ParBilinearForm *a0, *b1, *b2, *m1_dta1, *a1, *m2_dta2, *a2;
     mutable HypreParMatrix *A0, *M1_dtA1, *M2_dtA2;
     Vector *temp_x0, *temp_b0, *temp_x1, *temp_b1, *temp_x2, *temp_b2;
@@ -55,7 +55,7 @@ private:
 public:
     PNP_Protein_Gummel_CG_Operator(ParFiniteElementSpace* fes_, ParGridFunction* phi1_gf_, ParGridFunction* phi2_gf_,
                                    int truevsize, Array<int>& trueoffset, Array<int>& ess_bdr_, Array<int>& top_bdr_,
-                                   Array<int>& bottom_bdr_, Array<int>& interface_bdr_, Array<int>& Gamma_m)
+                                   Array<int>& bottom_bdr_, Array<int>& interface_bdr_, Array<int>& Gamma_m, int max_Gummel=0)
     : Operator(truevsize * 3), true_vsize(truevsize), fes(fes_), phi1_gf(phi1_gf_), phi2_gf(phi2_gf_),
       true_offset(trueoffset), ess_bdr(ess_bdr_), top_bdr(top_bdr_),
       bottom_bdr(bottom_bdr_), interface_bdr(interface_bdr_), Gamma_M(Gamma_m),
@@ -63,6 +63,13 @@ public:
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+        if (max_Gummel != 0) {
+            max_GummelSteps = max_Gummel; // 读取给定参数
+        }
+        else {
+            max_GummelSteps = Gummel_max_iters; // 读取默认参数
+        }
 
         pmesh = fes->GetParMesh();
 
@@ -175,7 +182,7 @@ public:
             if (rank == 0 && verbose >= 2) {
                 cout << "Gummel step: " << gummel_step << ", Relative Tol: " << tol << endl;
             }
-            if (tol < Gummel_rel_tol) { // Gummel迭代停止
+            if (tol < Gummel_rel_tol || gummel_step == max_GummelSteps) { // Gummel迭代停止
                 last_gummel_step = true;
             }
 
@@ -470,7 +477,6 @@ public:
         l2 = new ParLinearForm(fes);
 
         jac_k = new BlockOperator(true_offset);
-
     }
     ~PNP_Protein_Newton_CG_Operator()
     {
@@ -821,6 +827,7 @@ private:
     ParFiniteElementSpace* fes;
     ParMesh* pmesh;
 
+    PNP_Protein_Gummel_CG_Operator* gummel_oper;
     PNP_Protein_Newton_CG_Operator* oper;
     PetscNonlinearSolver* newton_solver;
     PetscPreconditionerFactory *jac_factory;
@@ -847,17 +854,24 @@ public:
         pmesh = fes->GetParMesh();
         fes->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
+        if (nonzero_NewtonInitial) {
+            gummel_oper   = new PNP_Protein_Gummel_CG_Operator(fes, phi1_gf, phi2_gf, true_vsize, true_offset, ess_bdr,
+                                top_bdr, bottom_bdr, interface_bdr, Gamma_M, nonzero_maxGummel);
+        }
+
         oper          = new PNP_Protein_Newton_CG_Operator(fes, true_vsize, true_offset, ess_tdof_list, phi1_gf, phi2_gf);
         jac_factory   = new PreconditionerFactory(*oper, prec_type);
         newton_solver = new PetscNonlinearSolver(fes->GetComm(), *oper, "newton_");
         newton_solver->SetPreconditionerFactory(jac_factory);
-        newton_solver->iterative_mode = false;
+        newton_solver->iterative_mode = nonzero_NewtonInitial? true: false;
     }
     ~PNP_Protein_Newton_CG_TimeDependent()
     {
         delete oper;
         delete newton_solver;
         delete jac_factory;
+
+        if (nonzero_NewtonInitial) delete gummel_oper;
     }
 
     virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
@@ -897,8 +911,15 @@ public:
 
         oper->UpdateParameters(t, dt, &old_c1, &old_c2); // 传入当前解
 
-        Vector zero_vec;
+        Vector zero_vec; // dummy vector
+
+        if (nonzero_NewtonInitial) { // 用Gummel迭代为Newton迭代提供初值
+            gummel_oper->UpdateParameters(t, dt, &old_c1, &old_c2);
+            gummel_oper->Mult(zero_vec, *phi_dc1dt_dc2dt);
+        }
+
         newton_solver->Mult(zero_vec, *phi_dc1dt_dc2dt);
+
         if (!newton_solver->GetConverged()) MFEM_ABORT("Newton solver did not converge!!!");
 
         phic1c2_ptr->SetVector(phi_dc1dt_dc2dt->GetBlock(0), true_offset[0]);

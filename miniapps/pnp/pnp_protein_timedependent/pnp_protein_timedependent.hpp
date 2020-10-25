@@ -11,7 +11,9 @@ using namespace mfem;
 
 
 int p_order                     = 1; //有限元基函数的多项式次数
-const char* Linearize           = "gummel"; // newton, gummel
+bool nonzero_NewtonInitial      = false;
+int nonzero_maxGummel           = 3;
+const char* Linearize           = "newton"; // newton, gummel
 const char* Discretize          = "cg"; // cg, dg
 const char* AdvecStable         = "eafe"; // none, supg, eafe
 const char* prec_type           = "block"; // preconditioner for Newton discretization: block, uzawa, simple
@@ -33,7 +35,7 @@ bool SpaceConvergRate_Change_dt = false; // 为了计算误差: error = c1 dt + 
 double Change_dt_factor         = 1.0; // dt = factor * h^2
 int ode_type                    = 1; // 1: backward Euler; 11: forward Euler
 double t_init                   = 0.0; // 初始时间, 单位 µs
-double t_final                  = 1000; // 最后时间
+double t_final                  = 400; // 最后时间
 double t_stepsize               = 100; // 时间步长
 bool paraview                   = false;
 const char* paraview_dir        = "";
