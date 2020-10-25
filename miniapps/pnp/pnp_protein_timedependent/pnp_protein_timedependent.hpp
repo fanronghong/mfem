@@ -11,7 +11,7 @@ using namespace mfem;
 
 
 int p_order                     = 1; //有限元基函数的多项式次数
-const char* Linearize           = "newton"; // newton, gummel
+const char* Linearize           = "gummel"; // newton, gummel
 const char* Discretize          = "cg"; // cg, dg
 const char* AdvecStable         = "eafe"; // none, supg, eafe
 const char* prec_type           = "block"; // preconditioner for Newton discretization: block, uzawa, simple
@@ -33,7 +33,7 @@ bool SpaceConvergRate_Change_dt = false; // 为了计算误差: error = c1 dt + 
 double Change_dt_factor         = 1.0; // dt = factor * h^2
 int ode_type                    = 1; // 1: backward Euler; 11: forward Euler
 double t_init                   = 0.0; // 初始时间, 单位 µs
-double t_final                  = 400; // 最后时间
+double t_final                  = 1000; // 最后时间
 double t_stepsize               = 100; // 时间步长
 bool paraview                   = false;
 const char* paraview_dir        = "";
@@ -53,10 +53,10 @@ const int Gamma_m_marker   = 5;
 
 double phi_top     = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 上边界是 Dirichlet, 乘以alpha1进行无量纲化
 double phi_bottom  = 0.0 * alpha1; // 国际单位V, 电势在计算区域的 下边界是 Dirichlet
-double c1_top      = 0.1 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 上边界是 Dirichlet,乘以alpha2是把mol/L换成Angstrom,单位统一
-double c1_bottom   = 0.1 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 下边界是 Dirichlet
-double c2_top      = 0.1 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
-double c2_bottom   = 0.1 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
+double c1_top      = 0.5 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 上边界是 Dirichlet,乘以alpha2是把mol/L换成Angstrom,单位统一
+double c1_bottom   = 0.5 * alpha3; // 国际单位mol/L, K+阳离子在计算区域的 下边界是 Dirichlet
+double c2_top      = 0.5 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
+double c2_bottom   = 0.5 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
 ConstantCoefficient phi_D_top_coeff(phi_top);
 ConstantCoefficient phi_D_bottom_coeff(phi_bottom);
 ConstantCoefficient c1_D_top_coeff(c1_top);

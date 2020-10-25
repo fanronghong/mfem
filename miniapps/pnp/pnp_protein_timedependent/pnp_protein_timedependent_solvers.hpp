@@ -27,15 +27,14 @@ struct Return
     ParGridFunction* c2;
 };
 
-class PNP_Protein_Gummel_CG_TimeDependent: public TimeDependentOperator
+
+class PNP_Protein_Gummel_CG_Operator: public Operator
 {
 private:
-    ParMesh* pmesh;
     ParFiniteElementSpace* fes;
-    int true_vsize;
-    Array<int>  &true_offset, &ess_bdr, &top_bdr, &bottom_bdr, &interface_bdr, &Gamma_M;
-    Array<int> ess_tdof_list, top_ess_tdof_list, bottom_ess_tdof_list, interface_ess_tdof_list;
+    ParMesh* pmesh;
 
+    int true_vsize;
     mutable ParBilinearForm *a0, *b1, *b2, *m1_dta1, *a1, *m2_dta2, *a2;
     mutable HypreParMatrix *A0, *M1_dtA1, *M2_dtA2;
     Vector *temp_x0, *temp_b0, *temp_x1, *temp_b1, *temp_x2, *temp_b2;
@@ -43,20 +42,23 @@ private:
     /* 将电势分解成3部分: 奇异电荷部分phi1, 调和部分phi2, 其余部分phi3,
     * ref: Poisson–Nernst–Planck equations for simulating biomolecular diffusion–reaction processes I: Finite element solutions
     * */
-    ParGridFunction *phi1_gf, *phi2_gf;
-
+    double t, dt;
+    ParGridFunction *c1, *c2, *phi1_gf, *phi2_gf;
     VectorCoefficient *grad_phi1, *grad_phi2, *grad_phi1_plus_grad_phi2; // grad(phi1 + phi2)
+
+    Array<int>  &true_offset, &ess_bdr, &top_bdr, &bottom_bdr, &interface_bdr, &Gamma_M;
+    Array<int> ess_tdof_list, top_ess_tdof_list, bottom_ess_tdof_list, interface_ess_tdof_list;
 
     StopWatch chrono;
     int num_procs, rank;
 
 public:
-    PNP_Protein_Gummel_CG_TimeDependent(ParFiniteElementSpace* fes_, double time, ParGridFunction* phi1_gf_, ParGridFunction* phi2_gf_,
-                                        int truevsize, Array<int>& trueoffset, Array<int>& ess_bdr_, Array<int>& top_bdr_,
-                                        Array<int>& bottom_bdr_, Array<int>& interface_bdr_, Array<int>& Gamma_m)
-        : TimeDependentOperator(truevsize*3, time), fes(fes_), phi1_gf(phi1_gf_), phi2_gf(phi2_gf_), true_vsize(truevsize),
-        true_offset(trueoffset), ess_bdr(ess_bdr_), top_bdr(top_bdr_), bottom_bdr(bottom_bdr_), interface_bdr(interface_bdr_), Gamma_M(Gamma_m),
-        a0(NULL), b1(NULL), b2(NULL), m1_dta1(NULL), m2_dta2(NULL), a1(NULL), a2(NULL)
+    PNP_Protein_Gummel_CG_Operator(ParFiniteElementSpace* fes_, ParGridFunction* phi1_gf_, ParGridFunction* phi2_gf_,
+            int truevsize, Array<int>& trueoffset, Array<int>& ess_bdr_, Array<int>& top_bdr_,
+                                   Array<int>& bottom_bdr_, Array<int>& interface_bdr_, Array<int>& Gamma_m)
+    : Operator(truevsize * 3), true_vsize(truevsize), fes(fes_), phi1_gf(phi1_gf_), phi2_gf(phi2_gf_),
+      true_offset(trueoffset), ess_bdr(ess_bdr_), top_bdr(top_bdr_), bottom_bdr(bottom_bdr_), interface_bdr(interface_bdr_), Gamma_M(Gamma_m),
+      a0(NULL), b1(NULL), b2(NULL), m1_dta1(NULL), m2_dta2(NULL), a1(NULL), a2(NULL)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -84,15 +86,15 @@ public:
         fes->GetEssentialTrueDofs(bottom_bdr, bottom_ess_tdof_list);
         fes->GetEssentialTrueDofs(interface_bdr, interface_ess_tdof_list);
     }
-    ~PNP_Protein_Gummel_CG_TimeDependent()
+
+    ~PNP_Protein_Gummel_CG_Operator()
     {
-
-
-        delete grad_phi1; delete grad_phi2; delete grad_phi1_plus_grad_phi2;
-
         delete a0; delete b1; delete b2;
         delete m1_dta1; delete a1;
         delete m2_dta2; delete a2;
+
+        delete grad_phi1; delete grad_phi2; delete grad_phi1_plus_grad_phi2;
+
 
         delete A0; delete M1_dtA1; delete M2_dtA2;
         delete temp_x0; delete temp_b0;
@@ -101,24 +103,26 @@ public:
 
     }
 
-    virtual void ImplicitSolve(const double dt, const Vector &phi3c1c2, Vector &dphi3c1c2_dt)
+    void UpdateParameters(double current, double dt_, ParGridFunction* c1_, ParGridFunction* c2_)
     {
-        dphi3c1c2_dt = 0.0;
+        t  = current;
+        dt = dt_;
+        c1 = c1_;
+        c2 = c2_;
+    }
 
-        Vector* phi3c1c2_ptr = (Vector*) &phi3c1c2;
-        ParGridFunction old_phi3, old_c1, old_c2;
-        // 求解新的 old_phi3 从而更新 phi3c1c2_ptr, 最终更新 phi3c1c2
-        old_phi3.MakeTRef(fes, *phi3c1c2_ptr, true_offset[0]);
-        old_c1  .MakeTRef(fes, *phi3c1c2_ptr, true_offset[1]);
-        old_c2  .MakeTRef(fes, *phi3c1c2_ptr, true_offset[2]);
-        old_phi3.SetFromTrueVector(); // 下面要用到PrimalVector, 而不是TrueVector
-        old_c1  .SetFromTrueVector();
-        old_c2  .SetFromTrueVector();
+    virtual void Mult(const Vector& b, Vector& phi3_dc1dt_dc2dt) const
+    {
+//        Vector& phi3_dc1dt_dc2dt_ = const_cast<Vector&>(phi3_dc1dt_dc2dt);
+        cout << "1. l2 norm of phi3_dc1dt_dc2dt: " << phi3_dc1dt_dc2dt.Norml2() << endl;
 
-        ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi3_dt
-        // 下面通过求解 dc1dt, dc2dt 从而更新 dphi3c1c2_dt
-        dc1dt.MakeTRef(fes, dphi3c1c2_dt, true_offset[1]);
-        dc2dt.MakeTRef(fes, dphi3c1c2_dt, true_offset[2]);
+        ParGridFunction phi3(fes), dc1dt(fes), dc2dt(fes);
+        phi3 .MakeTRef(fes, phi3_dc1dt_dc2dt, true_offset[0]);
+        dc1dt.MakeTRef(fes, phi3_dc1dt_dc2dt, true_offset[1]);
+        dc2dt.MakeTRef(fes, phi3_dc1dt_dc2dt, true_offset[2]);
+        phi3 .SetFromTrueVector(); // 下面要用到 PrimalVector, 而不是 TrueVector
+        dc1dt.SetFromTrueVector();
+        dc2dt.SetFromTrueVector();
 
         // 变量*_Gummel用于Gummel迭代过程中
         ParGridFunction phi3_Gummel(fes), dc1dt_Gummel(fes), dc2dt_Gummel(fes);
@@ -143,8 +147,8 @@ public:
 
             this->buildb1();
             this->buildb2();
-            b1->AddMult(old_c1, *l0, 1.0);    // l0 = l0 + b1 c1
-            b2->AddMult(old_c2, *l0, 1.0);    // l0 = l0 + b1 c1 + b2 c2
+            b1->AddMult(*c1, *l0, 1.0);    // l0 = l0 + b1 c1
+            b2->AddMult(*c2, *l0, 1.0);    // l0 = l0 + b1 c1 + b2 c2
             b1->AddMult(dc1dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt
             b2->AddMult(dc2dt_Gummel, *l0, dt);  // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
 
@@ -165,9 +169,9 @@ public:
             // **************************************************************************************
             diff = 0.0;
             diff += phi3_Gummel;
-            diff -= old_phi3; // 用到的是old_phi的PrimalVector
+            diff -= phi3; // 用到的是old_phi的PrimalVector
             double tol = diff.ComputeL2Error(zero) / phi3_Gummel.ComputeL2Error(zero); // 这里不能把diff设为Vector类型, 如果是Vector类型, 这里计算Norml2()时各个进程得到的值不一样
-            old_phi3 = phi3_Gummel; // 算完本次Gummel迭代的tol就可以更新phi_Gummel
+            phi3 = phi3_Gummel; // 算完本次Gummel迭代的tol就可以更新phi_Gummel
             if (rank == 0 && verbose >= 2) {
                 cout << "Gummel step: " << gummel_step << ", Relative Tol: " << tol << endl;
             }
@@ -183,9 +187,9 @@ public:
             *l1 = 0.0;
 
             this->builda1(phi3_Gummel);
-            a1->AddMult(old_c1, *l1, -1.0); // l1 = l1 - a1 c1
+            a1->AddMult(*c1, *l1, -1.0); // l1 = l1 - a1 c1
 
-            this->buildm1_dta1(dt, phi3_Gummel);
+            this->buildm1_dta1(phi3_Gummel);
 //            dc1dt_Gummel.ProjectBdrCoefficient(zero, ess_bdr); // essential 边界条件为0
             m1_dta1->FormLinearSystem(ess_tdof_list, dc1dt_Gummel, *l1, *M1_dtA1, *temp_x1, *temp_b1);
             M1_dtA1->EliminateZeroRows(); // 把0行的主对角元素设为1(在蛋白区域里面的自由度为0)
@@ -204,9 +208,9 @@ public:
             *l2 = 0.0;
 
             this->builda2(phi3_Gummel);
-            a2->AddMult(old_c2, *l2, -1.0); // l2 = l2 - a2 c2
+            a2->AddMult(*c2, *l2, -1.0); // l2 = l2 - a2 c2
 
-            this->buildm2_dta2(dt, phi3_Gummel);
+            this->buildm2_dta2(phi3_Gummel);
 //            dc2dt_Gummel.ProjectBdrCoefficient(zero, ess_bdr); // essential 边界条件为0
             m2_dta2->FormLinearSystem(ess_tdof_list, dc2dt_Gummel, *l2, *M2_dtA2, *temp_x2, *temp_b2);
             M2_dtA2->EliminateZeroRows(); // 把0行的主对角元素设为1(在蛋白区域里面的自由度为0)
@@ -218,14 +222,16 @@ public:
             delete np2_solver;
         }
 
+
         // 用最终Gummel迭代的解更新要求解的3个未知量
-        old_phi3 = phi3_Gummel;
-        dc1dt    = dc1dt_Gummel;
-        dc2dt    = dc2dt_Gummel;
+        phi3  = phi3_Gummel;
+        dc1dt = dc1dt_Gummel;
+        dc2dt = dc2dt_Gummel;
         // 而我们要返回的TrueVector, 而不是PrimalVector
-        old_phi3.SetTrueVector();
-        dc1dt   .SetTrueVector();
-        dc2dt   .SetTrueVector();
+        phi3 .SetTrueVector();
+        dc1dt.SetTrueVector();
+        dc2dt.SetTrueVector();
+        cout << "2. l2 norm of phi3_dc1dt_dc2dt: " << phi3_dc1dt_dc2dt.Norml2() << endl;
     }
 
 private:
@@ -269,11 +275,11 @@ private:
     }
 
     // (c1, v1)_{\Omega_s} + dt D1 (grad(c1) + z1 c1 grad(phi3), grad(v1))_{\Omega_s}, given dt and phi3
-    void buildm1_dta1(double dt, ParGridFunction& phi3) const
+    void buildm1_dta1(ParGridFunction& phi3_) const
     {
         if (m1_dta1 != NULL) { delete m1_dta1; }
 
-        phi3.ExchangeFaceNbrData();
+        phi3_.ExchangeFaceNbrData();
         ProductCoefficient dt_D1(dt, D1_water);
         ProductCoefficient dt_D1_z1(dt_D1, v_K_coeff);
 
@@ -284,34 +290,34 @@ private:
         // dt D1 (grad(c1), grad(v1))_{\Omega_s}
         m1_dta1->AddDomainIntegrator(new DiffusionIntegrator(dt_D1));
         // dt D1 z1 (c1 grad(phi3), grad(v1))_{\Omega_s}
-        m1_dta1->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi3, &dt_D1_z1));
+        m1_dta1->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi3_, &dt_D1_z1));
 
         m1_dta1->Assemble(skip_zero_entries);
     }
 
     // D1 (grad(c1) + z1 c1 grad(phi3), grad(v1))_{\Omega_s}, given phi3
-    void builda1(ParGridFunction& phi3) const
+    void builda1(ParGridFunction& phi3_) const
     {
         if (a1 != NULL) { delete a1; }
 
-        phi3.ExchangeFaceNbrData();
+        phi3_.ExchangeFaceNbrData();
 
         a1 = new ParBilinearForm(fes);
 
         // D1 (grad(c1), grad(v1))_{\Omega_s}
         a1->AddDomainIntegrator(new DiffusionIntegrator(D1_water));
         // D1 z1 (c1 grad(phi3), grad(v1))_{\Omega_s}
-        a1->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi3, &D1_prod_z1_water));
+        a1->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi3_, &D1_prod_z1_water));
 
         a1->Assemble(skip_zero_entries);
     }
 
     // (c2, v2)_{\Omega_s} + dt D2 (grad(c2) + z2 c2 grad(phi3), grad(v2))_{\Omega_s}, given dt and phi3
-    void buildm2_dta2(double dt, ParGridFunction& phi3) const
+    void buildm2_dta2(ParGridFunction& phi3_) const
     {
         if (m2_dta2 != NULL) { delete m2_dta2; }
 
-        phi3.ExchangeFaceNbrData();
+        phi3_.ExchangeFaceNbrData();
         ProductCoefficient dt_D2(dt, D2_water);
         ProductCoefficient dt_D2_z2(dt_D2, v_Cl_coeff);
 
@@ -322,26 +328,91 @@ private:
         // dt D2 (grad(c2), grad(v2))_{\Omega_s}
         m2_dta2->AddDomainIntegrator(new DiffusionIntegrator(dt_D2));
         // dt D2 z2 (c2 grad(phi3), grad(v2))_{\Omega_s}
-        m2_dta2->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi3, &dt_D2_z2));
+        m2_dta2->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi3_, &dt_D2_z2));
 
         m2_dta2->Assemble(skip_zero_entries);
     }
 
     // D2 (grad(c2) + z2 c2 grad(phi3), grad(v2))_{\Omega_s}, given phi3
-    void builda2(ParGridFunction& phi3) const
+    void builda2(ParGridFunction& phi3_) const
     {
         if (a2 != NULL) { delete a2; }
 
-        phi3.ExchangeFaceNbrData();
+        phi3_.ExchangeFaceNbrData();
 
         a2 = new ParBilinearForm(fes);
 
         // D2 (grad(c2), grad(v2))_{\Omega_s}
         a2->AddDomainIntegrator(new DiffusionIntegrator(D2_water));
         // D2 z2 (c2 grad(phi3), grad(v2))_{\Omega_s}
-        a2->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi3, &D2_prod_z2_water));
+        a2->AddDomainIntegrator(new GradConvection_BLFIntegrator(phi3_, &D2_prod_z2_water));
 
         a2->Assemble(skip_zero_entries);
+    }
+};
+class PNP_Protein_Gummel_CG_TimeDependent: public TimeDependentOperator
+{
+private:
+    ParFiniteElementSpace* fes;
+    ParMesh* pmesh;
+    int true_vsize;
+    Array<int>  &true_offset;
+
+    PNP_Protein_Gummel_CG_Operator* oper;
+
+public:
+    PNP_Protein_Gummel_CG_TimeDependent(ParFiniteElementSpace* fes_, double time, ParGridFunction* phi1_gf, ParGridFunction* phi2_gf,
+                                        int truevsize, Array<int>& trueoffset, Array<int>& ess_bdr_, Array<int>& top_bdr_,
+                                        Array<int>& bottom_bdr_, Array<int>& interface_bdr_, Array<int>& Gamma_m)
+        : TimeDependentOperator(truevsize*3, time), fes(fes_), true_vsize(truevsize), true_offset(trueoffset)
+    {
+        oper = new PNP_Protein_Gummel_CG_Operator(fes, phi1_gf, phi2_gf, truevsize, trueoffset, ess_bdr_,
+                                               top_bdr_, bottom_bdr_, interface_bdr_, Gamma_m);
+
+    }
+    ~PNP_Protein_Gummel_CG_TimeDependent()
+    {
+        delete oper;
+    }
+
+    virtual void ImplicitSolve(const double dt, const Vector &phi3c1c2, Vector &dphi3c1c2_dt)
+    {
+        dphi3c1c2_dt = 0.0;
+
+        Vector* phi3c1c2_ptr = (Vector*) &phi3c1c2;
+        ParGridFunction old_phi3, old_c1, old_c2;
+        // 求解新的 old_phi3 从而更新 phi3c1c2_ptr, 最终更新 phi3c1c2
+        old_phi3.MakeTRef(fes, *phi3c1c2_ptr, true_offset[0]);
+        old_c1  .MakeTRef(fes, *phi3c1c2_ptr, true_offset[1]);
+        old_c2  .MakeTRef(fes, *phi3c1c2_ptr, true_offset[2]);
+        old_phi3.SetFromTrueVector(); // 下面要用到PrimalVector, 而不是TrueVector
+        old_c1  .SetFromTrueVector();
+        old_c2  .SetFromTrueVector();
+
+        ParGridFunction dc1dt, dc2dt; // Poisson方程不是一个ODE, 所以不求dphi3_dt
+        // 下面通过求解 dc1dt, dc2dt 从而更新 dphi3c1c2_dt
+        dc1dt.MakeTRef(fes, dphi3c1c2_dt, true_offset[1]);
+        dc2dt.MakeTRef(fes, dphi3c1c2_dt, true_offset[2]);
+
+        auto* phi_dc1dt_dc2dt = new BlockVector(true_offset); // 在求解器中作为tdof的数据流
+        old_phi3.SetTrueVector();
+        dc1dt   .SetTrueVector();
+        dc2dt   .SetTrueVector();
+        phi_dc1dt_dc2dt->SetVector(old_phi3.GetTrueVector(), true_offset[0]);
+        phi_dc1dt_dc2dt->SetVector(   dc1dt.GetTrueVector(), true_offset[1]);
+        phi_dc1dt_dc2dt->SetVector(   dc2dt.GetTrueVector(), true_offset[2]);
+
+        oper->UpdateParameters(t, dt, &old_c1, &old_c2);
+
+        Vector zero_vec;
+        cout << "0. l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << endl;
+        oper->Mult(zero_vec, *phi_dc1dt_dc2dt); // zero_vec是dummy. 求得的解仍然保存在 phi_dc1dt_dc2dt 中
+        cout << "3. l2 norm of phi_dc1dt_dc2dt: " << phi_dc1dt_dc2dt->Norml2() << endl;
+
+        phi3c1c2_ptr->SetVector(phi_dc1dt_dc2dt->GetBlock(0), true_offset[0]);
+        dphi3c1c2_dt .SetVector(phi_dc1dt_dc2dt->GetBlock(1), true_offset[1]);
+        dphi3c1c2_dt .SetVector(phi_dc1dt_dc2dt->GetBlock(2), true_offset[2]);
+        delete phi_dc1dt_dc2dt;
     }
 };
 
@@ -796,6 +867,8 @@ public:
 
     virtual void ImplicitSolve(const double dt, const Vector &phic1c2, Vector &dphic1c2_dt)
     {
+        dphic1c2_dt = 0.0;
+
         // 求解新的 old_phi 从而更新 phic1c2_ptr, 最终更新 phic1c2
         Vector* phic1c2_ptr = (Vector*) &phic1c2;
         old_phi.MakeTRef(fes, *phic1c2_ptr, true_offset[0]);
