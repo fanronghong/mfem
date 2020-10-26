@@ -773,6 +773,16 @@ public:
 
         // elmat := -elmat + sigma*elmat^t + jmat
         // 第二处修改: 只保留 jmat. 注: 下面注释的内容为原本内容, 后面紧接着是修改后的内容
+        for (int i=0; i<ndofs; ++i) {
+            for (int j=0; j<i; ++j) {
+                double mij = jmat(i, j); // jmat 只有下三角部分有元素
+                elmat(i, j) = mij;
+                elmat(j, i) = mij;
+            }
+            elmat(i, i) = jmat(i, i);
+        }
+        return;
+
         if (kappa_is_nonzero)
         {
             for (int i = 0; i < ndofs; i++)
