@@ -575,7 +575,7 @@ public:
             delete l0;
             delete poisson_solver;
 
-            if (0){
+            if (1){
                 /* l0->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(phi_exact, kappa * water_rel_permittivity), ess_bdr); //fff water_rel_permittivity
 
                     // kappa <{h^{-1}} [phi], [psi]>
@@ -605,8 +605,8 @@ public:
                          << endl;
                 }
 
-                MPI_Barrier(MPI_COMM_WORLD);
                 SolvePoisson();
+                MFEM_ABORT("After SolvePoisson().");
             }
 
             // **************************************************************************************
@@ -1061,7 +1061,6 @@ private:
                  << endl;
         }
 
-        MPI_Barrier(MPI_COMM_WORLD);
         MFEM_ABORT("Stop checking L2 norm");
 
     }
