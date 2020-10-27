@@ -554,8 +554,8 @@ public:
             }
             if (abs(kappa - 0.0) > 1E-10 && penalty_with_boundary) // 添加惩罚项
             {
-                // q0: kappa <{h^{-1}} phi_D, psi>
-                l0->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(phi_exact, kappa * water_rel_permittivity), ess_bdr);
+                // q0: kappa <{h^{-1} epsilon_s} phi_D, psi>
+                l0->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(phi_exact, epsilon_water, kappa), ess_bdr);
             }
             l0->Assemble();
 //
@@ -598,15 +598,19 @@ public:
                 A0_E0_S0_P0->Mult(*temp_b0, AB);
                 double AB_l2norm = AB.Norml2();
 
+                A0_E0_S0_P0->Mult(1.0, *temp_x0, -1.0, *temp_b0);
+                double error = temp_b0->Norml2();
+
                 if (rank == 0) {
                     cout << "B: " << B_l2norm
                          << ", X: " << X_l2norm
                          << ", AB: " << AB_l2norm
+                         << ", error: " << error
                          << endl;
                 }
 
-                MPI_Barrier(MPI_COMM_WORLD);
                 SolvePoisson();
+                MFEM_ABORT("After SolvePoisson().");
             }
 
             // **************************************************************************************
@@ -997,13 +1001,13 @@ private:
             }
         }
 
-        // kappa <{h^{-1}} [phi], [psi]>
+        // kappa <{h^{-1} epsilon_s} [phi], [psi]>
         if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
         {
-            a0_e0_s0_p0->AddInteriorFaceIntegrator(new DGDiffusion_Penalty( kappa * water_rel_permittivity)); // fff
+            a0_e0_s0_p0->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(epsilon_water, kappa)); // fff
             if (penalty_with_boundary)
             {
-                a0_e0_s0_p0->AddBdrFaceIntegrator(new DGDiffusion_Penalty( kappa * water_rel_permittivity), ess_bdr); // fff
+                a0_e0_s0_p0->AddBdrFaceIntegrator(new DGDiffusion_Penalty(epsilon_water, kappa), ess_bdr); // fff
             }
         }
 
@@ -1054,11 +1058,15 @@ private:
         A->Mult(B, AB);
         double AB_l2norm = AB.Norml2();
 
+        A->Mult(1.0, X, -1.0, B);
+        double error = B.Norml2();
+
         if (rank == 0) {
             cout << "B: " << B_l2norm
                  << ", X: " << X_l2norm
                  << ", AB: " << AB_l2norm
-                 << endl;
+                << ", error: " << error
+                << endl;
         }
 
         MPI_Barrier(MPI_COMM_WORLD);

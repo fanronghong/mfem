@@ -608,6 +608,7 @@ public:
             jmat.SetSize(ndofs);
             jmat = 0.;
         }
+        else return; // 第二处修改: kappa为0就直接退出
 
         const IntegrationRule *ir = IntRule;
         if (ir == NULL)
@@ -772,7 +773,7 @@ public:
         }
 
         // elmat := -elmat + sigma*elmat^t + jmat
-        // 第二处修改: 只保留 jmat. 注: 下面注释的内容为原本内容, 后面紧接着是修改后的内容
+        // 第三处修改: 只保留 jmat. 注: 下面注释的内容为原本内容, 后面紧接着是修改后的内容
         if (kappa_is_nonzero)
         {
             for (int i = 0; i < ndofs; i++)
@@ -807,7 +808,137 @@ public:
         }
     }
 };
+class DGDiffusion_Penalty2: public BilinearFormIntegrator
+{
+/* 似乎不太确定 DGDiffusion_Penalty 是否有bug, 所以自己写了这个积分子, 以此来互相验证
+ * */
+protected:
+    Coefficient *Q;
+    MatrixCoefficient *MQ;
+    double kappa;
 
+    // these are not thread-safe!
+    Vector shape1, shape2, nor;
+
+public:
+    DGDiffusion_Penalty2(const double k)
+            : Q(NULL), MQ(NULL), kappa(k) { }
+    DGDiffusion_Penalty2(Coefficient &q, const double k)
+    : Q(&q), MQ(NULL), kappa(k) { }
+
+    using BilinearFormIntegrator::AssembleFaceMatrix;
+    virtual void AssembleFaceMatrix(const FiniteElement &el1,
+                                    const FiniteElement &el2,
+                                    FaceElementTransformations &Trans,
+                                    DenseMatrix &elmat)
+    {
+        bool kappa_is_nonzero = (kappa != 0.);
+        int dim, ndof1, ndof2, ndofs;
+
+        dim = el1.GetDim();
+        nor.SetSize(dim);
+
+        ndof1 = el1.GetDof();
+        shape1.SetSize(ndof1);
+        if (Trans.Elem2No >= 0)
+        {
+            ndof2 = el2.GetDof();
+            shape2.SetSize(ndof2);
+        }
+        else ndof2 = 0;
+
+        ndofs = ndof1 + ndof2;
+        elmat.SetSize(ndofs);
+        elmat = 0.0;
+
+        const IntegrationRule *ir = IntRule;
+        if (ir == NULL)
+        {
+            // a simple choice for the integration order; is this OK?
+            int order;
+            if (ndof2)
+            {
+                order = 2*max(el1.GetOrder(), el2.GetOrder());
+            }
+            else
+            {
+                order = 2*el1.GetOrder();
+            }
+            ir = &IntRules.Get(Trans.GetGeometryType(), order);
+        }
+
+        for (int p=0; p<ir->GetNPoints(); ++p)
+        {
+            const IntegrationPoint &ip = ir->IntPoint(p);
+
+            // Set the integration point in the face and the neighboring elements
+            Trans.SetAllIntPoints(&ip);
+
+            // Access the neighboring elements' integration points
+            // Note: eip2 will only contain valid data if Elem2 exists
+            const IntegrationPoint &eip1 = Trans.GetElement1IntPoint();
+            const IntegrationPoint &eip2 = Trans.GetElement2IntPoint();
+
+            if (dim == 1)
+            {
+                nor(0) = 2*eip1.x - 1.0;
+            }
+            else
+            {
+                CalcOrtho(Trans.Jacobian(), nor);
+            }
+
+            el1.CalcShape(eip1, shape1);
+
+            if (Trans.Elem2No >= 0) // 内部边界
+            {
+                el2.CalcShape(eip2, shape2);
+                Trans.SetAllIntPoints(&ip);
+
+                double h1_E = (nor * nor) / Trans.Elem1->Weight();
+                if (Q) h1_E *= Q->Eval(*Trans.Elem1, eip1);
+                Trans.SetAllIntPoints(&ip);
+
+                double h2_E = (nor * nor) / Trans.Elem2->Weight();
+                if (Q) h2_E *= Q->Eval(*Trans.Elem2, eip2);
+
+                double w = h1_E + h2_E;
+                w *= ip.weight * kappa / 2;
+
+                for (int i=0; i<ndof1; ++i)
+                    for (int j = 0; j < ndof1; ++j)
+                        elmat(i, j) += w * shape1(i) * shape1(j);
+
+                for (int i=0; i<ndof1; ++i)
+                    for (int j=0; j<ndof2; ++j)
+                        elmat(i, j+ndof1) -= w * shape1(i) * shape2(j);
+
+                for (int i=0; i<ndof2; ++i)
+                    for (int j=0; j<ndof1; ++j)
+                        elmat(i + ndof1, j) -= w * shape2(i) * shape1(j);
+
+                for (int i=0; i<ndof2; ++i)
+                    for (int j=0; j<ndof2; ++j)
+                        elmat(i + ndof1, j+ndof1) += w * shape2(i) * shape2(j);
+            }
+            else // 区域边界
+            {
+                double h_E = (nor * nor) / Trans.Elem1->Weight();
+
+                double w = ip.weight * kappa * h_E;
+                if (Q) w *= Q->Eval(*Trans.Elem1, eip1);
+
+                for (int i=0; i<ndof1; ++i)
+                {
+                    for (int j=0; j<ndof1; ++j)
+                    {
+                        elmat(i, j) += w * shape1(i) * shape1(j);
+                    }
+                }
+            }
+        }
+    }
+};
 
 
 /** Boundary linear integrator for imposing non-zero Dirichlet boundary
@@ -1354,12 +1485,79 @@ namespace _DGDiffusion_Edge_Symmetry_Penalty
         }
     }
 
+    void Test_DGDiffusion_Penalty2()
+    {
+        Mesh* mesh = new Mesh(50, 50, Element::TRIANGLE, true, 1.0, 1.0);
+
+        DG_FECollection fec(1, mesh->Dimension());
+        FiniteElementSpace fes(mesh, &fec);
+
+        FunctionCoefficient sin_coeff(sin_cfun);
+
+        GridFunction rand_gf(&fes);
+        for (int i=0; i<fes.GetNDofs(); ++i)
+        {
+            rand_gf[i] = rand() % 10;
+        }
+
+        GridFunctionCoefficient rand_coeff(&rand_gf);
+
+        {
+            BilinearForm blf0(&fes);
+            blf0.AddInteriorFaceIntegrator(new DGDiffusion_Penalty2(rand_coeff, 3.1415926));
+            blf0.AddBdrFaceIntegrator(new DGDiffusion_Penalty2(rand_coeff, 3.1415926));
+            blf0.Assemble();
+
+            BilinearForm blf1(&fes);
+            blf1.AddInteriorFaceIntegrator(new DGDiffusion_Penalty(rand_coeff, 3.1415926));
+            blf1.AddBdrFaceIntegrator(new DGDiffusion_Penalty(rand_coeff, 3.1415926));
+            blf1.Assemble();
+
+            ProductCoefficient neg_rand(-1.0, rand_coeff);
+
+            BilinearForm blf2(&fes);
+            blf2.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, 3.1415926, 3.1415926));
+            blf2.AddBdrFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, 3.1415926, 3.1415926));
+            // 抵消 edge 积分
+            blf2.AddInteriorFaceIntegrator(new DGDiffusion_Edge(neg_rand));
+            blf2.AddBdrFaceIntegrator(new DGDiffusion_Edge(neg_rand));
+            // 抵消 penalty 积分
+            blf2.AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(neg_rand, 3.1415926));
+            blf2.AddBdrFaceIntegrator(new DGDiffusion_Symmetry(neg_rand, 3.1415926));
+            blf2.Assemble();
+
+            Vector worker0(fes.GetVSize()), worker1(fes.GetVSize()), worker2(fes.GetVSize());
+            blf0.Mult(rand_gf, worker0);
+            blf1.Mult(rand_gf, worker1);
+            blf2.Mult(rand_gf, worker2);
+
+            worker0 -= worker2;
+            worker1 -= worker2;
+//            worker0.Print(cout << "worker0: \n", 1);
+//            worker1.Print(cout << "worker1: \n", 1);
+
+            double TOL = 1E-10;
+            for (int i=0; i<fes.GetVSize(); ++i)
+            {
+                if (abs(worker0[i]) > TOL)
+                MFEM_ABORT("Error in DGDiffusion_Penalty2");
+            }
+            for (int i=0; i<fes.GetVSize(); ++i)
+            {
+                if (abs(worker1[i]) > TOL)
+                MFEM_ABORT("Error in DGDiffusion_Penalty");
+            }
+
+        }
+    }
 }
 
 
 void Test_DGDiffusion_Edge_Symmetry_Penalty()
 {
     using namespace _DGDiffusion_Edge_Symmetry_Penalty;
+
+    Test_DGDiffusion_Penalty2();
 
     Test_DGDiffusion_Edge_Symmetry_Penalty_1();
 
