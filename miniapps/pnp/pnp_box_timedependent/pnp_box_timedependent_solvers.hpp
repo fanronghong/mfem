@@ -1817,6 +1817,16 @@ public:
 };
 
 
+class PNP_Box_Newton_DG_Operator: public Operator
+{
+    
+};
+class PNP_Box_Newton_DG_TimeDependent: public TimeDependentOperator
+{
+
+};
+
+
 class PNP_Box_TimeDependent_Solver
 {
 private:
