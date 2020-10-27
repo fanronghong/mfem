@@ -9,7 +9,7 @@ using namespace mfem;
 
 
 /** Integrator for the DG form:
-    * ref: DGDiffusionIntegrator, 下面我们把这个积分子拆分成3个单独的积分子.
+    * ref: DGDiffusionIntegrator, 下面我们把这个积分子拆分成3个单独的积分子. 注意: 我们可以把 symmetry 看出 edge 的转置.
     * 下面只把DGDiffusionIntegrator里面的部分代码修改掉, 理论上来讲应该不会有bug.
 
     - < {(Q grad(u)).n}, [v] >           ------> edge
@@ -1354,6 +1354,51 @@ namespace _DGDiffusion_Edge_Symmetry_Penalty
         }
     }
 
+    // 把 symmetry 看出 edge 的转置来测试
+    void Test_DGDiffusion_Symmetry1()
+    {
+        Mesh* mesh = new Mesh(50, 50, Element::TRIANGLE, true, 1.0, 1.0);
+
+        DG_FECollection fec(1, mesh->Dimension());
+        FiniteElementSpace fes(mesh, &fec);
+
+        FunctionCoefficient sin_coeff(sin_cfun);
+
+        GridFunction rand_gf(&fes);
+        for (int i=0; i<fes.GetNDofs(); ++i)
+            rand_gf[i] = rand() % 10;
+
+        GridFunctionCoefficient rand_coeff(&rand_gf);
+
+        {
+            BilinearForm blf1(&fes);
+            blf1.AddInteriorFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, 0, 0));
+            blf1.AddBdrFaceIntegrator(new DGDiffusionIntegrator(rand_coeff, 0, 0));
+            blf1.Assemble();
+
+            BilinearForm blf2(&fes);
+            blf2.AddInteriorFaceIntegrator(new TransposeIntegrator(
+                                     new DGDiffusion_Symmetry(rand_coeff, -1.0)));
+            blf2.AddBdrFaceIntegrator(new TransposeIntegrator(
+                                     new DGDiffusion_Symmetry(rand_coeff, -1.0)));
+            blf2.Assemble();
+
+            Vector worker1(fes.GetVSize()), worker2(fes.GetVSize());
+            blf1.Mult(rand_gf, worker1);
+            blf2.Mult(rand_gf, worker2);
+
+            worker1 -= worker2;
+//            worker1.Print(cout << "work1:(SHOULD BE ZERO)\n", 1);
+
+            double TOL = 1E-10;
+            for (int i=0; i<fes.GetVSize(); ++i)
+            {
+                if (abs(worker1[i]) > TOL)
+                MFEM_ABORT("Error in DGWeakDirichlet_BLFIntegrator");
+            }
+        }
+
+    }
 }
 
 
@@ -1364,6 +1409,8 @@ void Test_DGDiffusion_Edge_Symmetry_Penalty()
     Test_DGDiffusion_Edge_Symmetry_Penalty_1();
 
     Test_DGWeakDirichlet_BLFIntegrator_1();
+
+    Test_DGDiffusion_Symmetry1();
 
     /* ---------- 完成本文件中所有类的全部测试 ------------ */
 };
