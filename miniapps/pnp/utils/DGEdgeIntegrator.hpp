@@ -652,6 +652,132 @@ public:
 };
 
 
+/* 计算单元边界积分
+ *
+ *    q <[Q1], {Q2 grad(u).n v}>
+ *
+ * u is Trial function, v is Test function,
+ * q, Q1 and Q2 are Coefficient.
+ * */
+class DGEdgeIntegrator3: public BilinearFormIntegrator
+{
+protected:
+    Coefficient *q, *Q1, *Q2;
+
+    DenseMatrix dshape1, dshape2, dshape1dxt, dshape2dxt;
+    Vector nor, shape1, shape2, vec1, vec2;
+
+public:
+    DGEdgeIntegrator3(Coefficient* q_, Coefficient *Q1_, Coefficient *Q2_): q(q_), Q1(Q1_), Q2(Q2_) {}
+    ~DGEdgeIntegrator3() {}
+
+    using BilinearFormIntegrator::AssembleFaceMatrix;
+    virtual void AssembleFaceMatrix(const FiniteElement& el1,
+                                    const FiniteElement& el2,
+                                    FaceElementTransformations& Trans,
+                                    DenseMatrix& elmat)
+    {
+        int dim, ndof1, ndof2(0), ndofs;
+
+        dim = el1.GetDim();
+        nor.SetSize(dim);
+
+        ndof1 = el1.GetDof();
+        shape1.SetSize(ndof1);
+        vec1.SetSize(ndof1);
+        dshape1.SetSize(ndof1, dim);
+        dshape1dxt.SetSize(ndof1, dim);
+
+        if (Trans.Elem2No >= 0)
+        {
+            ndof2 = el2.GetDof();
+            shape2.SetSize(ndof2);
+            vec2.SetSize(ndof2);
+            dshape2.SetSize(ndof2, dim);
+            dshape2dxt.SetSize(ndof2, dim);
+        }
+
+        ndofs = ndof1 + ndof2;
+        elmat.SetSize(ndofs);
+        elmat = 0.0;
+
+        const IntegrationRule *ir = IntRule; // ref: DGTraceIntegrator::AssembleFaceMatrix
+        if (ir == NULL) {
+            int order;
+            // Assuming order(u)==order(mesh)
+            if (ndof2)
+                order = (min(Trans.Elem1->OrderW(), Trans.Elem2->OrderW()) +
+                         2 * max(el1.GetOrder(), el2.GetOrder()));
+            else {
+                order = Trans.Elem1->OrderW() + 2 * el1.GetOrder();
+            }
+            if (el1.Space() == FunctionSpace::Pk) {
+                order++;
+            }
+            ir = &IntRules.Get(Trans.FaceGeom, order); //得到face上的积分规则(里面包含积分点)
+        }
+
+        for (int p=0; p<ir->GetNPoints(); ++p) {
+            const IntegrationPoint &ip = ir->IntPoint(p);
+            Trans.SetAllIntPoints(&ip);
+
+            const IntegrationPoint &eip1 = Trans.GetElement1IntPoint();
+            const IntegrationPoint &eip2 = Trans.GetElement2IntPoint();
+
+            if (dim == 1) {
+                nor(0) = 2 * eip1.x - 1.0;
+            }
+            else {
+                CalcOrtho(Trans.Face->Jacobian(), nor); // 计算Face的法向量
+            }
+
+            el1.CalcShape(eip1, shape1);
+            el1.CalcDShape(eip1, dshape1);
+            Mult(dshape1, Trans.Elem1->AdjugateJacobian(), dshape1dxt);
+            dshape1dxt.Mult(nor, vec1);
+
+            if (Trans.Elem2No >= 0)
+            {
+                el2.CalcShape(eip2, shape2);
+                el2.CalcDShape(eip2, dshape2);
+                Mult(dshape2, Trans.Elem2->AdjugateJacobian(), dshape2dxt);
+                dshape2dxt.Mult(nor, vec2);
+
+                double Q1_jump = Q1->Eval(*Trans.Elem1, eip1) - Q1->Eval(*Trans.Elem2, eip2);
+
+                double w = ip.weight * q->Eval(*Trans.Elem1, eip1) * Q1_jump / 2; // ip.weight q [Q1] / 2
+
+                for (int i=0; i<ndof1; ++i)
+                {
+                    for (int j=0; j<ndof1; ++j)
+                    {
+                        elmat(i, j) += shape1(i) * Q2->Eval(*Trans.Elem1, eip1) * vec1(j) / Trans.Elem1->Weight();
+                    }
+                }
+                for (int i=0; i<ndof2; ++i)
+                {
+                    for (int j=0; j<ndof2; ++j)
+                    {
+                        elmat(i+ndof1, j+ndof1) += shape2(i) * Q2->Eval(*Trans.Elem2, eip2) * vec2(j) / Trans.Elem2->Weight();
+                    }
+                }
+            }
+            else
+            {
+                double w = ip.weight * q->Eval(*Trans.Elem1, eip1)
+                                     * Q1->Eval(*Trans.Elem1, eip1)
+                                     * Q2->Eval(*Trans.Elem1, eip1) / Trans.Elem1->Weight();
+
+                for (int i=0; i<ndof1; ++i)
+                    for (int j=0; j<ndof1; ++j)
+                        elmat(i, j) += w * shape1(i) * vec1(j);
+            }
+        }
+    }
+};
+
+
+
 
 namespace _DGEdgeIntegrator
 {
