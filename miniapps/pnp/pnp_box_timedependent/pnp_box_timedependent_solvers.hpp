@@ -1823,9 +1823,6 @@ public:
         delete l0; delete l1; delete l2;
 
         delete jac_k;
-
-
-
     }
 
     void UpdateParameters(double current, double dt_, ParGridFunction* c1_, ParGridFunction* c2_)
@@ -1885,7 +1882,16 @@ public:
         b2->AddMult(*c2, *l0, 1.0);            // l0 = l0 + b1 c1 + b2 c2
         b1->AddMult(*dc1dt, *l0, dt);             // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt
         b2->AddMult(*dc2dt, *l0, dt);             // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
-        a0_e0_s0_p0->AddMult(*phi, *l0, -1.0); // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt - a0_e0_s0_p0 phi
+        { // ref: https://github.com/mfem/mfem/issues/1830
+            auto* blf_tdof = a0_e0_s0_p0->ParallelAssemble();
+            auto* l0_tdof  = l0->ParallelAssemble();
+            auto* Restriction = a0_e0_s0_p0->GetRestriction();
+
+            blf_tdof->Mult(-1.0, phi->GetTrueVector(), 1.0, *l0_tdof); // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt - a0_e0_s0_p0 phi
+            Restriction->MultTranspose(*l0_tdof, *l0);
+
+            delete blf_tdof; delete l0_tdof; delete Restriction;
+        }
 
         l0->ParallelAssemble(y0);
 
@@ -1914,16 +1920,49 @@ public:
         buildh1(c1);
         buildw1(c1);
         h1->AddMult(*phi, *l1, -1.0);
-        w1->AddMult(*phi, *l1, 1.0);
-        w1->AddMultTranspose(*phi, *l1, -1.0*sigma);
+        {
+            auto* w1_tdof = w1->ParallelAssemble();
+            auto* l1_tdof  = l1->ParallelAssemble();
+            auto* Restriction = w1->GetRestriction();
+
+//        w1->AddMult(*phi, *l1, 1.0);
+//        w1->AddMultTranspose(*phi, *l1, -1.0*sigma);
+            w1_tdof->Mult(1.0, phi->GetTrueVector(), 1.0, *l1_tdof);
+            w1_tdof->MultTranspose(1.0, phi->GetTrueVector(), 1.0, *l1_tdof);
+            Restriction->MultTranspose(*l1_tdof, *l1);
+
+            delete w1_tdof; delete l1_tdof; delete Restriction;
+        }
 
         buildm1_dta1(phi);
-        builde1(phi);
-        builds1(phi);
-        buildp1();
         m1_dta1->AddMult(*dc1dt, *l1, -1.0);
-        e1->AddMult(*dc1dt, *l1, -1.0*dt);
-        s1->AddMult(*dc1dt, *l1, dt);
+        builde1(phi);
+               builds1(phi);
+        {
+            auto* e1_tdof = e1->ParallelAssemble();
+            auto* l1_tdof  = l1->ParallelAssemble();
+            auto* Restriction = w1->GetRestriction();
+
+//        e1->AddMult(*dc1dt, *l1, -1.0*dt);
+            e1_tdof->Mult(-1.0*dt, dc1dt->GetTrueVector(), 1.0, *l1_tdof);
+            Restriction->Mult(*l1_tdof, *l1);
+
+            delete e1_tdof; delete l1_tdof; delete Restriction;
+        }
+        buildp1();
+        {
+            auto* s1_tdof = s1->ParallelAssemble();
+            auto* l1_tdof  = l1->ParallelAssemble();
+            auto* Restriction = fes->GetRestrictionMatrix();
+
+//            s1->AddMult(*dc1dt, *l1, dt);
+            s1_tdof->Mult(dt, dc1dt->GetTrueVector(), 1.0, *l1_tdof);
+            Restriction->Mult(*l1_tdof, *l1);
+            cout << "before while" << endl;
+            while(1) {}
+
+            delete s1_tdof; delete l1_tdof; delete Restriction;
+        }
         p1->AddMult(*dc1dt, *l1, dt);
         p1->AddMult(*c1, *l1, 1.0);
 
@@ -2084,6 +2123,7 @@ private:
         }
 
         a0_e0_s0_p0->Assemble(skip_zero_entries);
+        a0_e0_s0_p0->Finalize(skip_zero_entries);
     }
 
     // epsilon_s (grad(phi), grad(psi))
@@ -2261,6 +2301,7 @@ private:
         if (w1 != NULL) { delete w1; }
         GridFunctionCoefficient c1_coeff(c1_);
         ProductCoefficient neg_D1_z1_c1(neg_D1_z1, c1_coeff);
+        c1_->ExchangeFaceNbrData();
 
         w1 = new ParBilinearForm(fes);
 
@@ -2419,6 +2460,7 @@ private:
     void builde1(ParGridFunction* phi_) const
     {
         if (e1 != NULL) { delete e1; }
+        phi_->ExchangeFaceNbrData();
 
         e1 = new ParBilinearForm(fes);
         // -<{D1 grad(c1)}, [v1]>
@@ -2437,6 +2479,7 @@ private:
     void builde2(ParGridFunction* phi_) const
     {
         if (e2 != NULL) { delete e2; }
+        phi_->ExchangeFaceNbrData();
 
         e2 = new ParBilinearForm(fes);
         // -<{D2 grad(c2)}, [v2]>
@@ -2458,20 +2501,15 @@ private:
         if (s1 != NULL) { delete s1; }
 
         s1 = new ParBilinearForm(fes);
-        // -sigma <[c1], {D1 grad(v1)}>
-        s1->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(neg_D1, sigma));
-        if (symmetry_with_boundary)
-        {
-            s1->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(neg_D1, sigma), ess_bdr);
-        }
-
-        // -sigma <[c1], {D1 z1 v1 grad(phi)}>
-        phi->ExchangeFaceNbrData();
-        s1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(neg_sigma_D_K_v_K, *phi_));
-        if (symmetry_with_boundary)
-        {
-            s1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(neg_sigma_D_K_v_K, *phi_), ess_bdr);
-        }
+        s1->AddDomainIntegrator(new MassIntegrator);
+//        // -sigma <[c1], {D1 grad(v1)}>
+//        s1->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(neg_D1, sigma));
+//        s1->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(neg_D1, sigma), ess_bdr);
+//
+//        phi->ExchangeFaceNbrData();
+//        // -sigma <[c1], {D1 z1 v1 grad(phi)}>
+//        s1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(neg_sigma_D_K_v_K, *phi_));
+//        s1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(neg_sigma_D_K_v_K, *phi_), ess_bdr);
 
         s1->Assemble(skip_zero_entries);
         s1->Finalize(skip_zero_entries);
@@ -2510,10 +2548,7 @@ private:
         p1 = new ParBilinearForm(fes);
         // -kappa <{h^{-1} D1 } [c1], [v1]> 对单元内部边界和区域外部边界积分
         p1->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(-1.0*kappa* D_K));
-        if (penalty_with_boundary)
-        {
-            p1->AddBdrFaceIntegrator(new DGDiffusion_Penalty(-1.0*kappa* D_K), ess_bdr);
-        }
+        p1->AddBdrFaceIntegrator(new DGDiffusion_Penalty(-1.0*kappa* D_K), ess_bdr);
 
         p1->Assemble(skip_zero_entries);
         p1->Finalize(skip_zero_entries);
