@@ -10,11 +10,11 @@ using namespace mfem;
 
 int p_order                     = 1; //有限元基函数的多项式次数
 const char* mesh_file           = "../pnp_data/4_4_4_translate.msh";
-const char* Linearize           = "gummel"; // newton, gummel
+const char* Linearize           = "newton"; // newton, gummel
 const char* Discretize          = "dg"; // cg, dg
 const char* prec_type           = "block"; // preconditioner for Newton discretization: block, uzawa, simple
 const char* AdvecStable         = "none"; // none, eafe, supg
-const char* options_src         = "../pnp_data/gummel_amg";
+const char* options_src         = "../pnp_data/newton_amg";
 bool zero_initial               = true; // 非线性迭代的初值是否为0
 double initTol                  = 1e-3; // 为得到非线性迭代的初值所需Gummel迭代
 bool local_conservation         = false;
