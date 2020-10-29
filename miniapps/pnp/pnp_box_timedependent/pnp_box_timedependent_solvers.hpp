@@ -1877,11 +1877,11 @@ public:
 
         buildb1();
         buildb2();
-        builda0_e0_s0_p0();
         b1->AddMult(*c1, *l0, 1.0);            // l0 = l0 + b1 c1
         b2->AddMult(*c2, *l0, 1.0);            // l0 = l0 + b1 c1 + b2 c2
         b1->AddMult(*dc1dt, *l0, dt);             // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt
         b2->AddMult(*dc2dt, *l0, dt);             // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
+        builda0_e0_s0_p0();
         { // ref: https://github.com/mfem/mfem/issues/1830
             auto* blf_tdof = a0_e0_s0_p0->ParallelAssemble();
             auto* l0_tdof  = l0->ParallelAssemble();
@@ -1918,59 +1918,70 @@ public:
         l1->Assemble();
 
         buildh1(c1);
-        buildw1(c1);
-        h1->AddMult(*phi, *l1, -1.0);
         {
+            auto* h1_tdof = h1->ParallelAssemble();
+            auto* Restriction = h1->GetRestriction();
+            auto* l1_tdof  = l1->ParallelAssemble();
+
+//            h1->AddMult(*phi, *l1, -1.0);
+            h1_tdof->Mult(-1.0, phi->GetTrueVector(), 1.0, *l1_tdof);
+            Restriction->MultTranspose(*l1_tdof, *l1);
+
+            delete h1_tdof; delete Restriction; delete l1_tdof;
+        }
+        buildw1(c1);
+        {
+            cout << "enter in build w1." << endl;
+            MPI_Barrier(MPI_COMM_WORLD);
+
+            // goon
             auto* w1_tdof = w1->ParallelAssemble();
             auto* l1_tdof  = l1->ParallelAssemble();
             auto* Restriction = w1->GetRestriction();
 
-//        w1->AddMult(*phi, *l1, 1.0);
-//        w1->AddMultTranspose(*phi, *l1, -1.0*sigma);
+//            w1->AddMult(*phi, *l1, 1.0);
+//            w1->AddMultTranspose(*phi, *l1, -1.0*sigma);
             w1_tdof->Mult(1.0, phi->GetTrueVector(), 1.0, *l1_tdof);
             w1_tdof->MultTranspose(1.0, phi->GetTrueVector(), 1.0, *l1_tdof);
             Restriction->MultTranspose(*l1_tdof, *l1);
 
             delete w1_tdof; delete l1_tdof; delete Restriction;
         }
-
-        buildm1_dta1(phi);
-        m1_dta1->AddMult(*dc1dt, *l1, -1.0);
-        builde1(phi);
-               builds1(phi);
-        {
-            auto* e1_tdof = e1->ParallelAssemble();
-            auto* l1_tdof  = l1->ParallelAssemble();
-            auto* Restriction = w1->GetRestriction();
-
-//        e1->AddMult(*dc1dt, *l1, -1.0*dt);
-            e1_tdof->Mult(-1.0*dt, dc1dt->GetTrueVector(), 1.0, *l1_tdof);
-            Restriction->Mult(*l1_tdof, *l1);
-
-            delete e1_tdof; delete l1_tdof; delete Restriction;
-        }
-        buildp1();
-        {
-            auto* s1_tdof = s1->ParallelAssemble();
-            auto* l1_tdof  = l1->ParallelAssemble();
-            auto* Restriction = fes->GetRestrictionMatrix();
-
-//            s1->AddMult(*dc1dt, *l1, dt);
-            s1_tdof->Mult(dt, dc1dt->GetTrueVector(), 1.0, *l1_tdof);
-            Restriction->Mult(*l1_tdof, *l1);
-            cout << "before while" << endl;
-            while(1) {}
-
-            delete s1_tdof; delete l1_tdof; delete Restriction;
-        }
-        p1->AddMult(*dc1dt, *l1, dt);
-        p1->AddMult(*c1, *l1, 1.0);
-
-        buildg1_();
-        buildt1();
-        g1_->AddMult(*c1, *l1, -1.0);
-        t1->AddMult(*c1, *l1, 1.0);
-        t1->AddMultTranspose(*c1, *l1, -1.0*sigma);
+//        buildm1_dta1(phi);
+//        m1_dta1->AddMult(*dc1dt, *l1, -1.0);
+//        builds1(phi);
+//        {
+//            auto* s1_tdof = s1->ParallelAssemble();
+//            auto* l1_tdof  = l1->ParallelAssemble();
+//            auto* Restriction = s1->GetRestriction();
+//
+////            s1->AddMult(*dc1dt, *l1, dt);
+//            s1_tdof->Mult(dt, dc1dt->GetTrueVector(), 1.0, *l1_tdof);
+//            Restriction->Mult(*l1_tdof, *l1);
+//
+//            delete s1_tdof; delete l1_tdof; delete Restriction;
+//        }
+//        builde1(phi);
+//        {
+//            auto* e1_tdof = e1->ParallelAssemble();
+//            auto* l1_tdof  = l1->ParallelAssemble();
+//            auto* Restriction = w1->GetRestriction();
+//
+////        e1->AddMult(*dc1dt, *l1, -1.0*dt);
+//            e1_tdof->Mult(-1.0*dt, dc1dt->GetTrueVector(), 1.0, *l1_tdof);
+//            Restriction->Mult(*l1_tdof, *l1);
+//
+//            delete e1_tdof; delete l1_tdof; delete Restriction;
+//        }
+//        buildp1();
+//        p1->AddMult(*dc1dt, *l1, dt);
+//        p1->AddMult(*c1, *l1, 1.0);
+//
+//        buildg1_();
+//        buildt1();
+//        g1_->AddMult(*c1, *l1, -1.0);
+//        t1->AddMult(*c1, *l1, 1.0);
+//        t1->AddMultTranspose(*c1, *l1, -1.0*sigma);
 
         l1->ParallelAssemble(y1);
 
@@ -1995,31 +2006,33 @@ public:
             l2->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(c2_exact, kappa * D_Cl), ess_bdr); // fff
         }
         l2->Assemble();
-
-        buildh2(c2);
-        buildw2(c2);
-        h2->AddMult(*phi, *l2, -1.0);
-        w2->AddMult(*phi, *l2, 1.0);
-        w2->AddMultTranspose(*phi, *l2, -1.0*sigma);
-
-        buildm2_dta2(phi);
-        builde2(phi);
-        builds2(phi);
-        buildp2();
-        m2_dta2->AddMult(*dc2dt, *l2, -1.0);
-        e2->AddMult(*dc2dt, *l2, -1.0*dt);
-        s2->AddMult(*dc2dt, *l2, dt);
-        p2->AddMult(*dc2dt, *l2, dt);
-        p2->AddMult(*c2, *l2, 1.0);
-
-        buildg2_();
-        buildt2();
-        g2_->AddMult(*c2, *l2, -1.0);
-        t2->AddMult(*c2, *l2, 1.0);
-        t2->AddMultTranspose(*c2, *l2, -1.0*sigma);
-
+//
+//        buildh2(c2);
+//        buildw2(c2);
+//        h2->AddMult(*phi, *l2, -1.0);
+//        w2->AddMult(*phi, *l2, 1.0);
+//        w2->AddMultTranspose(*phi, *l2, -1.0*sigma);
+//
+//        buildm2_dta2(phi);
+//        builde2(phi);
+//        builds2(phi);
+//        buildp2();
+//        m2_dta2->AddMult(*dc2dt, *l2, -1.0);
+//        e2->AddMult(*dc2dt, *l2, -1.0*dt);
+//        s2->AddMult(*dc2dt, *l2, dt);
+//        p2->AddMult(*dc2dt, *l2, dt);
+//        p2->AddMult(*c2, *l2, 1.0);
+//
+//        buildg2_();
+//        buildt2();
+//        g2_->AddMult(*c2, *l2, -1.0);
+//        t2->AddMult(*c2, *l2, 1.0);
+//        t2->AddMultTranspose(*c2, *l2, -1.0*sigma);
+//
         l2->ParallelAssemble(y2);
 
+        MPI_Barrier(MPI_COMM_WORLD);
+        MFEM_ABORT("Finish computing Residual.");
         residual.Neg(); // 残量取负
     }
 
@@ -2299,9 +2312,9 @@ private:
     void buildw1(ParGridFunction* c1_) const
     {
         if (w1 != NULL) { delete w1; }
+        c1_->ExchangeFaceNbrData();
         GridFunctionCoefficient c1_coeff(c1_);
         ProductCoefficient neg_D1_z1_c1(neg_D1_z1, c1_coeff);
-        c1_->ExchangeFaceNbrData();
 
         w1 = new ParBilinearForm(fes);
 
@@ -2401,6 +2414,7 @@ private:
         h1->AddDomainIntegrator(new DiffusionIntegrator(D1_z1_c1_coeff));
 
         h1->Assemble(skip_zero_entries);
+        h1->Finalize(skip_zero_entries);
     }
 
     // D1 (z1 (c1 + dt dc1dt) grad(dphi), grad(v1)), given c1 and dc1dt
@@ -2501,15 +2515,14 @@ private:
         if (s1 != NULL) { delete s1; }
 
         s1 = new ParBilinearForm(fes);
-        s1->AddDomainIntegrator(new MassIntegrator);
-//        // -sigma <[c1], {D1 grad(v1)}>
-//        s1->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(neg_D1, sigma));
-//        s1->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(neg_D1, sigma), ess_bdr);
-//
-//        phi->ExchangeFaceNbrData();
-//        // -sigma <[c1], {D1 z1 v1 grad(phi)}>
-//        s1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(neg_sigma_D_K_v_K, *phi_));
-//        s1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(neg_sigma_D_K_v_K, *phi_), ess_bdr);
+        // -sigma <[c1], {D1 grad(v1)}>
+        s1->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(neg_D1, sigma));
+        s1->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(neg_D1, sigma), ess_bdr);
+
+        phi->ExchangeFaceNbrData();
+        // -sigma <[c1], {D1 z1 v1 grad(phi)}>
+        s1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(neg_sigma_D_K_v_K, *phi_));
+        s1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(neg_sigma_D_K_v_K, *phi_), ess_bdr);
 
         s1->Assemble(skip_zero_entries);
         s1->Finalize(skip_zero_entries);
