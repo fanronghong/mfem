@@ -1890,7 +1890,7 @@ public:
             blf_tdof->Mult(-1.0, phi->GetTrueVector(), 1.0, *l0_tdof); // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt - a0_e0_s0_p0 phi
             Restriction->MultTranspose(*l0_tdof, *l0);
 
-            delete blf_tdof; delete l0_tdof; delete Restriction;
+            delete blf_tdof; delete l0_tdof;
         }
 
         l0->ParallelAssemble(y0);
@@ -1930,7 +1930,7 @@ public:
             w1_tdof->MultTranspose(1.0, phi->GetTrueVector(), 1.0, *l1_tdof);
             Restriction->MultTranspose(*l1_tdof, *l1);
 
-            delete w1_tdof; delete l1_tdof; delete Restriction;
+            delete w1_tdof; delete l1_tdof;
         }
         buildh1(c1);
         {
@@ -1942,7 +1942,7 @@ public:
             h1_tdof->Mult(-1.0, phi->GetTrueVector(), 1.0, *l1_tdof);
             Restriction->MultTranspose(*l1_tdof, *l1);
 
-            delete h1_tdof; delete Restriction; delete l1_tdof;
+            delete h1_tdof; delete l1_tdof;
         }
         buildm1_dta1(phi);
         m1_dta1->AddMult(*dc1dt, *l1, -1.0);
@@ -1956,7 +1956,7 @@ public:
             s1_tdof->Mult(dt, dc1dt->GetTrueVector(), 1.0, *l1_tdof);
             Restriction->Mult(*l1_tdof, *l1);
 
-            delete s1_tdof; delete l1_tdof; delete Restriction;
+            delete s1_tdof; delete l1_tdof;
         }
         builde1(phi);
         {
@@ -1968,20 +1968,52 @@ public:
             e1_tdof->Mult(-1.0*dt, dc1dt->GetTrueVector(), 1.0, *l1_tdof);
             Restriction->Mult(*l1_tdof, *l1);
 
-            delete e1_tdof; delete l1_tdof; delete Restriction;
+            delete e1_tdof; delete l1_tdof;
         }
         buildp1();
-        p1->AddMult(*dc1dt, *l1, dt);
-        p1->AddMult(*c1, *l1, 1.0);
+        {
+            auto* p1_tdof = p1->ParallelAssemble();
+            auto* l1_tdof  = l1->ParallelAssemble();
+            auto* Restriction = p1->GetRestriction();
+
+//            p1->AddMult(*dc1dt, *l1, dt);
+//            p1->AddMult(*c1, *l1, 1.0);
+            p1_tdof->Mult(dt, dc1dt->GetTrueVector(), 1.0, *l1_tdof);
+            p1_tdof->Mult(1.0, c1->GetTrueVector(), 1.0, *l1_tdof);
+            Restriction->Mult(*l1_tdof, *l1);
+
+            delete p1_tdof; delete l1_tdof;
+        }
 
         buildg1_();
         buildt1();
         g1_->AddMult(*c1, *l1, -1.0);
-        t1->AddMult(*c1, *l1, 1.0);
-        t1->AddMultTranspose(*c1, *l1, -1.0*sigma);
+        {
+            auto* t1_tdof = t1->ParallelAssemble();
+            auto* l1_tdof  = l1->ParallelAssemble();
+            auto* Restriction = t1->GetRestriction();
 
+//            t1->AddMult(*c1, *l1, 1.0);
+//            t1->AddMultTranspose(*c1, *l1, -1.0*sigma);
+            t1_tdof->Mult(1.0, c1->GetTrueVector(), 1.0, *l1_tdof);
+            t1_tdof->Mult(-1.0*sigma, c1->GetTrueVector(), 1.0, *l1_tdof);
+            Restriction->Mult(*l1_tdof, *l1);
+
+            delete t1_tdof; delete l1_tdof;
+        }
         l1->ParallelAssemble(y1);
 
+        if (1) {
+            if (rank==0) cout << "rank: " << rank << endl;
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank==1) cout << "rank: " << rank << endl;
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank==2) cout << "rank: " << rank << endl;
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank==3) cout << "rank: " << rank << endl;
+            MPI_Barrier(MPI_COMM_WORLD);
+            // 把NP2中的相关计算全部仿造NP1中的改成tdof，这样才会并行运算
+        }
 
         // **************************************************************************************
         //                                3. NP2 方程 Residual
