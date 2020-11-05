@@ -23,6 +23,7 @@ def PlotConservative(filename=None, title=None):
     plt.figure(num_subfig)
     for i, data in enumerate(local_conserv):
         Statistics(data)
+        # Statistics_(data)
         base = range(len(data))
         ax = plt.subplot(subfig_tag + i)
         plt.title(title[i])
@@ -34,6 +35,38 @@ def PlotConservative(filename=None, title=None):
     plt.show()
 
 def Statistics(data):
+    abs_data = map(abs, data)
+    length = len(abs_data)
+    min_val = min(abs_data)
+    max_val = max(abs_data)
+    avg_val = np.mean(abs_data)
+    scale = (avg_val - min_val) / 10.0
+    a1 = a2 = a3 = a4 = 0
+    for val in abs_data:
+        if   0 <= val and val < 1e-7:
+            a1 += 1
+        elif 1e-7 <= val and val < 1e-6:
+            a2 += 1
+        elif 1e-6 <= val and val < 1e-5:
+            a3 += 1
+        elif 1e-5 <= val:
+            a4 += 1
+        else:
+            raise ValueError
+
+    # 计算比例
+    a1 = a1/length
+    a2 = a2/length
+    a3 = a3/length
+    a4 = a4/length
+
+    print("[{}, {}): {:.2%}".format(0, 1e-7, a1))
+    print("[{}, {}): {:.2%}".format(1e-7, 1e-6, a2))
+    print("[{}, {}): {:.2%}".format(1e-6, 1e-5, a3))
+    print("[{}, {}): {:.2%}".format(1e-5, max_val, a4))
+    print("\n")
+
+def Statistics_(data):
     abs_data = map(abs, data)
     length = len(abs_data)
     max_val = max(abs_data)
@@ -89,7 +122,6 @@ def Statistics(data):
     print("[{}, {}): {}".format(8*scale, 9*scale, a9))
     print("[{}, {}): {}".format(9*scale, max_val, a10))
     print("\n")
-
 
 
 if __name__ == '__main__':
