@@ -1735,7 +1735,8 @@ private:
 
     mutable ParBilinearForm *a0_e0_s0_p0, *a0, *b1, *b2, *m1_dta1, *m2_dta2, *g1_, *g2_,
                             *h1, *h2, *h1_dth1, *h2_dth2, *k1, *k2, *r1, *r2, *t1, *t2, *L1, *L2, *w1, *w2,
-                            *e1, *e2, *s1, *s2, *p1, *p2, *h1_k1_r1_l1, *h2_k2_r2_l2, *m1_a1_e1_s1_p1, *m2_a2_e2_s2_p2;
+                            *e1, *e2, *s1, *s2, *p1, *p2, *h1_k1_r1_l1, *h2_k2_r2_l2, *m1_a1_e1_s1_p1, *m2_a2_e2_s2_p2,
+                            *np1_c1, *np1_phi;
     mutable ParLinearForm *l0, *l1, *l2;
     HypreParMatrix *A0_E0_S0_P0, *A0, *B1, *B2, *M1_dtA1, *M2_dtA2, *G1, *G2, *H1, *H2, *H1_dtH1, *H2_dtH2,
                     *H1_K1_R1_L1, *H2_K2_R2_L2, *M1_A1_E1_S1_P1, *M2_A2_E2_S2_P2;;
@@ -1775,6 +1776,9 @@ public:
         l1 = new ParLinearForm(fes);
         l2 = new ParLinearForm(fes);
 
+        np1_c1 = NULL;
+        np1_phi = NULL;
+
         jac_k = new BlockOperator(true_offset);
 
         b1 = NULL; b2 = NULL; a0_e0_s0_p0 = NULL;
@@ -1795,34 +1799,33 @@ public:
     }
     ~PNP_Box_Newton_DG_Operator()
     {
-        delete phi; delete dc1dt; delete dc2dt;
-
-        delete b1; delete b2; delete a0_e0_s0_p0;
-
-        delete h1; delete w1;
-        delete m1_dta1; delete e1; delete s1; delete p1;
-        delete g1_; delete t1;
-
-        delete h2; delete w2;
-        delete m2_dta2; delete e2; delete s2; delete p2;
-        delete g2_; delete t2;
-
-        delete a0_e0_s0_p0;
-        delete h1_k1_r1_l1;
-        delete m1_a1_e1_s1_p1;
-        delete h2_k2_r2_l2;
-        delete m2_a2_e2_s2_p2;
-
-        delete A0_E0_S0_P0;
-        delete H1_K1_R1_L1; delete H2_K2_R2_L2;
-        delete A0; delete B1; delete B2;
-        delete G1; delete G2;
-        delete H1; delete H2;
-        delete M1_dtA1; delete M2_dtA2;
-
-        delete l0; delete l1; delete l2;
-
-        delete jac_k;
+//        delete phi; delete dc1dt; delete dc2dt;
+//
+//        delete b1; delete b2; delete a0_e0_s0_p0;
+//
+//        delete h1; delete w1;
+//        delete m1_dta1; delete e1; delete s1; delete p1;
+//        delete g1_; delete t1;
+//
+//        delete h2; delete w2;
+//        delete m2_dta2; delete e2; delete s2; delete p2;
+//        delete g2_; delete t2;
+//
+//        delete h1_k1_r1_l1;
+//        delete m1_a1_e1_s1_p1;
+//        delete h2_k2_r2_l2;
+//        delete m2_a2_e2_s2_p2;
+//
+//        delete A0_E0_S0_P0;
+//        delete H1_K1_R1_L1; delete H2_K2_R2_L2;
+//        delete A0; delete B1; delete B2;
+//        delete G1; delete G2;
+//        delete H1; delete H2;
+//        delete M1_dtA1; delete M2_dtA2;
+//
+//        delete l0; delete l1; delete l2;
+//
+//        delete jac_k;
     }
 
     void UpdateParameters(double current, double dt_, ParGridFunction* c1_, ParGridFunction* c2_)
@@ -1850,9 +1853,149 @@ public:
         Vector dc1dt_tdof(phi_dc1dt_dc2dt.GetData() + 1*true_vsize, true_vsize);
         Vector dc2dt_tdof(phi_dc1dt_dc2dt.GetData() + 2*true_vsize, true_vsize);
 
+        residual = 0.0;
         Vector y0(residual.GetData() + 0 * true_vsize, true_vsize);
         Vector y1(residual.GetData() + 1 * true_vsize, true_vsize);
         Vector y2(residual.GetData() + 2 * true_vsize, true_vsize);
+
+        if (0) {
+            cout << endl;
+            if (rank == 0) {
+                cout << "In compute Residual(), l2 norm of   phi: " << phi  ->Norml2() << endl;
+                cout << "In compute Residual(), l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "In compute Residual(), l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "In compute Residual(), l2 norm of   phi: " << phi  ->Norml2() << endl;
+                cout << "In compute Residual(), l2 norm of dc1dt: " << dc1dt->Norml2() << endl;
+                cout << "In compute Residual(), l2 norm of dc2dt: " << dc2dt->Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+
+
+        if (1) {
+            if (0)
+            {
+                cout << "l2 norm of y0: " << y0.Norml2() << endl;
+                cout << "l2 norm of y1: " << y1.Norml2() << endl;
+                cout << "l2 norm of y2: " << y2.Norml2() << endl;
+                residual.Neg(); // 残量取负
+                return;
+            }
+
+            if (0)
+            {
+                // **************************************************************************************
+                //                                1. Poisson 方程 Residual
+                // **************************************************************************************
+                delete l0;
+                l0 = new ParLinearForm(fes);
+                // b0: (f0, psi)
+                f0_analytic.SetTime(t);
+                l0->AddDomainIntegrator(new DomainLFIntegrator(f0_analytic));
+                if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
+                {
+                    // g0: sigma <phi_D, epsilon_s grad(psi).n>
+                    l0->AddBdrFaceIntegrator(new DGDirichletLF_Symmetry(phi_exact, epsilon_water, sigma), ess_bdr);
+                }
+                if (abs(kappa - 0.0) > 1E-10 && penalty_with_boundary) // 添加惩罚项
+                {
+                    // q0: kappa <{h^{-1} epsilon_s} phi_D, psi>
+                    l0->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(phi_exact, kappa * water_rel_permittivity), ess_bdr);
+                }
+                l0->Assemble();
+
+                buildb1();
+                buildb2();
+                b1->AddMult(*c1, *l0, 1.0);            // l0 = l0 + b1 c1
+                b2->AddMult(*c2, *l0, 1.0);            // l0 = l0 + b1 c1 + b2 c2
+                b1->AddMult(*dc1dt, *l0, dt);             // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt
+                b2->AddMult(*dc2dt, *l0, dt);             // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
+                builda0_e0_s0_p0();
+                { // ref: https://github.com/mfem/mfem/issues/1830
+                    auto* blf_tdof = a0_e0_s0_p0->ParallelAssemble();
+                    auto* l0_tdof  = l0->ParallelAssemble();
+                    auto* Restriction = a0_e0_s0_p0->GetRestriction();
+
+                    blf_tdof->Mult(-1.0, phi->GetTrueVector(), 1.0, *l0_tdof); // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt - a0_e0_s0_p0 phi
+                    Restriction->MultTranspose(*l0_tdof, *l0);
+
+                    delete blf_tdof; delete l0_tdof;
+                }
+
+                l0->ParallelAssemble(y0);
+
+                cout << "l2 norm of y0: " << y0.Norml2() << endl;
+                cout << "l2 norm of y1: " << y1.Norml2() << endl;
+                cout << "l2 norm of y2: " << y2.Norml2() << endl;
+                residual.Neg(); // 残量取负
+                return;
+            }
+
+            if (1)
+            {
+                // **************************************************************************************
+                //                                2. NP1 方程 Residual
+                // **************************************************************************************
+                delete l1;
+                l1 = new ParLinearForm(fes);
+                // b1: (f1, v1)
+                f1_analytic.SetTime(t);
+                l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
+                // -q1: kappa <{h^{-1} D1 } c1_D, v1>
+                c1_exact.SetTime(t);
+                l1->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(c1_exact, -1.0*kappa * D_K), ess_bdr);
+                l1->Assemble();
+
+                buildnp1_c1();
+                {
+                    auto* np1_c1_tdof = np1_c1->ParallelAssemble();
+                    auto* Restriction = np1_c1->GetRestriction();
+                    auto* l0_tdof  = l0->ParallelAssemble();
+
+                    np1_c1_tdof->Mult(-1.0, c1->GetTrueVector(), 1.0, *l0_tdof);
+                    np1_c1_tdof->Mult(-1.0*dt, dc1dt_tdof, 1.0, *l0_tdof);
+
+                    Restriction->MultTranspose(*l0_tdof, *l0);
+                    delete np1_c1_tdof; delete l0_tdof;
+                }
+
+                buildnp1_phi(c1);
+                {
+                    auto* np1_phi_tdof = np1_phi->ParallelAssemble();
+                    auto* Restriction = np1_phi->GetRestriction();
+                    auto* l0_tdof  = l0->ParallelAssemble();
+
+                    np1_phi_tdof->Mult(-1.0, phi_tdof, 1.0, *l0_tdof);
+
+                    Restriction->MultTranspose(*l0_tdof, *l0);
+                    delete np1_phi_tdof; delete l0_tdof;
+                }
+
+                buildnp1_phi(dc1dt);
+                {
+                    auto* np1_phi_tdof = np1_phi->ParallelAssemble();
+                    auto* Restriction = np1_phi->GetRestriction();
+                    auto* l0_tdof  = l0->ParallelAssemble();
+
+                    np1_phi_tdof->Mult(-1.0*dt, phi_tdof, 1.0, *l0_tdof);
+
+                    Restriction->MultTranspose(*l0_tdof, *l0);
+                    delete np1_phi_tdof; delete l0_tdof;
+                }
+
+                l1->ParallelAssemble(y1);
+
+                cout.precision(14);
+                cout << "l2 norm of y0: " << y0.Norml2() << endl;
+                cout << "l2 norm of y1: " << y1.Norml2() << endl;
+                cout << "l2 norm of y2: " << y2.Norml2() << endl;
+                residual.Neg(); // 残量取负
+                return;
+            }
+        }
 
 
         // **************************************************************************************
@@ -2003,17 +2146,6 @@ public:
         }
         l1->ParallelAssemble(y1);
 
-        if (1) {
-            if (rank==0) cout << "rank: " << rank << endl;
-            MPI_Barrier(MPI_COMM_WORLD);
-            if (rank==1) cout << "rank: " << rank << endl;
-            MPI_Barrier(MPI_COMM_WORLD);
-            if (rank==2) cout << "rank: " << rank << endl;
-            MPI_Barrier(MPI_COMM_WORLD);
-            if (rank==3) cout << "rank: " << rank << endl;
-            MPI_Barrier(MPI_COMM_WORLD);
-            // 把NP2中的相关计算全部仿造NP1中的改成tdof，这样才会并行运算
-        }
 
         // **************************************************************************************
         //                                3. NP2 方程 Residual
@@ -2073,6 +2205,108 @@ public:
         phi  ->SetFromTrueVector(); // 下面要用到 PrimalVector, 而不是 TrueVector
         dc1dt->SetFromTrueVector();
         dc2dt->SetFromTrueVector();
+
+        if (1)
+        {
+            if (0) {
+                auto *temp0 = new ParBilinearForm(fes);
+                auto *temp1 = new ParBilinearForm(fes);
+                auto *temp2 = new ParBilinearForm(fes);
+
+                temp0->AddDomainIntegrator(new MassIntegrator(zero));
+                temp0->Assemble();
+                temp0->FormSystemMatrix(null_array, *A0_E0_S0_P0);
+                A0_E0_S0_P0->EliminateZeroRows();
+
+                temp1->AddDomainIntegrator(new MassIntegrator(zero));
+                temp1->Assemble();
+                temp1->FormSystemMatrix(null_array, *M1_A1_E1_S1_P1);
+                M1_A1_E1_S1_P1->EliminateZeroRows();
+
+                temp2->AddDomainIntegrator(new MassIntegrator(zero));
+                temp2->Assemble();
+                temp2->FormSystemMatrix(null_array, *M2_A2_E2_S2_P2);
+                M2_A2_E2_S2_P2->EliminateZeroRows();
+
+                delete jac_k;
+                jac_k = new BlockOperator(true_offset);
+                jac_k->SetBlock(0, 0, A0_E0_S0_P0);
+                jac_k->SetBlock(1, 1, M1_A1_E1_S1_P1);
+                jac_k->SetBlock(2, 2, M2_A2_E2_S2_P2);
+                return *jac_k;
+            }
+
+            if (0) {
+                // **************************************************************************************
+                //                                1. Poisson 方程的 Jacobian
+                // **************************************************************************************
+                builda0_e0_s0_p0();
+                a0_e0_s0_p0->FormSystemMatrix(null_array, *A0_E0_S0_P0);
+                buildb1();
+                b1->FormSystemMatrix(null_array, *B1);
+                *B1 *= -1.0*dt;
+                buildb2();
+                b2->FormSystemMatrix(null_array, *B2);
+                *B2 *= -1.0*dt;
+
+                auto *temp1 = new ParBilinearForm(fes);
+                auto *temp2 = new ParBilinearForm(fes);
+
+                temp1->AddDomainIntegrator(new MassIntegrator(zero));
+                temp1->Assemble();
+                temp1->FormSystemMatrix(null_array, *M1_A1_E1_S1_P1);
+                M1_A1_E1_S1_P1->EliminateZeroRows();
+
+                temp2->AddDomainIntegrator(new MassIntegrator(zero));
+                temp2->Assemble();
+                temp2->FormSystemMatrix(null_array, *M2_A2_E2_S2_P2);
+                M2_A2_E2_S2_P2->EliminateZeroRows();
+
+                delete jac_k;
+                jac_k = new BlockOperator(true_offset);
+                jac_k->SetBlock(0, 0, A0_E0_S0_P0);
+                jac_k->SetBlock(0, 1, B1);
+                jac_k->SetBlock(0, 2, B2);
+//                jac_k->SetBlock(1, 0, H1_K1_R1_L1);
+                jac_k->SetBlock(1, 1, M1_A1_E1_S1_P1);
+//            jac_k->SetBlock(2, 0, H2_K2_R2_L2);
+                jac_k->SetBlock(2, 2, M2_A2_E2_S2_P2);
+                return *jac_k;
+            }
+
+            if (1)
+            {
+                // **************************************************************************************
+                //                                2. NP1 方程的 Jacobian
+                // **************************************************************************************
+                buildh1_k1_r1_l1(c1, dc1dt);
+                h1_k1_r1_l1->FormSystemMatrix(null_array, *H1_K1_R1_L1);
+
+                buildm1_a1_e1_s1_p1(phi);
+                m1_a1_e1_s1_p1->FormSystemMatrix(null_array, *M1_A1_E1_S1_P1);
+
+                auto *temp0 = new ParBilinearForm(fes);
+                auto *temp2 = new ParBilinearForm(fes);
+
+                temp0->AddDomainIntegrator(new MassIntegrator(zero));
+                temp0->Assemble();
+                temp0->FormSystemMatrix(null_array, *A0_E0_S0_P0);
+                A0_E0_S0_P0->EliminateZeroRows();
+
+                temp2->AddDomainIntegrator(new MassIntegrator(zero));
+                temp2->Assemble();
+                temp2->FormSystemMatrix(null_array, *M2_A2_E2_S2_P2);
+                M2_A2_E2_S2_P2->EliminateZeroRows();
+
+                delete jac_k;
+                jac_k = new BlockOperator(true_offset);
+                jac_k->SetBlock(0, 0, A0_E0_S0_P0);
+                jac_k->SetBlock(1, 0, H1_K1_R1_L1);
+                jac_k->SetBlock(1, 1, M1_A1_E1_S1_P1);
+                jac_k->SetBlock(2, 2, M2_A2_E2_S2_P2);
+                return *jac_k;
+            }
+        }
 
 
         // **************************************************************************************
@@ -2624,28 +2858,13 @@ private:
 
         // D1 (z1 c1 grad(dphi), grad(v1)), given c1
         h1_k1_r1_l1->AddDomainIntegrator(new DiffusionIntegrator(D1_z1_c1_coeff));
+        h1_k1_r1_l1->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D1_z1_c1_coeff, 0.0, 0.0));
+        h1_k1_r1_l1->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D1_z1_c1_coeff, 0.0, 0.0), ess_bdr);
+
         // D1 (z1 dt dc1dt grad(dphi), grad(v1)), given c1
         h1_k1_r1_l1->AddDomainIntegrator(new DiffusionIntegrator(D1_z1_dt_dc1dt_coeff));
-
-        // -<{D1 z1 c1 grad(dphi)}, [v1]>, given c1
-        h1_k1_r1_l1->AddInteriorFaceIntegrator(new DGDiffusion_Edge(D1_z1_c1_coeff));
-        h1_k1_r1_l1->AddBdrFaceIntegrator(new DGDiffusion_Edge(D1_z1_c1_coeff), ess_bdr);
-
-        // -<{D1 z1 dt dc1dt grad(dphi)}, [v1]>, given c1
-        h1_k1_r1_l1->AddInteriorFaceIntegrator(new DGDiffusion_Edge(D1_z1_dt_dc1dt_coeff));
-        h1_k1_r1_l1->AddBdrFaceIntegrator(new DGDiffusion_Edge(D1_z1_dt_dc1dt_coeff), ess_bdr);
-
-        // sigma <[c1], {D1 z1 v1 grad(dphi)}>
-        h1_k1_r1_l1->AddInteriorFaceIntegrator(new DGEdgeIntegrator3(&sigma_coeff, &c1_coeff, &D_K_prod_v_K));
-        h1_k1_r1_l1->AddBdrFaceIntegrator(new DGEdgeIntegrator3(&sigma_coeff, &c1_coeff, &D_K_prod_v_K), ess_bdr);
-
-        // sigma <[dt dc1dt], {D1 z1 v1 grad(dphi)}>
-        h1_k1_r1_l1->AddInteriorFaceIntegrator(new DGEdgeIntegrator3(&sigma_coeff, &dt_dc1dt, &D_K_prod_v_K));
-        h1_k1_r1_l1->AddBdrFaceIntegrator(new DGEdgeIntegrator3(&sigma_coeff, &dt_dc1dt, &D_K_prod_v_K), ess_bdr);
-
-        // sigma <c1_D, D1 z1 v1 grad(dphi).n>
-        ProductCoefficient neg_sigma_c1D_D1_z1(neg_sigma_D_K_v_K, c1_exact);
-        h1_k1_r1_l1->AddBdrFaceIntegrator(new DGDiffusion_Edge(neg_sigma_c1D_D1_z1), ess_bdr);
+        h1_k1_r1_l1->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D1_z1_dt_dc1dt_coeff, 0.0, 0.0));
+        h1_k1_r1_l1->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D1_z1_dt_dc1dt_coeff, 0.0, 0.0), ess_bdr);
 
         h1_k1_r1_l1->Assemble(skip_zero_entries);
     }
@@ -2695,35 +2914,24 @@ private:
 
         m1_a1_e1_s1_p1 = new ParBilinearForm(fes);
 
-        // (c1, v1) + dt D1 (grad(c1) + z1 c1 grad(phi), grad(v1)), given phi
+        phi->ExchangeFaceNbrData();
+        ProductCoefficient neg_dt_D_K_v_K(dt, neg_D_K_v_K);
         ProductCoefficient dt_D1(dt, D_K_);
         ProductCoefficient dt_D1_z1(dt, D_K_prod_v_K);
 
         m1_a1_e1_s1_p1 = new ParBilinearForm(fes);
         // (c1, v1)
         m1_a1_e1_s1_p1->AddDomainIntegrator(new MassIntegrator);
+
         // dt D1 (grad(c1) + z1 c1 grad(phi), grad(v1)), given phi
         m1_a1_e1_s1_p1->AddDomainIntegrator(new DiffusionIntegrator(dt_D1));
+        m1_a1_e1_s1_p1->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(dt_D1, 0.0, kappa));
+        m1_a1_e1_s1_p1->AddBdrFaceIntegrator(new DGDiffusionIntegrator(dt_D1, 0.0, kappa));
+
         m1_a1_e1_s1_p1->AddDomainIntegrator(new GradConvection_BLFIntegrator(*phi_, &dt_D1_z1));
 
-        // -<{D1 (grad(c1) + z1 c1 grad(phi))}, [v1]>, given phi
-        m1_a1_e1_s1_p1->AddInteriorFaceIntegrator(new DGDiffusion_Edge(D_K_));
-        m1_a1_e1_s1_p1->AddBdrFaceIntegrator(new DGDiffusion_Edge(D_K_), ess_bdr);
-        m1_a1_e1_s1_p1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_K_v_K, *phi_));
-        m1_a1_e1_s1_p1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(neg_D_K_v_K, *phi_), ess_bdr);
-
-        // dt sigma <[c1], {D1 grad(v1)}>
-        m1_a1_e1_s1_p1->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(D_K_, dt*sigma));
-        m1_a1_e1_s1_p1->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(D_K_, dt*sigma), ess_bdr);
-        // dt sigma <[c1], {D1 z1 v1 grad(phi)}>
-        phi->ExchangeFaceNbrData();
-        ProductCoefficient dt_sigma_D_K_v_K(dt, neg_D_K_v_K);
-        m1_a1_e1_s1_p1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator2(dt_sigma_D_K_v_K, *phi_));
-        m1_a1_e1_s1_p1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator2(dt_sigma_D_K_v_K, *phi_), ess_bdr);
-
-        // kappa <{h^{-1} D1 } [c1], [v1]> 对单元内部边界和区域外部边界积分
-        m1_a1_e1_s1_p1->AddInteriorFaceIntegrator(new DGDiffusion_Penalty(kappa* D_K));
-        m1_a1_e1_s1_p1->AddBdrFaceIntegrator(new DGDiffusion_Penalty(kappa* D_K), ess_bdr);
+        m1_a1_e1_s1_p1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator1(neg_dt_D_K_v_K, *phi_));
+        m1_a1_e1_s1_p1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(neg_dt_D_K_v_K, *phi_), ess_bdr);
 
         m1_a1_e1_s1_p1->Assemble(skip_zero_entries);
     }
@@ -2766,6 +2974,37 @@ private:
 
         m2_a2_e2_s2_p2->Assemble(skip_zero_entries);
     }
+
+    void buildnp1_c1() const
+    {
+        if (np1_c1 != NULL) { delete np1_c1; }
+
+        np1_c1 = new ParBilinearForm(fes);
+
+        np1_c1->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
+        np1_c1->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, 0.0, kappa));
+        np1_c1->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, 0.0, kappa), ess_bdr);
+
+        np1_c1->Assemble(skip_zero_entries);
+        np1_c1->Finalize(skip_zero_entries);
+    }
+
+    void buildnp1_phi(ParGridFunction* c1_) const
+    {
+        if (np1_phi != NULL) { delete np1_phi; }
+
+        GridFunctionCoefficient c1_coeff(c1_);
+        ProductCoefficient D1_z1_c1(D_K_prod_v_K, c1_coeff);
+
+        np1_phi = new ParBilinearForm(fes);
+
+        np1_phi->AddDomainIntegrator(new DiffusionIntegrator(D1_z1_c1));
+        np1_phi->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D1_z1_c1, 0.0, 0.0));
+        np1_phi->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D1_z1_c1, 0.0, 0.0), ess_bdr);
+
+        np1_phi->Assemble(skip_zero_entries);
+        np1_phi->Finalize(skip_zero_entries);
+    }
 };
 class PNP_Box_Newton_DG_TimeDependent: public TimeDependentOperator
 {
@@ -2780,11 +3019,15 @@ private:
 
     int true_vsize;
     Array<int> true_offset, ess_bdr; // 在H1空间中存在ess_tdof_list, 在DG空间中不存在
+    int num_procs, rank;
 
 public:
     PNP_Box_Newton_DG_TimeDependent(int truesize, Array<int>& offset, Array<int>& ess_bdr_, ParFiniteElementSpace* fes_, double time)
             : TimeDependentOperator(3*truesize, time), fes(fes_), true_vsize(truesize), true_offset(offset), ess_bdr(ess_bdr_)
     {
+        MPI_Comm_size(fes->GetComm(), &num_procs);
+        MPI_Comm_rank(fes->GetComm(), &rank);
+
         oper = new PNP_Box_Newton_DG_Operator(fes, true_vsize, true_offset, ess_bdr);
 
         jac_factory   = new PreconditionerFactory(*oper, prec_type);
@@ -2811,8 +3054,22 @@ public:
         old_c1 .SetFromTrueVector();
         old_c2 .SetFromTrueVector();
 
+        if (0) {
+            phi_exact.SetTime(t-dt);
+            c1_exact.SetTime(t-dt);
+            c2_exact.SetTime(t-dt);
+
+            double phiL2errornorm = old_phi.ComputeL2Error(phi_exact);
+            double  c1L2errornorm = old_c1 .ComputeL2Error(c1_exact);
+            double  c2L2errornorm = old_c2 .ComputeL2Error(c2_exact);
+            cout << "1. ImplicitSolve(), phi L2 errornorm: " << phiL2errornorm << '\n'
+                 << "1. ImplicitSolve(),  c1 L2 errornorm: " <<  c1L2errornorm << '\n'
+                 << "1. ImplicitSolve(),  c2 L2 errornorm: " <<  c2L2errornorm << '\n' << endl;
+        }
+
+
         // 下面通过求解 dc1dt, dc2dt 从而更新 dphic1c2_dt
-        ParGridFunction dc1dt, dc2dt;
+        ParGridFunction dc1dt(fes), dc2dt(fes);
         dphic1c2_dt = 0.0;
         dc1dt.MakeTRef(fes, dphic1c2_dt, true_offset[1]);
         dc2dt.MakeTRef(fes, dphic1c2_dt, true_offset[2]);
@@ -2820,6 +3077,61 @@ public:
         dc2dt.SetFromTrueVector();
 
         /* DG 不需要设定强的边界条件, 都是weak Dirichlet边界条件. */
+        if (0) {
+            phi_exact.SetTime(t);
+            dc1dt_exact.SetTime(t);
+            dc2dt_exact.SetTime(t);
+            c1_exact.SetTime(t);
+            c2_exact.SetTime(t);
+
+            old_phi.ProjectCoefficient(phi_exact);
+            dc1dt.ProjectCoefficient(dc1dt_exact);
+            dc2dt.ProjectCoefficient(dc2dt_exact);
+
+//            old_c1.ProjectCoefficient(c1_exact);
+//            old_c2.ProjectCoefficient(c2_exact);
+            old_c1.Add(dt, dc1dt);
+            old_c2.Add(dt, dc2dt);
+
+            old_phi.SetTrueVector();
+            dc1dt.SetTrueVector();
+            dc2dt.SetTrueVector();
+
+            {
+                double phiL2errornorm = old_phi.ComputeL2Error(phi_exact);
+                double  dc1dtL2errornorm = dc1dt.ComputeL2Error(dc1dt_exact);
+                double  dc2dtL2errornorm = dc2dt.ComputeL2Error(dc2dt_exact);
+
+                double c1L2errornorm = old_c1.ComputeL2Error(c1_exact);
+                double c2L2errornorm = old_c2.ComputeL2Error(c2_exact);
+
+                cout << "2. ImplicitSolve(),   phi L2 errornorm: " << phiL2errornorm << '\n'
+                     << "2. ImplicitSolve(), dc1dt L2 errornorm: " <<  dc1dtL2errornorm << '\n'
+                     << "2. ImplicitSolve(), dc2dt L2 errornorm: " <<  dc2dtL2errornorm << '\n'
+                     << "2. ImplicitSolve(), old_c1 L2 errornorm: " <<  c1L2errornorm << '\n'
+                     << "2. ImplicitSolve(), old_c2 L2 errornorm: " <<  c2L2errornorm << '\n'
+                        << endl;
+
+            }
+
+//            true_offset.Print(cout << "true_offset: ");
+//            phic1c2_ptr->SetVector(old_phi.GetTrueVector(), true_offset[0]);
+//            dphic1c2_dt .SetVector(dc1dt.GetTrueVector(), true_offset[1]);
+//            dphic1c2_dt .SetVector(dc2dt.GetTrueVector(), true_offset[2]);
+//            if (1) cout << "l2 norm of dphic1c2_dt: " << dphic1c2_dt.Norml2() << endl;
+            return;
+        }
+        if (1) {
+            phi_exact.SetTime(t);
+            dc1dt_exact.SetTime(t);
+            dc2dt_exact.SetTime(t);
+            c1_exact.SetTime(t);
+            c2_exact.SetTime(t);
+
+            old_phi.ProjectCoefficient(phi_exact);
+            dc1dt.ProjectCoefficient(dc1dt_exact);
+            dc2dt.ProjectCoefficient(dc2dt_exact);
+        }
 
         auto* phi_dc1dt_dc2dt = new BlockVector(true_offset);
         *phi_dc1dt_dc2dt = 0.0;
@@ -2831,6 +3143,25 @@ public:
         phi_dc1dt_dc2dt->SetVector(  dc2dt.GetTrueVector(), true_offset[2]);
 
         oper->UpdateParameters(t, dt, &old_c1, &old_c2); // 传入当前解
+        if (0) {
+            cout << endl;
+            if (rank == 0) {
+                cout << "Before Newton::Mult(), l2 norm of  old_c1: " << old_c1.Norml2() << endl;
+                cout << "Before Newton::Mult(), l2 norm of  old_c2: " << old_c2.Norml2() << endl;
+                cout << "Before Newton::Mult(), l2 norm of old_phi: " << old_phi.Norml2() << endl;
+                cout << "Before Newton::Mult(), l2 norm of   dc1dt: " << dc1dt.Norml2() << endl;
+                cout << "Before Newton::Mult(), l2 norm of   dc2dt: " << dc2dt.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (rank == 1) {
+                cout << "Before Newton::Mult(), l2 norm of  old_c1: " << old_c1.Norml2() << endl;
+                cout << "Before Newton::Mult(), l2 norm of  old_c2: " << old_c2.Norml2() << endl;
+                cout << "Before Newton::Mult(), l2 norm of old_phi: " << old_phi.Norml2() << endl;
+                cout << "Before Newton::Mult(), l2 norm of   dc1dt: " << dc1dt.Norml2() << endl;
+                cout << "Before Newton::Mult(), l2 norm of   dc2dt: " << dc2dt.Norml2() << endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
 
         Vector zero_vec;
         newton_solver->Mult(zero_vec, *phi_dc1dt_dc2dt);
@@ -2840,6 +3171,11 @@ public:
         phic1c2_ptr->SetVector(phi_dc1dt_dc2dt->GetBlock(0), true_offset[0]);
         dphic1c2_dt .SetVector(phi_dc1dt_dc2dt->GetBlock(1), true_offset[1]);
         dphic1c2_dt .SetVector(phi_dc1dt_dc2dt->GetBlock(2), true_offset[2]);
+        if (0) {
+            cout << "l2 norm of dphic1c2_dt: " << dphic1c2_dt.Norml2() << endl;
+            cout << "l2 norm of phi_dc1dt_dc2dt->GetBlock(1): " << phi_dc1dt_dc2dt->GetBlock(1).Norml2() << endl;
+            cout << "l2 norm of phi_dc1dt_dc2dt->GetBlock(2): " << phi_dc1dt_dc2dt->GetBlock(2).Norml2() << endl;
+        }
         delete phi_dc1dt_dc2dt;
     }
 };
@@ -2917,22 +3253,6 @@ public:
         c2_gf->ProjectCoefficient(c2_exact);
         c2_gf->SetTrueVector();
         c2_gf->SetFromTrueVector();
-        if (0) {
-            if (rank == 0) {
-                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of old_phi: " << phi_gf->Norml2() << endl;
-                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of  old_c1: " << c1_gf->Norml2() << endl;
-                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of  old_c2: " << c2_gf->Norml2() << endl;
-                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
-            }
-            MPI_Barrier(MPI_COMM_WORLD);
-            if (rank == 1) {
-                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of old_phi: " << phi_gf->Norml2() << endl;
-                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of  old_c1: " << c1_gf->Norml2() << endl;
-                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of  old_c2: " << c2_gf->Norml2() << endl;
-                cout << "In PNP_Box_TimeDependent_Solver::PNP_Box_TimeDependent_Solver(), l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
-            }
-            MPI_Barrier(MPI_COMM_WORLD);
-        }
 
         if (strcmp(Linearize, "gummel") == 0)
         {
@@ -3039,6 +3359,34 @@ public:
         {
             double dt_real = min(t_stepsize, t_final - t);
 
+            if (0) {
+                if (rank == 0) {
+                    cout << "Before ODE.Step(), l2 norm of old_phi: " << phi_gf->Norml2() << endl;
+                    cout << "Before ODE.Step(), l2 norm of  old_c1: " << c1_gf->Norml2() << endl;
+                    cout << "Before ODE.Step(), l2 norm of  old_c2: " << c2_gf->Norml2() << endl;
+                    cout << "Before ODE.Step(), l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
+                }
+                MPI_Barrier(MPI_COMM_WORLD);
+                if (rank == 1) {
+                    cout << "Before ODE.Step(), l2 norm of old_phi: " << phi_gf->Norml2() << endl;
+                    cout << "Before ODE.Step(), l2 norm of  old_c1: " << c1_gf->Norml2() << endl;
+                    cout << "Before ODE.Step(), l2 norm of  old_c2: " << c2_gf->Norml2() << endl;
+                    cout << "Before ODE.Step(), l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
+                }
+                MPI_Barrier(MPI_COMM_WORLD);
+
+                phi_exact.SetTime(t);
+                c1_exact.SetTime(t);
+                c2_exact.SetTime(t);
+
+                double phiL2errornorm = phi_gf->ComputeL2Error(phi_exact);
+                double  c1L2errornorm = c1_gf->ComputeL2Error(c1_exact);
+                double  c2L2errornorm = c2_gf->ComputeL2Error(c2_exact);
+                cout << "phi L2 errornorm: " << phiL2errornorm << '\n'
+                     << " c1 L2 errornorm: " <<  c1L2errornorm << '\n'
+                     << " c2 L2 errornorm: " <<  c2L2errornorm << '\n' << endl;
+            }
+
             ode_solver->Step(*phic1c2, t, dt_real); // 经过这一步之后 phic1c2(TrueVector, not PrimalVector) 和 t 都被更新了
 
             last_step = (t >= t_final - 1e-8*t_stepsize);
@@ -3047,6 +3395,20 @@ public:
             phi_gf->SetFromTrueVector();
             c1_gf->SetFromTrueVector();
             c2_gf->SetFromTrueVector();
+
+            if (0) {
+                phi_exact.SetTime(t);
+                c1_exact.SetTime(t);
+                c2_exact.SetTime(t);
+
+                double phiL2errornorm = phi_gf->ComputeL2Error(phi_exact);
+                double  c1L2errornorm = c1_gf->ComputeL2Error(c1_exact);
+                double  c2L2errornorm = c2_gf->ComputeL2Error(c2_exact);
+                cout << "phi L2 errornorm: " << phiL2errornorm << '\n'
+                     << " c1 L2 errornorm: " <<  c1L2errornorm << '\n'
+                     << " c2 L2 errornorm: " <<  c2L2errornorm << '\n' << endl;
+
+            }
 
             if (paraview)
             {
