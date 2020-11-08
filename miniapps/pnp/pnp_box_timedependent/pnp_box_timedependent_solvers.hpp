@@ -1732,6 +1732,7 @@ class PNP_Box_Newton_DG_Operator: public Operator
 {
 private:
     ParFiniteElementSpace* fes;
+    const Operator* Restriction; // 不能delete,它是FiniteElementSpace的成员变量
 
     mutable ParBilinearForm *a0_e0_s0_p0, *a0, *b1, *b2, *m1_dta1, *m2_dta2, *g1_, *g2_,
                             *h1, *h2, *h1_dth1, *h2_dth2, *k1, *k2, *r1, *r2, *t1, *t2, *L1, *L2, *w1, *w2,
@@ -1757,6 +1758,8 @@ public:
     {
         MPI_Comm_size(fes->GetComm(), &num_procs);
         MPI_Comm_rank(fes->GetComm(), &rank);
+
+        Restriction = fes->GetRestrictionMatrix();
 
         phi   = new ParGridFunction;
         dc1dt = new ParGridFunction;
@@ -1944,55 +1947,62 @@ public:
                 // b1: (f1, v1)
                 f1_analytic.SetTime(t);
                 l1->AddDomainIntegrator(new DomainLFIntegrator(f1_analytic));
-                // -q1: kappa <{h^{-1} D1 } c1_D, v1>
-                c1_exact.SetTime(t);
-                l1->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(c1_exact, -1.0*kappa * D_K), ess_bdr);
+//                // -q1: kappa <{h^{-1} D1 } c1_D, v1>
+//                c1_exact.SetTime(t);
+//                l1->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(c1_exact, -1.0*kappa * D_K), ess_bdr);
                 l1->Assemble();
 
                 buildnp1_c1();
                 {
                     auto* np1_c1_tdof = np1_c1->ParallelAssemble();
-                    auto* Restriction = np1_c1->GetRestriction();
-                    auto* l0_tdof  = l0->ParallelAssemble();
+                    auto* l1_tdof  = l1->ParallelAssemble();
 
-                    np1_c1_tdof->Mult(-1.0, c1->GetTrueVector(), 1.0, *l0_tdof);
-                    np1_c1_tdof->Mult(-1.0*dt, dc1dt_tdof, 1.0, *l0_tdof);
+                    np1_c1_tdof->Mult(-1.0, c1->GetTrueVector(), 1.0, *l1_tdof);
+                    np1_c1_tdof->Mult(-1.0*dt, dc1dt_tdof, 1.0, *l1_tdof);
 
-                    Restriction->MultTranspose(*l0_tdof, *l0);
-                    delete np1_c1_tdof; delete l0_tdof;
+                    Restriction->MultTranspose(*l1_tdof, *l1);
+                    delete np1_c1_tdof;
+                    delete l1_tdof;
                 }
 
                 buildnp1_phi(c1);
                 {
                     auto* np1_phi_tdof = np1_phi->ParallelAssemble();
-                    auto* Restriction = np1_phi->GetRestriction();
-                    auto* l0_tdof  = l0->ParallelAssemble();
+                    auto* l1_tdof  = l1->ParallelAssemble();
 
-                    np1_phi_tdof->Mult(-1.0, phi_tdof, 1.0, *l0_tdof);
+                    np1_phi_tdof->Mult(-1.0, phi_tdof, 1.0, *l1_tdof);
 
-                    Restriction->MultTranspose(*l0_tdof, *l0);
-                    delete np1_phi_tdof; delete l0_tdof;
+                    Restriction->MultTranspose(*l1_tdof, *l1);
+                    delete np1_phi_tdof;
+                    delete l1_tdof;
                 }
 
                 buildnp1_phi(dc1dt);
                 {
                     auto* np1_phi_tdof = np1_phi->ParallelAssemble();
-                    auto* Restriction = np1_phi->GetRestriction();
-                    auto* l0_tdof  = l0->ParallelAssemble();
+                    auto* l1_tdof  = l1->ParallelAssemble();
 
-                    np1_phi_tdof->Mult(-1.0*dt, phi_tdof, 1.0, *l0_tdof);
+                    np1_phi_tdof->Mult(-1.0*dt, phi_tdof, 1.0, *l1_tdof);
 
-                    Restriction->MultTranspose(*l0_tdof, *l0);
-                    delete np1_phi_tdof; delete l0_tdof;
+                    Restriction->MultTranspose(*l1_tdof, *l1);
+                    delete np1_phi_tdof;
+                    delete l1_tdof;
                 }
 
                 l1->ParallelAssemble(y1);
 
-                cout.precision(14);
+//                cout.precision(14);
+//                cout << endl;
+//                cout << "l2 norm of dc1dt_tdof: " << dc1dt_tdof.Norml2() << endl;
                 cout << "l2 norm of y0: " << y0.Norml2() << endl;
                 cout << "l2 norm of y1: " << y1.Norml2() << endl;
                 cout << "l2 norm of y2: " << y2.Norml2() << endl;
+//                cout << "l2 norm of Residual: " << residual.Norml2() << endl;
+//                cout << "L2 norm of phi: " << phi->ComputeL2Error(zero) << endl;
+//                cout << "L2 norm of dc1dt: " << dc1dt->ComputeL2Error(zero) << endl;
+//                cout << "L2 norm of dc2dt: " << dc2dt->ComputeL2Error(zero) << endl;
                 residual.Neg(); // 残量取负
+//                MFEM_ABORT("F");
                 return;
             }
         }
@@ -2856,12 +2866,12 @@ private:
         ProductCoefficient dt_dc1dt(dt, dc1dt_coeff);
         ProductCoefficient D1_z1_dt_dc1dt_coeff(D_K_prod_v_K, dt_dc1dt);
 
-        // D1 (z1 c1 grad(dphi), grad(v1)), given c1
+        // D1 (z1 c1 grad(dphi), grad(v1)) - <{D1 z1 c1 grad(dphi).n}, [v1]>, given c1
         h1_k1_r1_l1->AddDomainIntegrator(new DiffusionIntegrator(D1_z1_c1_coeff));
         h1_k1_r1_l1->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D1_z1_c1_coeff, 0.0, 0.0));
         h1_k1_r1_l1->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D1_z1_c1_coeff, 0.0, 0.0), ess_bdr);
 
-        // D1 (z1 dt dc1dt grad(dphi), grad(v1)), given c1
+        // D1 (z1 dt dc1dt grad(dphi), grad(v1)) - <{D1 z1 dt dc1dt grad(dphi).n}, [v1]>, given c1
         h1_k1_r1_l1->AddDomainIntegrator(new DiffusionIntegrator(D1_z1_dt_dc1dt_coeff));
         h1_k1_r1_l1->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D1_z1_dt_dc1dt_coeff, 0.0, 0.0));
         h1_k1_r1_l1->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D1_z1_dt_dc1dt_coeff, 0.0, 0.0), ess_bdr);
@@ -2912,24 +2922,25 @@ private:
     {
         if (m1_a1_e1_s1_p1 != NULL) { delete m1_a1_e1_s1_p1; }
 
-        m1_a1_e1_s1_p1 = new ParBilinearForm(fes);
-
         phi->ExchangeFaceNbrData();
         ProductCoefficient neg_dt_D_K_v_K(dt, neg_D_K_v_K);
         ProductCoefficient dt_D1(dt, D_K_);
         ProductCoefficient dt_D1_z1(dt, D_K_prod_v_K);
 
         m1_a1_e1_s1_p1 = new ParBilinearForm(fes);
+
         // (c1, v1)
         m1_a1_e1_s1_p1->AddDomainIntegrator(new MassIntegrator);
 
-        // dt D1 (grad(c1) + z1 c1 grad(phi), grad(v1)), given phi
+        // dt D1 (grad(c1), grad(v1)) - <{dt D1 grad(c1).n}, [v1]> - kappa <{h^{-1} dt D1} [c1], [v1]>
         m1_a1_e1_s1_p1->AddDomainIntegrator(new DiffusionIntegrator(dt_D1));
-        m1_a1_e1_s1_p1->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(dt_D1, 0.0, kappa));
-        m1_a1_e1_s1_p1->AddBdrFaceIntegrator(new DGDiffusionIntegrator(dt_D1, 0.0, kappa));
+        m1_a1_e1_s1_p1->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(dt_D1, 0.0, 0.0));
+        m1_a1_e1_s1_p1->AddBdrFaceIntegrator(new DGDiffusionIntegrator(dt_D1, 0.0, 0.0), ess_bdr);
 
+        // dt D1 z1 (c1 grad(phi), grad(v1)), given phi
         m1_a1_e1_s1_p1->AddDomainIntegrator(new GradConvection_BLFIntegrator(*phi_, &dt_D1_z1));
 
+        // - <{dt D1 z1 c1 grad(phi).n}, [v1]>, given phi
         m1_a1_e1_s1_p1->AddInteriorFaceIntegrator(new DGEdgeBLFIntegrator1(neg_dt_D_K_v_K, *phi_));
         m1_a1_e1_s1_p1->AddBdrFaceIntegrator(new DGEdgeBLFIntegrator1(neg_dt_D_K_v_K, *phi_), ess_bdr);
 
@@ -2975,20 +2986,25 @@ private:
         m2_a2_e2_s2_p2->Assemble(skip_zero_entries);
     }
 
+    // D1 (grad(c1), grad(v1)) - <{D1 grad(c1).n}, [v1]> - kappa <{h^{-1} D1} [c1], [v1]>
     void buildnp1_c1() const
     {
         if (np1_c1 != NULL) { delete np1_c1; }
 
         np1_c1 = new ParBilinearForm(fes);
 
+        // D1 (grad(c1), grad(v1))
         np1_c1->AddDomainIntegrator(new DiffusionIntegrator(D_K_));
-        np1_c1->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, 0.0, kappa));
-        np1_c1->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, 0.0, kappa), ess_bdr);
+
+        // - <{D1 grad(c1).n}, [v1]> - kappa <{h^{-1} D1} [c1], [v1]>
+        np1_c1->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D_K_, 0.0, 0.0));
+        np1_c1->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D_K_, 0.0, 0.0), ess_bdr);
 
         np1_c1->Assemble(skip_zero_entries);
         np1_c1->Finalize(skip_zero_entries);
     }
 
+    // D1 z1 c1 (grad(phi), grad(v1)) - <{D1 z1 c1 grad(phi).n}, [v1]>, given c1
     void buildnp1_phi(ParGridFunction* c1_) const
     {
         if (np1_phi != NULL) { delete np1_phi; }
@@ -2998,7 +3014,10 @@ private:
 
         np1_phi = new ParBilinearForm(fes);
 
+        // D1 z1 c1 (grad(phi), grad(v1))
         np1_phi->AddDomainIntegrator(new DiffusionIntegrator(D1_z1_c1));
+
+        // - <{D1 z1 c1 grad(phi).n}, [v1]>
         np1_phi->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(D1_z1_c1, 0.0, 0.0));
         np1_phi->AddBdrFaceIntegrator(new DGDiffusionIntegrator(D1_z1_c1, 0.0, 0.0), ess_bdr);
 

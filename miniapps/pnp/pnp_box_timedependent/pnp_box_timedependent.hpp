@@ -39,7 +39,7 @@ int mpi_debug                   = 1;
 int verbose                     = 2; // 数字越大输出越多: 0,1,2
 double sigma                    = -1.0; // symmetric parameter for DG
 bool symmetry_with_boundary     = true; // 为true就可以不单独考虑weak Dirichlet.
-double kappa                    = 20; // penalty parameter for DG
+double kappa                    = 0; // penalty parameter for DG
 bool penalty_with_boundary      = true;
 
 const int bottom_attr           = 1;
