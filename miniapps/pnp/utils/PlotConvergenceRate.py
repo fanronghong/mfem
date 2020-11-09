@@ -35,13 +35,15 @@ def PlotConvergRate(p_order, mesh_sizes=None, errornorms1=None, errornorms2=None
     xticks = [49152, 2*49152, 49152*3, 49152*4]
 
     fig,ax = plt.subplots()
-    # ax.plot(x_coor, y_coor, '-d', label='exact convergence rate')
-    ax.plot(xticks, y1_coor, ':s', label='$\phi_h$ convergence rate')
-    ax.plot(xticks, y2_coor, ':o', label='$c_{1,h}$ convergence rate')
-    ax.plot(xticks, y3_coor, ':*', label='$c_{2,h}$ convergence rate')
+    ax.plot(x_coor, y1_coor, '-d', label='$\phi_h$  convergence rate')
+    ax.plot(x_coor, y2_coor, '-d', label='$c_{1,h}$ convergence rate')
+    ax.plot(x_coor, y3_coor, '-d', label='$c_{2,h}$ convergence rate')
+    # ax.plot(xticks, y1_coor, ':s', label='$\phi_h$ convergence rate')
+    # ax.plot(xticks, y2_coor, ':o', label='$c_{1,h}$ convergence rate')
+    # ax.plot(xticks, y3_coor, ':*', label='$c_{2,h}$ convergence rate')
     # ax.set_xticks([49152, 2*49152, 49152*3, 49152*4])
     # ax.xaxis.set_major_locator(MultipleLocator(8))
-    # ax.invert_xaxis()
+    ax.invert_xaxis()
     # plt.xticks(x_coor, [49152, 2*49152, 49152*3, 49152*4])
     plt.xlabel(xaxis)
     plt.ylabel(yaxis)
@@ -189,7 +191,7 @@ def demo(): # Gummel线性化对应的CG和DG离散格式
     plt.plot(mesh_size, total_time_cg_p1, ':s', label='p=1')
     plt.plot(mesh_size, total_time_cg_p2, ':o', label='p=2')
     plt.plot(mesh_size, total_time_cg_p3, ':*', label='p=3')
-    plt.xscale('log')
+    # plt.xscale('log')
     plt.yscale('log')
     plt.grid(True)
     plt.gca().invert_xaxis()
@@ -203,7 +205,7 @@ def demo(): # Gummel线性化对应的CG和DG离散格式
     plt.plot(mesh_size, total_time_dg_p1, ':s', label='p=1')
     plt.plot(mesh_size, total_time_dg_p2, ':o', label='p=2')
     plt.plot(mesh_size, total_time_dg_p3, ':*', label='p=3')
-    plt.xscale('log')
+    # plt.xscale('log')
     plt.yscale('log')
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
@@ -412,9 +414,7 @@ def demo2(): # 使用EAFE和SUPG求解NP方程的时间差异
     os._exit(0)
 
 if __name__ == '__main__':
-    demo1()
-
-    if 1:
+    if 0:
         # 数据来源dddd5
         p_order = 1
         mesh_size  = "0.38268343236509 0.19134171618254 0.095670858091283 0.047835429045611"
@@ -451,4 +451,13 @@ if __name__ == '__main__':
         errornorm2 = "4.9368238642349e-05 1.4896013648534e-05 3.9856962348929e-06 1.0213744233093e-06 2.5784251776647e-07"
         errornorm3 = "4.9368422295529e-05 1.4896080001237e-05 3.9857148334939e-06 1.0213791973692e-06 2.5784370382021e-07"
         PlotConvergRate(p_order, mesh_size, errornorm1, errornorm2, errornorm3)
-
+    elif 0:
+        demo()
+    elif 1:
+        # 数据来源 boxcggummel1
+        p_order = 1
+        mesh_size  = "0.56123102415469 0.28061551207734 0.14030775603867 0.070153878019336 0.035076939009668"
+        errornorm1 = "0.23337694437914 0.065927153180969 0.017041691576563 0.0042972382417652 0.0010766421701565"
+        errornorm2 = "0.17029430206066 0.045760042269532 0.011920665105797 0.0032922029315401 0.0011470896275865"
+        errornorm3 = "0.17033988050451 0.045772286469063 0.011923997438606 0.0032932393349512 0.0011475334175606"
+        PlotConvergRate(p_order, mesh_size, errornorm1, errornorm2, errornorm3)
