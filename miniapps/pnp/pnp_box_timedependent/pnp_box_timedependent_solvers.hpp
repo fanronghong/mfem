@@ -1879,8 +1879,7 @@ public:
             MPI_Barrier(MPI_COMM_WORLD);
         }
 
-
-        if (0) {
+        if (1) {
             if (0)
             {
                 cout << "l2 norm of y0: " << y0.Norml2() << endl;
@@ -1890,8 +1889,9 @@ public:
                 return;
             }
 
-            if (0)
+            if (1)
             {
+                cout << "Only obtain Poisson Residual." << endl;
                 // **************************************************************************************
                 //                                1. Poisson 方程 Residual
                 // **************************************************************************************
@@ -1900,24 +1900,21 @@ public:
                 // b0: (f0, psi)
                 f0_analytic.SetTime(t);
                 l0->AddDomainIntegrator(new DomainLFIntegrator(f0_analytic));
-                if (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) // 添加对称项
-                {
-                    // g0: sigma <phi_D, epsilon_s grad(psi).n>
-                    l0->AddBdrFaceIntegrator(new DGDirichletLF_Symmetry(phi_exact, epsilon_water, sigma), ess_bdr);
-                }
-                if (abs(kappa - 0.0) > 1E-10 && penalty_with_boundary) // 添加惩罚项
-                {
-                    // q0: kappa <{h^{-1} epsilon_s} phi_D, psi>
-                    l0->AddBdrFaceIntegrator(new DGDirichletLF_Penalty(phi_exact, kappa * water_rel_permittivity), ess_bdr);
-                }
+                // q0: kappa <{h^{-1} epsilon_s} phi_D, psi>
+                phi_exact.SetTime(t);
+                l0->AddBdrFaceIntegrator(new DGDirichletLFIntegrator(phi_exact, epsilon_water, 0.0, kappa));
                 l0->Assemble();
+                {
+                    l0->ParallelAssemble(y0);
+                    return;
+                }
 
                 buildb1();
                 buildb2();
-                b1->AddMult(*c1, *l0, 1.0);            // l0 = l0 + b1 c1
-                b2->AddMult(*c2, *l0, 1.0);            // l0 = l0 + b1 c1 + b2 c2
-                b1->AddMult(*dc1dt, *l0, dt);             // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt
-                b2->AddMult(*dc2dt, *l0, dt);             // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
+                b1->AddMult(*c1, *l0, 1.0);  // l0 = l0 + b1 c1
+                b2->AddMult(*c2, *l0, 1.0);  // l0 = l0 + b1 c1 + b2 c2
+                b1->AddMult(*dc1dt, *l0, dt);   // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt
+                b2->AddMult(*dc2dt, *l0, dt);   // l0 = l0 + b1 c1 + b2 c2 + dt b1 dc1dt + dt b2 dc2dt
                 builda0_e0_s0_p0();
                 { // ref: https://github.com/mfem/mfem/issues/1830
                     auto* blf_tdof = a0_e0_s0_p0->ParallelAssemble();
@@ -1935,11 +1932,15 @@ public:
                 cout << "l2 norm of y0: " << y0.Norml2() << endl;
                 cout << "l2 norm of y1: " << y1.Norml2() << endl;
                 cout << "l2 norm of y2: " << y2.Norml2() << endl;
-                residual.Neg(); // 残量取负
+                cout << "L2 norm of   phi: " << phi->ComputeL2Error(zero) << endl;
+                cout << "L2 norm of dc1dt: " << dc1dt->ComputeL2Error(zero) << endl;
+                cout << "L2 norm of dc2dt: " << dc2dt->ComputeL2Error(zero) << endl;
+//                residual.Neg(); // 残量取负
+                cout << "l2 norm of residual: " << residual.Norml2() << endl;
                 return;
             }
 
-            if (1)
+            if (0)
             {
                 // **************************************************************************************
                 //                                2. NP1 方程 Residual
@@ -2201,40 +2202,48 @@ public:
                 return *jac_k;
             }
 
-            if (0) {
+            if (1) {
+                cout << "Only obtain Poisson Jacobian." << endl;
                 // **************************************************************************************
                 //                                1. Poisson 方程的 Jacobian
                 // **************************************************************************************
                 builda0_e0_s0_p0();
                 a0_e0_s0_p0->FormSystemMatrix(null_array, *A0_E0_S0_P0);
+
                 buildb1();
                 b1->FormSystemMatrix(null_array, *B1);
                 *B1 *= -1.0*dt;
+
                 buildb2();
                 b2->FormSystemMatrix(null_array, *B2);
                 *B2 *= -1.0*dt;
 
-                auto *temp1 = new ParBilinearForm(fes);
-                auto *temp2 = new ParBilinearForm(fes);
+                // 把NP方程的部分变成单位阵，那么在Newton迭代过程中就相当于不求解NP方程
+                delete m1_a1_e1_s1_p1;
+                m1_a1_e1_s1_p1 = new ParBilinearForm(fes);
 
-                temp1->AddDomainIntegrator(new MassIntegrator(zero));
-                temp1->Assemble();
-                temp1->FormSystemMatrix(null_array, *M1_A1_E1_S1_P1);
+                m1_a1_e1_s1_p1->AddDomainIntegrator(new MassIntegrator(zero));
+                m1_a1_e1_s1_p1->Assemble(skip_zero_entries);
+                m1_a1_e1_s1_p1->Finalize(skip_zero_entries);
+                m1_a1_e1_s1_p1->FormSystemMatrix(null_array, *M1_A1_E1_S1_P1);
                 M1_A1_E1_S1_P1->EliminateZeroRows();
 
-                temp2->AddDomainIntegrator(new MassIntegrator(zero));
-                temp2->Assemble();
-                temp2->FormSystemMatrix(null_array, *M2_A2_E2_S2_P2);
+                delete m2_a2_e2_s2_p2;
+                m2_a2_e2_s2_p2 = new ParBilinearForm(fes);
+
+                m2_a2_e2_s2_p2->AddDomainIntegrator(new MassIntegrator(zero));
+                m2_a2_e2_s2_p2->Assemble(skip_zero_entries);
+                m2_a2_e2_s2_p2->Finalize(skip_zero_entries);
+                m2_a2_e2_s2_p2->FormSystemMatrix(null_array, *M2_A2_E2_S2_P2);
                 M2_A2_E2_S2_P2->EliminateZeroRows();
+
 
                 delete jac_k;
                 jac_k = new BlockOperator(true_offset);
                 jac_k->SetBlock(0, 0, A0_E0_S0_P0);
                 jac_k->SetBlock(0, 1, B1);
                 jac_k->SetBlock(0, 2, B2);
-//                jac_k->SetBlock(1, 0, H1_K1_R1_L1);
                 jac_k->SetBlock(1, 1, M1_A1_E1_S1_P1);
-//            jac_k->SetBlock(2, 0, H2_K2_R2_L2);
                 jac_k->SetBlock(2, 2, M2_A2_E2_S2_P2);
                 return *jac_k;
             }
@@ -2332,34 +2341,8 @@ private:
         a0_e0_s0_p0->AddDomainIntegrator(new DiffusionIntegrator(epsilon_water));
 
         // -<{epsilon_s grad(phi)}, [psi]>
-        a0_e0_s0_p0->AddInteriorFaceIntegrator(new DGDiffusion_Edge(epsilon_water));
-        a0_e0_s0_p0->AddBdrFaceIntegrator(new DGDiffusion_Edge(epsilon_water), ess_bdr);
-
-        // weak Dirichlet boundary condition. 如果对称项和惩罚项都没有添加边界积分项, 就必须额外添加weak Dirichlet边界条件
-        if (! (abs(sigma - 0.0) > 1E-10 && symmetry_with_boundary) )
-        {
-            a0_e0_s0_p0->AddBdrFaceIntegrator(new DGWeakDirichlet_BLFIntegrator(epsilon_water), ess_bdr);
-        }
-
-        // sigma <[phi], {epsilon_s grad(psi)}>
-        if (abs(sigma - 0.0) > 1E-10) // 添加对称项
-        {
-            a0_e0_s0_p0->AddInteriorFaceIntegrator(new DGDiffusion_Symmetry(epsilon_water, sigma));
-            if (symmetry_with_boundary)
-            {
-                a0_e0_s0_p0->AddBdrFaceIntegrator(new DGDiffusion_Symmetry(epsilon_water, sigma), ess_bdr);
-            }
-        }
-
-        // kappa <{h^{-1}} [phi], [psi]>
-        if (abs(kappa - 0.0) > 1E-10) // 添加惩罚项
-        {
-            a0_e0_s0_p0->AddInteriorFaceIntegrator(new DGDiffusion_Penalty( kappa * water_rel_permittivity)); // fff
-            if (penalty_with_boundary)
-            {
-                a0_e0_s0_p0->AddBdrFaceIntegrator(new DGDiffusion_Penalty( kappa * water_rel_permittivity), ess_bdr); // fff
-            }
-        }
+        a0_e0_s0_p0->AddInteriorFaceIntegrator(new DGDiffusionIntegrator(epsilon_water, 0.0, kappa));
+        a0_e0_s0_p0->AddBdrFaceIntegrator(new DGDiffusionIntegrator(epsilon_water, 0.0, kappa), ess_bdr);
 
         a0_e0_s0_p0->Assemble(skip_zero_entries);
         a0_e0_s0_p0->Finalize(skip_zero_entries);
@@ -3135,22 +3118,11 @@ public:
 
         oper->UpdateParameters(t, dt, &old_c1, &old_c2); // 传入当前解
         if (0) {
-            cout << endl;
-            if (rank == 0) {
-                cout << "Before Newton::Mult(), l2 norm of  old_c1: " << old_c1.Norml2() << endl;
-                cout << "Before Newton::Mult(), l2 norm of  old_c2: " << old_c2.Norml2() << endl;
-                cout << "Before Newton::Mult(), l2 norm of old_phi: " << old_phi.Norml2() << endl;
-                cout << "Before Newton::Mult(), l2 norm of   dc1dt: " << dc1dt.Norml2() << endl;
-                cout << "Before Newton::Mult(), l2 norm of   dc2dt: " << dc2dt.Norml2() << endl;
-            }
-            MPI_Barrier(MPI_COMM_WORLD);
-            if (rank == 1) {
-                cout << "Before Newton::Mult(), l2 norm of  old_c1: " << old_c1.Norml2() << endl;
-                cout << "Before Newton::Mult(), l2 norm of  old_c2: " << old_c2.Norml2() << endl;
-                cout << "Before Newton::Mult(), l2 norm of old_phi: " << old_phi.Norml2() << endl;
-                cout << "Before Newton::Mult(), l2 norm of   dc1dt: " << dc1dt.Norml2() << endl;
-                cout << "Before Newton::Mult(), l2 norm of   dc2dt: " << dc2dt.Norml2() << endl;
-            }
+            cout << "Before Newton::Mult(), L2 norm of  old_c1: " << old_c1.ComputeL2Error(zero) << endl;
+            cout << "Before Newton::Mult(), L2 norm of  old_c2: " << old_c2.ComputeL2Error(zero) << endl;
+            cout << "Before Newton::Mult(), L2 norm of old_phi: " << old_phi.ComputeL2Error(zero) << endl;
+            cout << "Before Newton::Mult(), L2 norm of   dc1dt: " << dc1dt.ComputeL2Error(zero) << endl;
+            cout << "Before Newton::Mult(), L2 norm of   dc2dt: " << dc2dt.ComputeL2Error(zero) << endl;
             MPI_Barrier(MPI_COMM_WORLD);
         }
 
@@ -3352,17 +3324,10 @@ public:
 
             if (0) {
                 if (rank == 0) {
-                    cout << "Before ODE.Step(), l2 norm of old_phi: " << phi_gf->Norml2() << endl;
-                    cout << "Before ODE.Step(), l2 norm of  old_c1: " << c1_gf->Norml2() << endl;
-                    cout << "Before ODE.Step(), l2 norm of  old_c2: " << c2_gf->Norml2() << endl;
-                    cout << "Before ODE.Step(), l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
-                }
-                MPI_Barrier(MPI_COMM_WORLD);
-                if (rank == 1) {
-                    cout << "Before ODE.Step(), l2 norm of old_phi: " << phi_gf->Norml2() << endl;
-                    cout << "Before ODE.Step(), l2 norm of  old_c1: " << c1_gf->Norml2() << endl;
-                    cout << "Before ODE.Step(), l2 norm of  old_c2: " << c2_gf->Norml2() << endl;
-                    cout << "Before ODE.Step(), l2 norm of phic1c2: " << phic1c2->Norml2() << endl;
+                    cout << "Before ODE.Step(), L2 norm of old_phi: " << phi_gf->ComputeL2Error(zero) << endl;
+                    cout << "Before ODE.Step(), L2 norm of  old_c1: " << c1_gf->ComputeL2Error(zero) << endl;
+                    cout << "Before ODE.Step(), L2 norm of  old_c2: " << c2_gf->ComputeL2Error(zero) << endl;
+                    cout << "Before ODE.Step(), L2 norm of phic1c2: " << phic1c2->Norml2() << endl;
                 }
                 MPI_Barrier(MPI_COMM_WORLD);
 

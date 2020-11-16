@@ -1,10 +1,14 @@
-#-*- coding: UTF-8 -*-
+#coding: utf-8
 
 import matplotlib.pyplot as plt
 import math
 from matplotlib.pyplot import MultipleLocator
 import os
 from matplotlib.ticker import NullFormatter  # useful for `logit` scale
+
+plt.rcParams['font.sans-serif']=['SimHei'] #用来正常显示中文标签
+plt.rcParams['axes.unicode_minus']=False #用来正常显示负号
+
 
 def PlotConvergRate(p_order, mesh_sizes=None, errornorms1=None, errornorms2=None, errornorms3=None, log_tranform=True, xaxis="x", yaxis="y"):
     sizes = [float(size) for size in mesh_sizes.split()]
@@ -21,7 +25,8 @@ def PlotConvergRate(p_order, mesh_sizes=None, errornorms1=None, errornorms2=None
         for i in range(len(sizes)):
             x_coor.append(math.log(sizes[i]))
             y_coor.append((p_order +1)*math.log(sizes[i]) - 6)
-            y1_coor.append(math.log(norms1[i]))
+            y1_coor.append(math.log(norms1[i] + norms2[i] + norms3[i]))
+            # y1_coor.append(math.log(norms1[i]))
             y2_coor.append(math.log(norms2[i]))
             y3_coor.append(math.log(norms3[i]))
     else: # no transformation
@@ -34,10 +39,31 @@ def PlotConvergRate(p_order, mesh_sizes=None, errornorms1=None, errornorms2=None
 
     xticks = [49152, 2*49152, 49152*3, 49152*4]
 
-    fig,ax = plt.subplots()
-    ax.plot(x_coor, y1_coor, '-d', label='$\phi_h$  convergence rate')
-    ax.plot(x_coor, y2_coor, '-d', label='$c_{1,h}$ convergence rate')
-    ax.plot(x_coor, y3_coor, '-d', label='$c_{2,h}$ convergence rate')
+    fig,ax = plt.subplots(1,1,figsize=(10, 9))
+    ax.plot(x_coor, y1_coor, '-d', label='$E$')
+    # ax.plot(x_coor, y1_coor, '-d', label='$||\phi_h - \phi_e||_{L^2}$')
+    # ax.plot(x_coor, y2_coor, '-d', label='$||c_{1,h} - c_{2,e}||_{L^2}$')
+    # ax.plot(x_coor, y3_coor, '-d', label='$||c_{2,h} - c_{2,e}||_{L^2}$')
+
+    x_offset = -0.5
+    y_offset = 0.5
+    rate = 2
+
+    coor1 = [sum(x_coor)/len(x_coor) - x_offset, sum(y2_coor)/len(y2_coor) - rate*y_offset]
+    coor2 = [sum(x_coor)/len(x_coor), sum(y2_coor)/len(y2_coor) - rate*y_offset]
+    coor3 = [sum(x_coor)/len(x_coor) - x_offset, sum(y2_coor)/len(y2_coor)]
+
+    ax.plot([coor1[0], coor2[0], coor3[0], coor1[0]],
+            [coor1[1], coor2[1], coor3[1], coor1[1]])
+
+    plt.text(coor1[0] + 0.1,
+             coor1[1] + 0.1,
+             str(rate), family="monospace", fontsize=15)
+    plt.text(coor1[0] - 0.1,
+             coor1[1] - 0.1,
+             "1", family="monospace", fontsize=15)
+
+
     # ax.plot(xticks, y1_coor, ':s', label='$\phi_h$ convergence rate')
     # ax.plot(xticks, y2_coor, ':o', label='$c_{1,h}$ convergence rate')
     # ax.plot(xticks, y3_coor, ':*', label='$c_{2,h}$ convergence rate')
@@ -45,10 +71,81 @@ def PlotConvergRate(p_order, mesh_sizes=None, errornorms1=None, errornorms2=None
     # ax.xaxis.set_major_locator(MultipleLocator(8))
     ax.invert_xaxis()
     # plt.xticks(x_coor, [49152, 2*49152, 49152*3, 49152*4])
-    plt.xlabel(xaxis)
-    plt.ylabel(yaxis)
+    # plt.xlabel(xaxis)
+    # plt.ylabel(yaxis)
     # plt.autoscale(enable=True, axis='y')
-    plt.legend()
+    ax.set_xlabel(xaxis, fontsize=20) # 设置坐标标签字体大小
+    ax.set_ylabel(yaxis, fontsize=20)
+    plt.xticks(fontsize=20) # 设置刻度字体大小
+    plt.yticks(fontsize=20)
+    plt.legend(fontsize=20) #设置图例字体大小
+    plt.show()
+
+def PlotConvergRate2(p_order, mesh_sizes=None, errornorms1=None, errornorms2=None, errornorms3=None, log_tranform=True, xaxis="x", yaxis="y"):
+    sizes = [float(size) for size in mesh_sizes.split()]
+    norms1 = [float(norm) for norm in errornorms1.split()]
+    norms2 = [float(norm) for norm in errornorms2.split()]
+    norms3 = [float(norm) for norm in errornorms3.split()]
+
+    x_coor = []
+    y_coor = []
+    y1_coor = []
+    y2_coor = []
+    y3_coor = []
+    if (log_tranform): # log transformation
+        for i in range(len(sizes)):
+            x_coor.append(math.log(sizes[i]))
+            y_coor.append((p_order +1)*math.log(sizes[i]) - 6)
+            y1_coor.append(math.log(norms1[i] + norms2[i] + norms3[i]))
+            y2_coor.append(math.log(norms2[i] + norms3[i]))
+            y3_coor.append(math.log(norms3[i]))
+    else: # no transformation
+        for i in range(len(sizes)):
+            x_coor.append(sizes[i])
+            y_coor.append((p_order +1) * sizes[i] - 6)
+            # y1_coor.append(norms1[i])
+            y2_coor.append(norms2[i])
+            y3_coor.append(norms3[i])
+
+    xticks = [49152, 2*49152, 49152*3, 49152*4]
+
+    x_offset = -0.5
+    y_offset = 0.5
+    rate = 2
+
+    coor1 = [sum(x_coor)/len(x_coor) - x_offset, sum(y2_coor)/len(y2_coor) - rate*y_offset]
+    coor2 = [sum(x_coor)/len(x_coor), sum(y2_coor)/len(y2_coor) - rate*y_offset]
+    coor3 = [sum(x_coor)/len(x_coor) - x_offset, sum(y2_coor)/len(y2_coor)]
+
+    fig,ax = plt.subplots(1,1,figsize=(10, 9))
+    ax.plot([coor1[0], coor2[0], coor3[0], coor1[0]],
+            [coor1[1], coor2[1], coor3[1], coor1[1]])
+
+    plt.text(coor1[0] + 0.1,
+             coor1[1] + 0.2,
+             str(rate), family="monospace", fontsize=15)
+    plt.text(coor1[0] - 0.2,
+             coor1[1] - 0.2,
+             "1", family="monospace", fontsize=15)
+
+    ax.plot(x_coor, y1_coor, '-d', label='$E$')
+    # ax.plot(x_coor, y2_coor, '-d', label='($c_{1,h}$ + $c_{2,h}$) convergence rate')
+    # ax.plot(x_coor, y3_coor, '-d', label='$c_{2,h}$ convergence rate')
+    # ax.plot(xticks, y1_coor, ':s', label='$\phi_h$ convergence rate')
+    # ax.plot(xticks, y2_coor, ':o', label='$c_{1,h}$ convergence rate')
+    # ax.plot(xticks, y3_coor, ':*', label='$c_{2,h}$ convergence rate')
+    # ax.set_xticks([49152, 2*49152, 49152*3, 49152*4])
+    # ax.xaxis.set_major_locator(MultipleLocator(8))
+    ax.invert_xaxis()
+    # plt.xticks(x_coor, [49152, 2*49152, 49152*3, 49152*4])
+    # plt.xlabel(xaxis)
+    # plt.ylabel(yaxis)
+    # plt.autoscale(enable=True, axis='y')
+    ax.set_xlabel(xaxis, fontsize=20) # 设置坐标标签字体大小
+    ax.set_ylabel(yaxis, fontsize=20)
+    plt.xticks(fontsize=20) # 设置刻度字体大小
+    plt.yticks(fontsize=20)
+    plt.legend(fontsize=20) #设置图例字体大小
     plt.show()
 
 def demo(): # Gummel线性化对应的CG和DG离散格式
@@ -80,9 +177,11 @@ def demo(): # Gummel线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
     plt.gca().invert_xaxis()
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("$||\phi_e - \phi_h||_{L^2}$")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("$||\phi_e - \phi_h||_{L^2}$", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.subplot(132)
     plt.plot(mesh_size, c1_L2err_p1_Gummel_CG, ':s', label='p=1')
@@ -93,9 +192,11 @@ def demo(): # Gummel线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
     plt.gca().invert_xaxis()
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.subplot(133)
     plt.plot(mesh_size, c2_L2err_p1_Gummel_CG, ':s', label='p=1')
@@ -106,9 +207,11 @@ def demo(): # Gummel线性化对应的CG和DG离散格式
     plt.gca().invert_xaxis()
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.show()
 
@@ -142,9 +245,11 @@ def demo(): # Gummel线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().invert_xaxis()
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("$||\phi_e - \phi_h||_{L^2}$")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("$||\phi_e - \phi_h||_{L^2}$", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.subplot(132)
     plt.plot(mesh_size, c1_L2err_p1_Gummel_DG, ':s', label='p=1')
@@ -155,9 +260,11 @@ def demo(): # Gummel线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().invert_xaxis()
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.subplot(133)
     plt.plot(mesh_size, c2_L2err_p1_Gummel_DG, ':s', label='p=1')
@@ -168,9 +275,11 @@ def demo(): # Gummel线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().invert_xaxis()
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.show()
 
@@ -191,29 +300,33 @@ def demo(): # Gummel线性化对应的CG和DG离散格式
     plt.plot(mesh_size, total_time_cg_p1, ':s', label='p=1')
     plt.plot(mesh_size, total_time_cg_p2, ':o', label='p=2')
     plt.plot(mesh_size, total_time_cg_p3, ':*', label='p=3')
-    # plt.xscale('log')
+    plt.xscale('log')
     plt.yscale('log')
     plt.grid(True)
     plt.gca().invert_xaxis()
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("time (s)")
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("time (s)", fontsize=10)
     plt.title("Gummel-CG Algorithm")
-    plt.legend()
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.subplot(122)
     plt.plot(mesh_size, total_time_dg_p1, ':s', label='p=1')
     plt.plot(mesh_size, total_time_dg_p2, ':o', label='p=2')
     plt.plot(mesh_size, total_time_dg_p3, ':*', label='p=3')
-    # plt.xscale('log')
+    plt.xscale('log')
     plt.yscale('log')
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
     plt.gca().invert_xaxis()
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("time (s)")
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("time (s)", fontsize=10)
     plt.title("Gummel-DG Algorithm")
-    plt.legend()
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.show()
 
@@ -248,9 +361,11 @@ def demo1(): # Newton线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().invert_xaxis()
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("$||\phi_e - \phi_h||_{L^2}$")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("$||\phi_e - \phi_h||_{L^2}$", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.subplot(132)
     plt.plot(mesh_size, c1_L2err_p1_Newton_CG, ':s', label='p=1')
@@ -261,9 +376,11 @@ def demo1(): # Newton线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().invert_xaxis()
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.subplot(133)
     plt.plot(mesh_size, c2_L2err_p1_Newton_CG, ':s', label='p=1')
@@ -274,9 +391,11 @@ def demo1(): # Newton线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
     plt.gca().invert_xaxis()
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.show()
 
@@ -308,9 +427,11 @@ def demo1(): # Newton线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
     plt.gca().invert_xaxis()
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("$||\phi_e - \phi_h||_{L^2}$")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("$||\phi_e - \phi_h||_{L^2}$", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.subplot(132)
     plt.plot(mesh_size, c1_L2err_p1_Newton_DG, ':s', label='p=1')
@@ -321,9 +442,11 @@ def demo1(): # Newton线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
     plt.gca().invert_xaxis()
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("$||c_{1,e} - c_{1,h}||_{L^2}$", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.subplot(133)
     plt.plot(mesh_size, c2_L2err_p1_Newton_DG, ':s', label='p=1')
@@ -334,9 +457,11 @@ def demo1(): # Newton线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
     plt.gca().invert_xaxis()
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("$||c_{2,e} - c_{2,h}||_{L^2}$", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.show()
 
@@ -361,10 +486,12 @@ def demo1(): # Newton线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
     plt.gca().invert_xaxis()
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("time (s)")
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("time (s)", fontsize=10)
     plt.title("Newton-CG Algorithm")
-    plt.legend()
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.subplot(122)
     plt.plot(mesh_size, total_time_dg_p1, ':s', label='p=1')
@@ -375,10 +502,12 @@ def demo1(): # Newton线性化对应的CG和DG离散格式
     plt.grid(True)
     plt.gca().yaxis.set_minor_formatter(NullFormatter())
     plt.gca().invert_xaxis()
-    plt.xlabel("mesh size (h)")
-    plt.ylabel("time (s)")
-    plt.title("Newton-DG Algorithm")
-    plt.legend()
+    plt.xlabel("mesh size (h)", fontsize=10)
+    plt.ylabel("time (s)", fontsize=10)
+    plt.title("Newton-DG Algorithm", fontsize=10)
+    plt.xticks(fontsize=10) # 设置刻度字体大小
+    plt.yticks(fontsize=10)
+    plt.legend(fontsize=15) #设置图例字体大小
 
     plt.show()
 
@@ -453,11 +582,40 @@ if __name__ == '__main__':
         PlotConvergRate(p_order, mesh_size, errornorm1, errornorm2, errornorm3)
     elif 0:
         demo()
-    elif 1:
+    elif 0:
+        demo1()
+    elif 0:
         # 数据来源 boxcggummel1
         p_order = 1
         mesh_size  = "0.56123102415469 0.28061551207734 0.14030775603867 0.070153878019336 0.035076939009668"
         errornorm1 = "0.23337694437914 0.065927153180969 0.017041691576563 0.0042972382417652 0.0010766421701565"
         errornorm2 = "0.17029430206066 0.045760042269532 0.011920665105797 0.0032922029315401 0.0011470896275865"
         errornorm3 = "0.17033988050451 0.045772286469063 0.011923997438606 0.0032932393349512 0.0011475334175606"
-        PlotConvergRate(p_order, mesh_size, errornorm1, errornorm2, errornorm3)
+        PlotConvergRate2(p_order, mesh_size, errornorm1, errornorm2, errornorm3, 1, "log(h)", "log(E)")
+    elif 0:
+        # 数据来源 boxcggummel5
+        p_order = 1
+        mesh_size  = "0.56123102415469 0.28061551207734 0.14030775603867 0.070153878019336 0.035076939009668"
+        errornorm1 = "0.23328755605563 0.065920456190746 0.017041614133852 0.0042972104025229 0.0010766434920509"
+        errornorm2 = "0.23944566803289 0.062531711416071 0.012773124563886 0.0042013363399556 0.0010043181123398"
+        errornorm3 = "0.25509012923365 0.063477950449538 0.012785386872202 0.0042062606749311 0.0010045663357719"
+        PlotConvergRate(p_order, mesh_size, errornorm1, errornorm2, errornorm3,
+                        xaxis=u"log(h), dt=0.5$h^2$", yaxis="log(errornorm)")
+    elif 0:
+        # 数据来源 boxcggummel3
+        p_order = 1
+        mesh_size  = "0.1 0.05 0.025 0.0125 0.00625" # 时间步长，不是网格尺寸
+        errornorm1 = "0.00023267672096525 0.00025858043641821 0.00026640098802742 0.00026854702361334 0.00026911090770878"
+        errornorm2 = "0.081889459586644 0.044526221749694 0.023328926591094 0.012001833347507 0.0061418995861662"
+        errornorm3 = "0.087857371851929 0.04623351924615 0.023788562391998 0.01212194540896 0.0061729879426658"
+        PlotConvergRate2(p_order, mesh_size, errornorm1, errornorm2, errornorm3,
+                        xaxis=u"log(dt)", yaxis="log($E_c$)")
+    elif 1:
+        # 数据来源 boxcggummel1
+        p_order = 1
+        mesh_size  = "0.1 0.05 0.025 0.0125 0.00625" # 时间步长，不是网格尺寸
+        errornorm1 = "0.23337694437914 0.065927153180969 0.017041691576563 0.0042972382417652 0.0010766421701565"
+        errornorm2 = "0.17029430206066 0.045760042269532 0.011920665105797 0.0032922029315401 0.0011470896275865"
+        errornorm3 = "0.17033988050451 0.045772286469063 0.011923997438606 0.0032932393349512 0.0011475334175606"
+        PlotConvergRate2(p_order, mesh_size, errornorm1, errornorm2, errornorm3,
+                        xaxis=u"log(h)", yaxis="log(E)")

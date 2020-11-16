@@ -107,7 +107,7 @@ int main(int argc, char *argv[])
 
         delete pmesh;
     }
-    else
+    else // h,dt 都不变，只算一次
     {
         Mesh* mesh = new Mesh(mesh_file);
         ParMesh* pmesh = new ParMesh(MPI_COMM_WORLD, *mesh);
