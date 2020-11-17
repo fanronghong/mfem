@@ -1,0 +1,9 @@
+#BSUB -n 1
+#BSUB -o bsub.protein.out
+
+
+make pnp_steadystate_protein
+
+# ------>
+./pnp_steadystate_protein -p 1 -lin gummel -dis dg
+./pnp_steadystate_protein -p 1 -lin newton -dis cg

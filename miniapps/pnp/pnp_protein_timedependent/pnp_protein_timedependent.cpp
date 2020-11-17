@@ -35,7 +35,7 @@ int main(int argc, char **argv)
     args.AddOption(&show_peclet, "-peclet", "--peclet", "-nopeclet", "--nopeclet", "Show Peclet numbers");
     args.AddOption(&verbose, "-verb", "--verbose", "Print Level: 1,2");
     args.AddOption(&visualize, "-v", "--vis", "-nov", "--novis", "Visualize outputs");
-    args.AddOption(&prec_type, "-prec", "--prec_type", "Preconditioner type for Newton disretization, choose: block, uzawa, simple");
+    args.AddOption(&prec_type, "-prec", "--prec_type", "Preconditioner type for Newton disretization, choose: block, lower, upper, blockschur, lowerblockschur, upperblockschur");
     args.AddOption(&schur_alpha1, "-schur1", "--schur1", "1st parameter for Schur Complement");
     args.AddOption(&schur_alpha2, "-schur2", "--schur2", "2nd parameter for Schur Complement");
     args.AddOption(&t_init, "-t_init", "--t_init", "Initial time");

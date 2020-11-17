@@ -200,7 +200,7 @@ public:
         double sum = 0.0;
         for (size_t i=0; i<pqr_info.size(); i++)
         {
-            double dist = pow(x[0] - pqr_info[i][0], 2)
+            double dist =   pow(x[0] - pqr_info[i][0], 2)
                           + pow(x[1] - pqr_info[i][1], 2)
                           + pow(x[2] - pqr_info[i][2], 2);
             sum += pqr_info[i][3] / sqrt(dist); // 带电量除以距离

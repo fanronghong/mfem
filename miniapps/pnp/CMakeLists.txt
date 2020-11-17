@@ -23,10 +23,11 @@ configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/bsub.script
                ${PROJECT_BINARY_DIR}/miniapps/pnp/bsub.script
                COPYONLY)
 
+
 add_subdirectory(pnp_box_steadystate)
 add_subdirectory(pnp_box_timedependent)
 
-add_subdirectory(pnp_protein)
+add_subdirectory(pnp_protein_steadystate)
 add_subdirectory(pnp_protein_timedependent)
 
 add_subdirectory(pnp_data)

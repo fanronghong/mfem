@@ -65,7 +65,7 @@ public:
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         if (max_Gummel != 0) {
-            max_GummelSteps = max_Gummel; // 读取给定参数
+            max_GummelSteps = max_Gummel; // 读取给定参数. 这个参数不为0一般是用Gummel迭代得到一个相对好的初值,然后使用其他迭代法求解,如Newton迭代
         }
         else {
             max_GummelSteps = Gummel_max_iters; // 读取默认参数
@@ -998,8 +998,11 @@ public:
         true_offset[2] = true_vsize * 2;
         true_offset[3] = true_vsize * 3;
 
+        // 求解奇异分解式的第一个解 phi1
         phi1_gf = new ParGridFunction(fes);
         Solve_Phi1();
+
+        // 求解奇异分解式的第二个解 phi2
         phi2_gf = new ParGridFunction(fes);
         Solve_Phi2();
 
@@ -1012,7 +1015,7 @@ public:
         c1_gf  ->MakeTRef(fes, *phi3c1c2, true_offset[1]);
         c2_gf  ->MakeTRef(fes, *phi3c1c2, true_offset[2]);
 
-        // 设定初值
+        // 设定初值. 注意: 对于DG离散的ParGridFunction,不能使用ProjectBdrCoefficient(), ref: https://github.com/mfem/mfem/issues/1675
         phi3_gf->ProjectBdrCoefficient(phi_D_top_coeff, top_bdr);
         phi3_gf->ProjectBdrCoefficient(phi_D_bottom_coeff, bottom_bdr);
         phi3_gf->SetTrueVector();
@@ -1171,23 +1174,19 @@ public:
     {
         // 为了简单, 我们只使用H1空间来计算phi2
 
-        H1_FECollection* h1_fec = new H1_FECollection(p_order, pmesh->Dimension());
-        ParFiniteElementSpace* h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
+        auto* h1_fec = new H1_FECollection(p_order, pmesh->Dimension());
+        auto* h1_fes = new ParFiniteElementSpace(pmesh, h1_fec);
 
         ParBilinearForm blf(h1_fes);
         // (grad(phi2), grad(psi2))_{\Omega_m}, \Omega_m: protein domain
         blf.AddDomainIntegrator(new DiffusionIntegrator(mark_protein_coeff));
-        blf.Assemble(0);
-        blf.Finalize(0);
+        blf.Assemble(skip_zero_entries);
+        blf.Finalize(skip_zero_entries);
 
         ParLinearForm lf(h1_fes);
         // -<grad(G).n, psi2>_{\Gamma_M}, G is phi1
         lf.AddBoundaryIntegrator(new BoundaryNormalLFIntegrator(neg_gradG), Gamma_m);
         lf.Assemble();
-
-        HypreParMatrix* A = new HypreParMatrix;
-        Vector *x = new Vector;
-        Vector *b = new Vector;
 
         Array<int> interface_tdof_list_h1;
         h1_fes->GetEssentialTrueDofs(interface_bdr, interface_tdof_list_h1);
@@ -1196,6 +1195,10 @@ public:
 //        phi2_gf->ProjectCoefficient(neg_G); // 上面一种方式应该更准确
 //        phi2_gf->ProjectCoefficient(G_coeff);
 //        phi2_gf->Neg();
+
+        auto* A = new HypreParMatrix;
+        auto* x = new Vector;
+        auto* b = new Vector;
 
         blf.FormLinearSystem(interface_tdof_list_h1, *phi2_gf, lf, *A, *x, *b);
         A->EliminateZeroRows(); // 设定所有的0行的主对角元为1
@@ -1333,10 +1336,11 @@ public:
             if (rank == 0)
             {
                 cout << "=========> ";
-                cout << Discretize << p_order << ", " << Linearize << ", " << options_src << ", DOFs: " << fes->GlobalTrueVSize() * 3<< ", Cores: " << num_procs << ", "
+                cout << Discretize << p_order << ", " << Linearize << ", " << options_src << ", DOFs: " << fes->GlobalTrueVSize() * 3<< ", Cores: " << num_procs << '\n'
                      << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" : "wrong type")) << '\n'
                      << mesh_file  << ", mesh size: " << mesh_size << '\n'
-                     << "t_init: "<< t_init << ", t_final: " << t_final << ", time step: " << t_stepsize
+                     << "t_init: "<< t_init << ", t_final: " << t_final << ", time step: " << t_stepsize << '\n'
+                     << "FiniteElementSpace size: " << fes->GlobalTrueVSize()
                      << endl;
 
                 cout << "ODE solver taking " << chrono.RealTime() << " s." << endl;

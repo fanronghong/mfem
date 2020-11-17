@@ -13,7 +13,7 @@ using namespace mfem;
 int p_order                     = 1; //有限元基函数的多项式次数
 bool nonzero_NewtonInitial      = false;
 int nonzero_maxGummel           = 3;
-const char* Linearize           = "gummel"; // newton, gummel
+const char* Linearize           = "newton"; // newton, gummel
 const char* Discretize          = "cg"; // cg, dg
 const char* AdvecStable         = "eafe"; // none, supg, eafe
 const char* prec_type           = "block"; // preconditioner for Newton discretization: block, uzawa, simple
@@ -34,11 +34,13 @@ bool SpaceConvergRate           = false; // 利用解析解计算误差阶
 bool SpaceConvergRate_Change_dt = false; // 为了计算误差: error = c1 dt + c2 h^2, 是否把dt设置为h^2的倍数?
 double Change_dt_factor         = 1.0; // dt = factor * h^2
 int ode_type                    = 1; // 1: backward Euler; 11: forward Euler
-double t_init           = 0.0; // 初始时间, 单位 µs
-double t_final          = 2000; // 最后时间
-double t_stepsize       = 100; // 时间步长
+double t_init                   = 0.0; // 初始时间, 单位 µs
+double t_final                  = 400; // 最后时间
+double t_stepsize               = 100; // 时间步长
 
-
+const int Gummel_max_iters      = 20;
+const double Gummel_rel_tol     = 1e-10;
+const double TOL                = 1e-10;
 
 bool paraview                   = false;
 const char* paraview_dir        = "";
@@ -47,6 +49,10 @@ int verbose                     = 1;
 double sigma                    = -1.0; // symmetric parameter for DG
 double kappa                    = 10.0; // penalty parameter for DG
 
+//const char* mesh_file      = "/home/fan/Desktop/1V36_new_NANO_280.msh"; // 带有蛋白的网格,与PQR文件必须匹配
+//const char* pqr_file       = "/home/fan/Desktop/1V36_new.pqr"; // PQR文件,与网格文件必须匹配
+//const char* mesh_file      = "../pnp_data/1bl8_tu.msh"; // 带有蛋白的网格,与PQR文件必须匹配
+//const char* pqr_file       = "../pnp_data/1bl8.pqr"; // PQR文件,与网格文件必须匹配
 const char* mesh_file      = "../pnp_data/1MAG_2.msh"; // 带有蛋白的网格,与PQR文件必须匹配
 const char* pqr_file       = "../pnp_data/1MAG.pqr"; // PQR文件,与网格文件必须匹配
 const int protein_marker   = 1; // 这些marker信息可以从Gmsh中可视化得到
@@ -63,8 +69,6 @@ double c1_bottom   = 0.0 * alpha3; // 国际单位mol/L, K+阳离子在计算区
 double c2_top      = 2.0 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 上边界是 Dirichlet
 double c2_bottom   = 0.0 * alpha3; // 国际单位mol/L, Cl-阴离子在计算区域的 下边界是 Dirichlet
 
-
-
 ConstantCoefficient phi_D_top_coeff(phi_top);
 ConstantCoefficient phi_D_bottom_coeff(phi_bottom);
 ConstantCoefficient c1_D_top_coeff(c1_top);
@@ -73,13 +77,9 @@ ConstantCoefficient c2_D_top_coeff(c2_top);
 ConstantCoefficient c2_D_bottom_coeff(c2_bottom);
 
 
-// ------------------------------- other parameters independent on mesh file and pqr file -------------------------------
-const int Gummel_max_iters  = 20;
-const double Gummel_rel_tol = 1e-10;
-const double TOL            = 1e-10;
-
-
-// ------------------------- 一些辅助变量(避免在main函数里面定义) ------------------------
+// ---------------------------------------------------------------------------------------
+//                           一些辅助变量(避免在main函数里面定义)
+// ---------------------------------------------------------------------------------------
 ConstantCoefficient neg(-1.0);
 ConstantCoefficient zero(0.0);
 ConstantCoefficient one(1.0);
@@ -101,13 +101,13 @@ ProductCoefficient     kappa_water(kappa_coeff, mark_water_coeff);
 Green_func                     G_func(pqr_file);     // i.e., phi1
 gradGreen_func                 gradG_func(pqr_file); // also can be obtained from grad(phi1)
 StdFunctionCoefficient         G_coeff(G_func);
-ProductCoefficient             neg_G(neg, G_coeff);
+ProductCoefficient             protein_G(mark_protein_coeff, G_coeff); // G 其实只在蛋白区域取值：第一种奇异分解式
 VectorStdFunctionCoefficient   gradG_coeff(3, gradG_func);
-ProductCoefficient             protein_G(mark_protein_coeff, G_coeff);
-ProductCoefficient             neg_protein_G(neg, protein_G);
-ScalarVectorProductCoefficient protein_gradG(mark_protein_coeff, gradG_coeff);
+ScalarVectorProductCoefficient protein_gradG(mark_protein_coeff, gradG_coeff); // gradG 其实只在蛋白区域取值：第一种奇异分解式
 ScalarVectorProductCoefficient neg_protein_gradG(neg, protein_gradG);
 ScalarVectorProductCoefficient neg_gradG(neg, gradG_coeff);
+ProductCoefficient             neg_G(neg, G_coeff);
+ProductCoefficient             neg_protein_G(neg, protein_G);
 
 ProductCoefficient D1_prod_z1_water(D_K_prod_v_K, mark_water_coeff);
 ProductCoefficient D2_prod_z2_water(D_Cl_prod_v_Cl, mark_water_coeff);
