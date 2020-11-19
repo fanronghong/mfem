@@ -15,6 +15,8 @@ int main(int argc, char **argv)
 
     OptionsParser args(argc, argv);
     args.AddOption(&output, "-out", "--output", "Just for showing all commands in cluster, like bsub -o ...");
+    args.AddOption(&mesh_file, "-msh", "--msh", "Protein mesh file.");
+    args.AddOption(&pqr_file, "-pqr", "--pqr", "PQR file");
     args.AddOption(&p_order, "-p", "--p_order", "Polynomial order of basis function.");
     args.AddOption(&Linearize, "-lin", "--linearize", "Linearization method: choose: cg, dg");
     args.AddOption(&nonzero_NewtonInitial, "-nonzero_init", "--nonzero_NewtonInit", "-zero_init", "--zero_NewtonInit", "Use Gummel iteration for Newton initial?");
