@@ -49,12 +49,10 @@ int verbose                     = 1;
 double sigma                    = -1.0; // symmetric parameter for DG
 double kappa                    = 10.0; // penalty parameter for DG
 
-const char* mesh_file      = "/share/home/rhfan/ProteinMeshPQR/1V36_new_nano_280_sparse_new.msh"; // 带有蛋白的网格,与PQR文件必须匹配
-const char* pqr_file       = "/share/home/rhfan/ProteinMeshPQR/1V36_new.pqr"; // PQR文件,与网格文件必须匹配
 //const char* mesh_file      = "../pnp_data/1bl8_tu.msh"; // 带有蛋白的网格,与PQR文件必须匹配
 //const char* pqr_file       = "../pnp_data/1bl8.pqr"; // PQR文件,与网格文件必须匹配
-//const char* mesh_file      = "../pnp_data/1MAG_2.msh"; // 带有蛋白的网格,与PQR文件必须匹配
-//const char* pqr_file       = "../pnp_data/1MAG.pqr"; // PQR文件,与网格文件必须匹配
+const char* mesh_file      = "../pnp_data/1MAG_2.msh"; // 带有蛋白的网格,与PQR文件必须匹配
+const char* pqr_file       = "../pnp_data/1MAG.pqr"; // PQR文件,与网格文件必须匹配
 const int protein_marker   = 1; // 这些marker信息可以从Gmsh中可视化得到
 const int water_marker     = 2;
 const int interface_marker = 9;
