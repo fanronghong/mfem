@@ -2628,6 +2628,7 @@ public:
                 cout << Discretize << p_order << ", " << Linearize << ", " << options_src << ", DOFs: " << fes->GlobalTrueVSize() * 3<< ", Cores: " << num_procs << ", "
                      << ((ode_type == 1) ? ("backward Euler") : (ode_type == 11 ? "forward Euler" : "wrong type")) << '\n'
                      << mesh_file << ", refine mesh: " << refine_mesh << ", mesh size: " << mesh_size << '\n'
+                     << "FiniteElementSpace size: " << fes->GlobalTrueVSize() << '\n'
                      << "t_init: "<< t_init << ", t_final: " << t_final << ", time step: " << t_stepsize << ", refine time: " << refine_time << ", time scale: " << time_scale
                      << endl;
 
