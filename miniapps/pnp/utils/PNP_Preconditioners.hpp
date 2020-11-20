@@ -561,7 +561,8 @@ public:
         VecRestoreSubVector(*Y, index_set[2], &y3);
 
         X->ResetArray();
-        Y->ResetArray();    }
+        Y->ResetArray();
+    }
 };
 
 class UpperBlockSchurPreconditionerSolver: public Solver

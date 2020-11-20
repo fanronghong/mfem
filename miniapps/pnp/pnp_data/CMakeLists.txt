@@ -18,6 +18,11 @@ configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_data/protein_newton_amg
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_data/protein_newton_amg
                COPYONLY)
 
+configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_data/protein_newton_lu
+               ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_data/protein_newton_lu
+               COPYONLY)
+
+
 configure_file(${PROJECT_SOURCE_DIR}/miniapps/pnp/pnp_data/4_4_4_translate.msh
                ${PROJECT_BINARY_DIR}/miniapps/pnp/pnp_data/4_4_4_translate.msh
                COPYONLY)
