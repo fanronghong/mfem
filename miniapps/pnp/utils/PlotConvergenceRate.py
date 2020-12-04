@@ -412,10 +412,19 @@ def demo2(): # 使用EAFE和SUPG求解NP方程的时间差异
     os._exit(0)
 
 def demo3(): # 测试强可扩展性
-    # 数据来源 block1, block2, block3, block4, block5, block6, block7 和 block1_2, block2_2, block3_2, block4_2, block5_2, block6_2, block7_2
-    num_process = [1, 2, 4, 8, 16, 32, 64]
-    T1 = [260.21, 132.89, 79.78, 102.98, 106.40, 166.69, 276.98]
-    T2 = [200.25, 104.66, 58.89, 47.74, 40.64, 55.73, 112.74]
+    import matplotlib
+    matplotlib.rc('xtick', labelsize=20)
+    matplotlib.rc('ytick', labelsize=20)
+
+    # 数据来源 block1, block2, block3, block4, block5, block6, block7
+    # 和 block1_2, block2_2, block3_2, block4_2, block5_2, block6_2, block7_2
+    # num_process = [1, 2, 4, 8, 16, 32, 64]
+    # T1 = [260.21, 132.89, 79.78, 102.98, 106.40, 166.69, 276.98]
+    # T2 = [200.25, 104.66, 58.89, 47.74, 40.64, 55.73, 112.74]
+    # 下面把进程数增加求解时间也增加的部分去掉
+    num_process = [1, 2, 4, 8, 16]
+    T1 = [260.21, 132.89, 79.78, 102.98, 106.40]
+    T2 = [200.25, 104.66, 58.89, 47.74, 40.64]
 
     fig = plt.figure()
     fig.canvas.set_window_title('Window Title')
@@ -424,19 +433,27 @@ def demo3(): # 测试强可扩展性
     plt.xscale('log') # symlog, logit, log
     plt.yscale('log')
     plt.grid(True)
-    plt.xlabel("Number of processors")
-    plt.ylabel("Time (s)")
-    plt.title("Strong Scaling")
-    plt.legend()
+    plt.xlabel("Number of processors", fontsize=20)
+    plt.ylabel("Time (s)", fontsize=20)
+    plt.title("Strong Scaling", fontsize=20)
+    plt.legend(fontsize=20)
     plt.show()
 
     os._exit(0)
 
 def demo4(): # 测试强可扩展性
+    import matplotlib
+    matplotlib.rc('xtick', labelsize=20)
+    matplotlib.rc('ytick', labelsize=20)
+
     # 数据来源 block1_1, block2_1, block3_1, block4_1, block5_1, block6, block7_1 和 block1_3, block2_3, block3_3, block4_3, block5_3, block6_3, block7_3
-    num_process = [2, 4, 8, 16, 32, 64, 128]
-    T1 = [436.17, 291.57, 128.29, 104.46, 85.91, 103.63, 174.16]
-    T2 = [491.35, 331.55, 141.00, 109.75, 80.12, 94.79, 167.89]
+    # num_process = [2, 4, 8, 16, 32, 64, 128]
+    # T1 = [436.17, 291.57, 128.29, 104.46, 85.91, 103.63, 174.16]
+    # T2 = [491.35, 331.55, 141.00, 109.75, 80.12, 94.79, 167.89]
+    # 下面把进程数增加求解时间也增加的部分去掉
+    num_process = [2, 4, 8, 16, 32]
+    T1 = [436.17, 291.57, 128.29, 104.46, 85.91]
+    T2 = [491.35, 331.55, 141.00, 109.75, 80.12]
 
     fig = plt.figure()
     fig.canvas.set_window_title('Window Title')
@@ -445,29 +462,36 @@ def demo4(): # 测试强可扩展性
     plt.xscale('log') # symlog, logit, log
     plt.yscale('log')
     plt.grid(True)
-    plt.xlabel("Number of processors")
-    plt.ylabel("Time (s)")
-    plt.title("Strong Scaling")
-    plt.legend()
+    plt.xlabel("Number of processors", fontsize=20)
+    plt.ylabel("Time (s)", fontsize=20)
+    plt.title("Strong Scaling", fontsize=20)
+    plt.legend(fontsize=20)
     plt.show()
 
     os._exit(0)
 
 def demo5(): # 测试强可扩展性
+    import matplotlib
+    matplotlib.rc('xtick', labelsize=20)
+    matplotlib.rc('ytick', labelsize=20)
+
     # 数据来源 scalability0,scalability1,scalability2,scalability3,scalability4,scalability5,scalability6
-    num_process = [1, 2, 4, 8, 16, 32, 64]
-    T1 = [0.36, 2.88, 9.30, 23.06, 76.33, 319.17, 1877.07]
+    num_process1 = [1, 8, 64]
+    T1 = [2.09, 10.64, 46.32]
+    num_process2 = [4, 32, 256]
+    T2 = [255.62, 338.64, 5108.96]
 
     fig = plt.figure()
     fig.canvas.set_window_title('Window Title')
-    plt.plot(num_process, T1, ':s')
+    plt.plot(num_process1, T1, ':s', label="ref_h: 1, 2, 3")
+    plt.plot(num_process2, T2, '-o', label="ref_h: 4, 5, 6")
     plt.xscale('log') # symlog, logit, log
     plt.yscale('log')
     plt.grid(True)
-    plt.xlabel("Number of processors")
-    plt.ylabel("Time (s)")
-    plt.title("Weak Scaling")
-    # plt.legend()
+    plt.xlabel("Number of processors", fontsize=20)
+    plt.ylabel("Time (s)", fontsize=20)
+    plt.title("Weak Scaling", fontsize=20)
+    plt.legend(fontsize=20)
     plt.show()
 
     os._exit(0)
@@ -513,9 +537,9 @@ if __name__ == '__main__':
         errornorm2 = "4.9368238642349e-05 1.4896013648534e-05 3.9856962348929e-06 1.0213744233093e-06 2.5784251776647e-07"
         errornorm3 = "4.9368422295529e-05 1.4896080001237e-05 3.9857148334939e-06 1.0213791973692e-06 2.5784370382021e-07"
         PlotConvergRate(p_order, mesh_size, errornorm1, errornorm2, errornorm3)
-    elif 0:
+    elif 1:
         demo3()
     elif 0:
         demo4()
-    elif 1:
+    elif 0:
         demo5()
