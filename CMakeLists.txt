@@ -9,32 +9,32 @@
 # terms of the BSD-3 license. We welcome feedback and contributions, see file
 # CONTRIBUTING.md for details.
 
-cmake_minimum_required(VERSION 2.8.11)
+cmake_minimum_required(VERSION 2.8.11) # 检查cmake的版本，至少为2.8.11
 set(USER_CONFIG "${CMAKE_CURRENT_SOURCE_DIR}/config/user.cmake" CACHE PATH
-  "Path to optional user configuration file.")
+  "Path to optional user configuration file.") # https://blog.csdn.net/Calvin_zhou/article/details/104060927
 
 # Require C++11 and disable compiler-specific extensions
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD 11) # 用 C++ 11 的规范进行编译: https://blog.csdn.net/justidle/article/details/105240822
+set(CMAKE_CXX_STANDARD_REQUIRED ON) # 强制: CMake says if the standard doesn't exist, older standard will be selected
+set(CMAKE_CXX_EXTENSIONS OFF) # Default value for CXX_EXTENSIONS property of targets
 
 # Load user settings before the defaults - this way the defaults will not
 # overwrite the user set options. If the user has not set all options, we still
 # have the defaults.
 message(STATUS "(optional) USER_CONFIG = ${USER_CONFIG}")
-include("${USER_CONFIG}" OPTIONAL)
-include("${CMAKE_CURRENT_SOURCE_DIR}/config/defaults.cmake")
+include("${USER_CONFIG}" OPTIONAL) # include 指令用来载入并运行来自于文件或模块的CMake代码
+include("${CMAKE_CURRENT_SOURCE_DIR}/config/defaults.cmake") # 先引入用户自定义的cmake参数，然后引入默认的cmake参数，但是前者优先级更高
 
 # Allow overwriting of the compiler by setting CXX/MPICXX on the command line or
 # in user.cmake.
-if (NOT CMAKE_CXX_COMPILER)
-  if (CXX)
+if (NOT CMAKE_CXX_COMPILER) # 通过下面的方式为 CMAKE_CXX_COMPILER 设定值
+  if (CXX) # 串行，在上面提到的defaults.cmake里面有 set(CXX g++)
     set(CMAKE_CXX_COMPILER ${CXX})
     # Avoid some issues when CXX is defined
     unset(CXX)
     unset(CXX CACHE)
   endif()
-  if (MFEM_USE_MPI AND MPICXX)
+  if (MFEM_USE_MPI AND MPICXX) # 并行，在上面提到的defaults.cmake里面有 set(MPICXX mpicxx)
     # In parallel MPICXX takes precedence, if defined.
     set(CMAKE_CXX_COMPILER ${MPICXX})
     # Setting the variables below circumvents autodetection, see FindMPI.cmake.
@@ -46,13 +46,13 @@ endif()
 #-------------------------------------------------------------------------------
 # Project name and version
 #-------------------------------------------------------------------------------
-project(mfem NONE)
+project(mfem NONE) # 设定项目名称 ${PROJECT_NAME} 为 mfem
 # Current version of MFEM, see also `makefile`.
 #   mfem_VERSION = (string)
 #   MFEM_VERSION = (int)   [automatically derived from mfem_VERSION]
 set(${PROJECT_NAME}_VERSION 4.1.1)
 
-# Prohibit in-source build
+# Prohibit in-source build: 不能在源码里面使用 cmake . (. 表示当前目录)，但可以在源码下建立build目录
 if (${PROJECT_SOURCE_DIR} STREQUAL ${PROJECT_BINARY_DIR})
   message(FATAL_ERROR
     "MFEM does not support in-source CMake builds at this time.")
@@ -82,10 +82,10 @@ if (MFEM_USE_STRUMPACK)
 endif()
 
 # Include xSDK default CMake file.
-include("${CMAKE_CURRENT_SOURCE_DIR}/config/XSDKDefaults.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/config/XSDKDefaults.cmake") # CMAKE_CURRENT_SOURCE_DIR 这是当前处理的CMakeLists.txt所在的目录
 
 # Enable languages.
-enable_language(CXX)
+enable_language(CXX) # enable_language() command enables support for the named language in CMake. This is the same as the project command but does not create any of the extra variables that are created by the project command. Example languages are CXX, C, Fortran.
 if (MFEM_USE_CUDA)
    # MFEM_USE_CUDA requires CMake 3.8 or newer (for direct CUDA support)
    cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
@@ -133,18 +133,21 @@ endif()
 # Suppress warnings about MACOSX_RPATH
 set(CMAKE_MACOSX_RPATH OFF CACHE BOOL "")
 
-# CMake needs to know where to find things
+# CMake needs to know where to find things.
+#     CMAKE_PREFIX_PATH是以分号分隔的列表，供find_package(), find_program(), find_library(), find_file()和find_path()使用，初始为空，由用户设定
+#     CMAKE_MODULE_PATH是以分号分隔的列表，供include()或 find_package()使用。初始为空，由用户设定
+#     两者的选择，优先使用CMAKE_PREFIX_PATH
 set(MFEM_CMAKE_PATH ${PROJECT_SOURCE_DIR}/config)
 set(CMAKE_MODULE_PATH ${MFEM_CMAKE_PATH}/cmake/modules)
 
 # Load MFEM CMake utilities.
-include(MfemCmakeUtilities)
+include(MfemCmakeUtilities) # fff
 
-string(TOUPPER "${PROJECT_NAME}" PROJECT_NAME_UC)
-mfem_version_to_int(${${PROJECT_NAME}_VERSION} ${PROJECT_NAME_UC}_VERSION)
+string(TOUPPER "${PROJECT_NAME}" PROJECT_NAME_UC) # string(TOUPPER <string> <output_variable>): Convert <string> to upper characters
+mfem_version_to_int(${${PROJECT_NAME}_VERSION} ${PROJECT_NAME_UC}_VERSION) # 把 4.1.1 转为 40101
 set(${PROJECT_NAME_UC}_VERSION_STRING ${${PROJECT_NAME}_VERSION})
 if (EXISTS ${PROJECT_SOURCE_DIR}/.git)
-   execute_process(
+   execute_process( # 通过execute_process调用shell命令或者脚本 fff
      COMMAND git describe --all --long --abbrev=40 --dirty --always
      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
      OUTPUT_VARIABLE ${PROJECT_NAME_UC}_GIT_STRING
@@ -186,7 +189,7 @@ if (MFEM_USE_MPI)
   endif()
 else()
   set(PKGS_NEED_MPI SUPERLU PETSC SLEPC STRUMPACK PUMI)
-  foreach(PKG IN LISTS PKGS_NEED_MPI)
+  foreach(PKG IN LISTS PKGS_NEED_MPI) # IN, LISTS 都是关键字: https://blog.csdn.net/weixin_33850890/article/details/87972645
     if (MFEM_USE_${PKG})
       message(STATUS "Disabling package ${PKG} - requires MPI")
       set(MFEM_USE_${PKG} OFF CACHE BOOL "Disabled - requires MPI" FORCE)
@@ -376,14 +379,14 @@ set(MFEM_TPLS MPI_CXX OPENMP BLAS LAPACK METIS HYPRE SuiteSparse SUNDIALS PETSC
 # Add all *_FOUND libraries in the variable TPL_LIBRARIES.
 set(TPL_LIBRARIES "")
 set(TPL_INCLUDE_DIRS "")
-foreach(TPL IN LISTS MFEM_TPLS)
+foreach(TPL IN LISTS MFEM_TPLS) # 罗列出mfem所使用的三方库
   if (${TPL}_FOUND)
     message(STATUS "MFEM: using package ${TPL}")
-    list(APPEND TPL_LIBRARIES ${${TPL}_LIBRARIES})
+    list(APPEND TPL_LIBRARIES ${${TPL}_LIBRARIES}) # 在该list(即TPL_LIBRARIES)之后追加元素
     list(APPEND TPL_INCLUDE_DIRS ${${TPL}_INCLUDE_DIRS})
   endif()
 endforeach(TPL)
-list(REMOVE_DUPLICATES TPL_LIBRARIES)
+list(REMOVE_DUPLICATES TPL_LIBRARIES) # 从列表中删除重复的元素
 list(REMOVE_DUPLICATES TPL_INCLUDE_DIRS)
 # message(STATUS "TPL_INCLUDE_DIRS = ${TPL_INCLUDE_DIRS}")
 include_directories(${TPL_INCLUDE_DIRS})
@@ -404,9 +407,9 @@ message(STATUS "MFEM git string: ${MFEM_GIT_STRING}")
 # Headers and sources
 set(SOURCES "")
 set(HEADERS "")
-set(MFEM_SOURCE_DIRS general linalg mesh fem)
+set(MFEM_SOURCE_DIRS general linalg mesh fem) # 不包括 config/, data/, doc/, examples/, miniapps/, tests/
 foreach(DIR IN LISTS MFEM_SOURCE_DIRS)
-  add_subdirectory(${DIR})
+  add_subdirectory(${DIR}) # 在这几个目录里面的CMakeLists.txt中定义了变量 SOURCES, HEADERS
 endforeach()
 
 if (MFEM_USE_CUDA)
@@ -418,9 +421,9 @@ endif()
 add_subdirectory(config)
 set(MASTER_HEADERS
   ${PROJECT_SOURCE_DIR}/mfem.hpp
-  ${PROJECT_SOURCE_DIR}/mfem-performance.hpp examples/petsc/ts_tutorial_ex1.cpp examples/petsc/ts_tutorial_ex2.cpp examples/petsc/ts_tutorial_ex3.cpp examples/petsc/ts_tutorial_ex4.cpp)
+  ${PROJECT_SOURCE_DIR}/mfem-performance.hpp)
 
-set(_lib_path "${CMAKE_INSTALL_PREFIX}/lib")
+set(_lib_path "${CMAKE_INSTALL_PREFIX}/lib") # fff
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH ON CACHE BOOL "")
 set(CMAKE_INSTALL_RPATH "${_lib_path}" CACHE PATH "")
 set(CMAKE_INSTALL_NAME_DIR "${_lib_path}" CACHE PATH "")
@@ -431,17 +434,17 @@ set(MFEM_INSTALL_DIR ${CMAKE_INSTALL_PREFIX} CACHE PATH
     "The MFEM install directory" FORCE)
 
 # Declaring the library
-add_library(mfem ${SOURCES} ${HEADERS} ${MASTER_HEADERS})
+add_library(mfem ${SOURCES} ${HEADERS} ${MASTER_HEADERS}) # 在 build/CMakeFiles/mfem.dir/ 目录下为每个源文件生成库文件，并在build/目录下生成libmfem.a库文件: https://blog.csdn.net/LaineGates/article/details/108242803
 # message(STATUS "TPL_LIBRARIES = ${TPL_LIBRARIES}")
 if (CMAKE_VERSION VERSION_GREATER 2.8.11)
-  target_link_libraries(mfem PUBLIC ${TPL_LIBRARIES})
+  target_link_libraries(mfem PUBLIC ${TPL_LIBRARIES}) # fff
 else()
   target_link_libraries(mfem ${TPL_LIBRARIES})
 endif()
 if (MINGW)
   target_link_libraries(mfem ws2_32)
 endif()
-set_target_properties(mfem PROPERTIES VERSION "${mfem_VERSION}")
+set_target_properties(mfem PROPERTIES VERSION "${mfem_VERSION}") # https://www.cnblogs.com/zhoug2020/p/5904206.html
 set_target_properties(mfem PROPERTIES SOVERSION "${mfem_VERSION}")
 
 # If building out-of-source, define MFEM_CONFIG_FILE to point to the config file
@@ -449,9 +452,10 @@ set_target_properties(mfem PROPERTIES SOVERSION "${mfem_VERSION}")
 if (NOT ("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}"))
   target_compile_definitions(mfem PRIVATE
     "MFEM_CONFIG_FILE=\"${PROJECT_BINARY_DIR}/config/_config.hpp\"")
-endif()
+endif() # fff
 
 # Generate configuration file in the build directory: config/_config.hpp.
+# 将input文件复制到output文件，并在输入文件内容中的变量，替换引用为@VAR@或${VAR}的变量值。每个变量引用将替换为该变量的当前值，如果未定义该变量，则为空字符串.
 configure_file(
   "${PROJECT_SOURCE_DIR}/config/cmake/config.hpp.in"
   "${PROJECT_BINARY_DIR}/config/_config.hpp")
@@ -462,7 +466,7 @@ if (NOT ("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}"))
   foreach(Header mfem.hpp mfem-performance.hpp)
     message(STATUS
       "Writing substitute header --> \"${Header}\"")
-    file(WRITE "${PROJECT_BINARY_DIR}/${Header}"
+    file(WRITE "${PROJECT_BINARY_DIR}/${Header}"    # WRITE 将一则信息写入文件中，如果该文件存在，它会覆盖它，如果不存在，它会创建该文件; APPEND 如同WRITE，区别在于它将信息内容追加到文件末尾
 "// Auto-generated file.
 #define MFEM_CONFIG_FILE \"${PROJECT_BINARY_DIR}/config/_config.hpp\"
 #include \"${PROJECT_SOURCE_DIR}/${Header}\"
@@ -480,7 +484,7 @@ endif()
 #-------------------------------------------------------------------------------
 
 # Enable testing if required
-if (MFEM_ENABLE_TESTING)
+if (MFEM_ENABLE_TESTING) # fff goon
   enable_testing()
   set(MFEM_ALL_TESTS_TARGET_NAME tests)
   add_mfem_target(${MFEM_ALL_TESTS_TARGET_NAME} OFF)
