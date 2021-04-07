@@ -141,7 +141,7 @@ set(MFEM_CMAKE_PATH ${PROJECT_SOURCE_DIR}/config)
 set(CMAKE_MODULE_PATH ${MFEM_CMAKE_PATH}/cmake/modules)
 
 # Load MFEM CMake utilities.
-include(MfemCmakeUtilities) # fff
+include(MfemCmakeUtilities) # 载入mfem/config/cmake/modules/MfemCmakeUtilities.cmake
 
 string(TOUPPER "${PROJECT_NAME}" PROJECT_NAME_UC) # string(TOUPPER <string> <output_variable>): Convert <string> to upper characters
 mfem_version_to_int(${${PROJECT_NAME}_VERSION} ${PROJECT_NAME_UC}_VERSION) # 把 4.1.1 转为 40101
@@ -484,11 +484,11 @@ endif()
 #-------------------------------------------------------------------------------
 
 # Enable testing if required
-if (MFEM_ENABLE_TESTING) # fff goon
+if (MFEM_ENABLE_TESTING)
   enable_testing()
   set(MFEM_ALL_TESTS_TARGET_NAME tests)
   add_mfem_target(${MFEM_ALL_TESTS_TARGET_NAME} OFF)
-  add_subdirectory(tests EXCLUDE_FROM_ALL)
+  add_subdirectory(tests EXCLUDE_FROM_ALL) # 在一个项目中不可避免会有一些测试代码，这些测试代码，我们并不一定需要每次都编译，尤其是编译正式版本的时候，这些测试代码是不会加入release版本的。为了加快编译速度，可以将这些测试用的target或不会加入release的target 加上EXCLUDE_FROM_ALL属性就不需要每次编译它了。如果想要编译，需要手动指定编译名，如 make tests
 endif()
 
 # Define a target that all examples and miniapps will depend on.
@@ -497,7 +497,7 @@ add_custom_target(${MFEM_EXEC_PREREQUISITES_TARGET_NAME})
 
 # Create a target for all examples and, optionally, enable it.
 set(MFEM_ALL_EXAMPLES_TARGET_NAME examples)
-add_mfem_target(${MFEM_ALL_EXAMPLES_TARGET_NAME} ${MFEM_ENABLE_EXAMPLES})
+add_mfem_target(${MFEM_ALL_EXAMPLES_TARGET_NAME} ${MFEM_ENABLE_EXAMPLES}) # ${MFEM_ENABLE_EXAMPLES}在config/defaults.cmake(以及user.cmake)中定义
 add_subdirectory(examples EXCLUDE_FROM_ALL)
 
 # Create a target for all miniapps and, optionally, enable it.
@@ -516,12 +516,12 @@ add_dependencies(exec
 #  - https://gitlab.kitware.com/cmake/cmake/issues/8438
 #  - https://cmake.org/Bug/view.php?id=8438
 
-# Add a target to copy the mfem data directory to the build directory
+# Add a target to copy the mfem data directory to the build directory. https://blog.csdn.net/qq_38410730/article/details/102797448
 add_custom_command(OUTPUT data_is_copied
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/data data
   COMMAND ${CMAKE_COMMAND} -E touch data_is_copied
   COMMENT "Copying the data directory ...")
-add_custom_target(copy_data DEPENDS data_is_copied)
+add_custom_target(copy_data DEPENDS data_is_copied) # 增加target: copy_data
 # Add 'copy_data' as a prerequisite for all executables, if the source and the
 # build directories are not the same.
 if (NOT ("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}"))
@@ -549,7 +549,7 @@ add_subdirectory(doc)
 #-------------------------------------------------------------------------------
 # Installation
 #-------------------------------------------------------------------------------
-
+# 设定安装目录下的 include/, lib/
 message(STATUS "CMAKE_INSTALL_PREFIX = ${CMAKE_INSTALL_PREFIX}")
 set(INSTALL_INCLUDE_DIR include
   CACHE PATH "Relative path for installing header files.")
@@ -564,15 +564,15 @@ set(INSTALL_CMAKE_DIR lib/cmake/mfem
 
 set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME Development)
 
-# Install the library
-install(TARGETS ${PROJECT_NAME}
-  EXPORT ${PROJECT_NAME_UC}Targets
-  DESTINATION ${INSTALL_LIB_DIR})
+# Install the library. make install的时候，是需要我们定义一个install的目标么？显然并不需要，作为一个经常需要被运行的指令，官方提供了一个命令install，只需要经过该命令的安装内容，不需要显示地定义install目标。此时，make install就是运行该命令的内容。
+install(TARGETS ${PROJECT_NAME} # TARGETS: 指定目标名称
+  EXPORT ${PROJECT_NAME_UC}Targets # EXPORT: 导出目标供外部使用
+  DESTINATION ${INSTALL_LIB_DIR}) # DESTINATION: 指定磁盘上要安装文件的目录
 
 # Install the master headers
 foreach(Header mfem.hpp mfem-performance.hpp)
   install(FILES ${PROJECT_BINARY_DIR}/InstallHeaders/${Header}
-    DESTINATION ${INSTALL_INCLUDE_DIR})
+    DESTINATION ${INSTALL_INCLUDE_DIR}) # 复制关键字FILES后面的文件到DESTINATION关键字后面指定的目录下: https://stackoverflow.com/questions/15694347/installing-additional-files-with-cmake
 endforeach()
 install(FILES ${MASTER_HEADERS} DESTINATION ${INSTALL_INCLUDE_DIR}/mfem)
 
@@ -612,11 +612,11 @@ install(FILES ${PROJECT_SOURCE_DIR}/config/tconfig.hpp
   DESTINATION ${INSTALL_INCLUDE_DIR}/mfem/config)
 
 # Package the whole thing up nicely
-include(CMakePackageConfigHelpers)
+include(CMakePackageConfigHelpers) # 载入系统cmake的安装目录下的/usr/share/cmake-3.16/Modules/CMakePackageConfigHelpers.cmake
 
 # Add all targets to the build-tree export set
 export(TARGETS ${PROJECT_NAME}
-  FILE "${PROJECT_BINARY_DIR}/MFEMTargets.cmake")
+  FILE "${PROJECT_BINARY_DIR}/MFEMTargets.cmake") # Export targets from the build tree for use by outside projects
 
 # Export the package for use from the build-tree (this registers the build-tree
 # with the CMake user package registry.)

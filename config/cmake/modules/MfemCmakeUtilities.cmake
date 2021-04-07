@@ -48,7 +48,7 @@ endfunction()
 function(add_mfem_target TARGET_NAME ADD_TO_ALL)
   if (ADD_TO_ALL)
     # add TARGET_NAME to the main target
-    add_custom_target(${TARGET_NAME} ALL)
+    add_custom_target(${TARGET_NAME} ALL) # https://blog.csdn.net/qq_38410730/article/details/102797448
   else()
     # do not add TARGET_NAME to the main target
     add_custom_target(${TARGET_NAME})
