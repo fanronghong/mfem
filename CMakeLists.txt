@@ -409,8 +409,12 @@ set(SOURCES "")
 set(HEADERS "")
 set(MFEM_SOURCE_DIRS general linalg mesh fem) # 不包括 config/, data/, doc/, examples/, miniapps/, tests/
 foreach(DIR IN LISTS MFEM_SOURCE_DIRS)
-  add_subdirectory(${DIR}) # 在这几个目录里面的CMakeLists.txt中定义了变量 SOURCES, HEADERS
-endforeach()
+  add_subdirectory(${DIR}) # 在这几个目录里面的CMakeLists.txt中引用了当前变量 SOURCES, HEADERS
+#  foreach(name ${SOURCES})
+#      message("------: ${name}")
+#  endforeach()
+#  message("======")
+endforeach() # 每一次调用函数add_subdirectory()就会执行相应目录下的CMakeLists.txt中的代码
 
 if (MFEM_USE_CUDA)
    foreach(file IN LISTS SOURCES)
@@ -621,10 +625,10 @@ export(TARGETS ${PROJECT_NAME}
 # Export the package for use from the build-tree (this registers the build-tree
 # with the CMake user package registry.)
 # TODO: How do we register the install-tree? Replacing the build-tree?
-export(PACKAGE ${PROJECT_NAME})
+export(PACKAGE ${PROJECT_NAME}) # fff
 
 # Extract the include directories required to use MFEM
-get_target_property(MFEM_TPL_INCLUDE_DIRS mfem INCLUDE_DIRECTORIES)
+get_target_property(MFEM_TPL_INCLUDE_DIRS mfem INCLUDE_DIRECTORIES) # https://blog.csdn.net/Sakaue/article/details/38420443
 if (NOT MFEM_TPL_INCLUDE_DIRS)
   set(MFEM_TPL_INCLUDE_DIRS "")
 endif()
@@ -635,7 +639,7 @@ set(LIB_INSTALL_DIR ${PROJECT_BINARY_DIR})
 configure_package_config_file(config/cmake/MFEMConfig.cmake.in
   ${CMAKE_CURRENT_BINARY_DIR}/MFEMConfig.cmake
   INSTALL_DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
-  PATH_VARS INCLUDE_INSTALL_DIRS LIB_INSTALL_DIR)
+  PATH_VARS INCLUDE_INSTALL_DIRS LIB_INSTALL_DIR) # fff
 
 # This is the version that will be installed
 set(INCLUDE_INSTALL_DIRS ${INSTALL_INCLUDE_DIR}  ${MFEM_TPL_INCLUDE_DIRS})
