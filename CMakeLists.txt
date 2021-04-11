@@ -437,7 +437,7 @@ set(MFEM_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR} CACHE PATH
 set(MFEM_INSTALL_DIR ${CMAKE_INSTALL_PREFIX} CACHE PATH
     "The MFEM install directory" FORCE)
 
-# Declaring the library
+# Declaring the library. 根据${SOURCES},${HEADERS},${MASTER_HEADERS}生成库 mfem
 add_library(mfem ${SOURCES} ${HEADERS} ${MASTER_HEADERS}) # 在 build/CMakeFiles/mfem.dir/ 目录下为每个源文件生成库文件，并在build/目录下生成libmfem.a库文件: https://blog.csdn.net/LaineGates/article/details/108242803
 # message(STATUS "TPL_LIBRARIES = ${TPL_LIBRARIES}")
 if (CMAKE_VERSION VERSION_GREATER 2.8.11)
