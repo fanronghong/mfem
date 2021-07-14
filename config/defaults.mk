@@ -373,7 +373,7 @@ UMPIRE_OPT = -I$(UMPIRE_DIR)/include
 UMPIRE_LIB = -L$(UMPIRE_DIR)/lib -lumpire
 
 # If YES, enable some informational messages
-VERBOSE = NO
+VERBOSE = YES
 
 # Optional build tag
 MFEM_BUILD_TAG = $(shell uname -snm)
