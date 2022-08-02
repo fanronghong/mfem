@@ -43,11 +43,11 @@ SMX = $(if $(MFEM_USE_PUMI:NO=),MFEM_USE_SIMMETRIX)
 SMX_PATH = $(PUMI_DIR)/include/gmi_sim.h
 SMX_FILE = $(subst @MFEM_DIR@,$(if $(MFEM_DIR),$(MFEM_DIR),..),$(SMX_PATH))
 
-$(GHV): $(SRC)$(GHV).cpp
+$(GHV): $(SRC)$(GHV).cpp # 设定依赖目标 mfem/config/get_hypre_version.cpp
 	$(call mfem-info, Determining HYPRE version ...)
-	$(GHV_CXX) ${GHV_FLAGS} $(SRC)$(GHV).cpp -o $(GHV)
+	$(GHV_CXX) ${GHV_FLAGS} $(SRC)$(GHV).cpp -o $(GHV) # 编译 mfem/config/get_hypre_version.cpp 为目标文件
 $(GHV).out: $(GHV)
-	./$(GHV) > $(GHV).out
+	./$(GHV) > $(GHV).out # 运行 get_hypre_version.cpp 生成的可执行文件，输出结果从定向到 get_hypre_version.out
 .INTERMEDIATE: $(GHV) $(GHV).out
 
 get-hypre-version: $(GHV).out
@@ -76,9 +76,11 @@ header: $(if $(MPI),get-hypre-version,) $(if $(SMX),check-smx)
 	sed "$$@" $(SRC)config.hpp.in > $(CONFIG_HPP)
 
 # The target below uses the values of the shell variables listed in
-# the shell variables MFEM_DEFINES and MFEM_CONFIG_VARS
+# the shell variables MFEM_DEFINES(来源于mfem/makefile)
+# and MFEM_CONFIG_VARS(来源于mfem/makefile)
 config-mk:
 	$(call mfem-info, Writing $(CONFIG_MK) ...)
+	# set -- : https://stackoverflow.com/questions/20088290/whats-set-progname-means-in-shell-script
 	@set -- && \
 	for ref in $${MFEM_DEFINES} $${MFEM_CONFIG_VARS}; do \
 	   eval var=\$$$$ref && \
@@ -87,7 +89,7 @@ config-mk:
 	set -- "$$@" -e 's/@\([^@]*\)@/$$(\1)/g' -e 's/  *$$//g' && \
 	set -- "$$@" -e tb -e ba -e ":b" -e 's/^$$//' -e tc -e ba && \
 	set -- "$$@" -e ":c" -e d -e ":a" && \
-	sed "$$@" $(SRC)config.mk.in > $(CONFIG_MK)
+	sed "$$@" $(SRC)config.mk.in > $(CONFIG_MK) # 依照脚本的指令来处理、编辑文本文件, 主要用来自动编辑一个或多个文件、简化对文件的反复操作、编写转换程序等
 
 clean:
 	rm -f $(CONFIG_HPP) $(CONFIG_MK) sample-runs-build.log

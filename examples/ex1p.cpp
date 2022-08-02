@@ -166,23 +166,23 @@ int main(int argc, char *argv[])
       delete_fec = true;
    }
    ParFiniteElementSpace fespace(&pmesh, fec);
-   HYPRE_Int size = fespace.GlobalTrueVSize();
-   if (myid == 0)
-   {
-      cout << "Number of finite element unknowns: " << size << endl;
-   }
+//   HYPRE_Int size = fespace.GlobalTrueVSize();
+//   if (myid == 0)
+//   {
+//      cout << "Number of finite element unknowns: " << size << endl;
+//   }
 
    // 8. Determine the list of true (i.e. parallel conforming) essential
    //    boundary dofs. In this example, the boundary conditions are defined
    //    by marking all the boundary attributes from the mesh as essential
    //    (Dirichlet) and converting them to a list of true dofs.
    Array<int> ess_tdof_list;
-   if (pmesh.bdr_attributes.Size())
-   {
-      Array<int> ess_bdr(pmesh.bdr_attributes.Max());
-      ess_bdr = 1;
-      fespace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
-   }
+//   if (pmesh.bdr_attributes.Size())
+//   {
+//      Array<int> ess_bdr(pmesh.bdr_attributes.Max());
+//      ess_bdr = 1;
+//      fespace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+//   }
 
    // 9. Set up the parallel linear form b(.) which corresponds to the
    //    right-hand side of the FEM linear system, which in this case is
