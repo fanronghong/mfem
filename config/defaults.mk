@@ -401,7 +401,7 @@ MKL_CPARDISO_LIB = -Wl,-rpath,$(MKL_CPARDISO_DIR)/$(MKL_LIBRARY_SUBDIR)\
                    -lmkl_intel_lp64 -lmkl_sequential -lmkl_core
 
 # If YES, enable some informational messages
-VERBOSE = NO
+VERBOSE = YES
 
 # Optional build tag
 MFEM_BUILD_TAG = $(shell uname -snm)

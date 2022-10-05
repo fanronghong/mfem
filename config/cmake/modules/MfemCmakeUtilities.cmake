@@ -48,7 +48,7 @@ endfunction()
 function(add_mfem_target TARGET_NAME ADD_TO_ALL)
   if (ADD_TO_ALL)
     # add TARGET_NAME to the main target
-    add_custom_target(${TARGET_NAME} ALL)
+    add_custom_target(${TARGET_NAME} ALL) # https://blog.csdn.net/qq_38410730/article/details/102797448
   else()
     # do not add TARGET_NAME to the main target
     add_custom_target(${TARGET_NAME})
@@ -56,6 +56,43 @@ function(add_mfem_target TARGET_NAME ADD_TO_ALL)
 endfunction()
 
 # Add mfem examples
+# ARGC代表的是函数或者宏传递的参数个数;
+# ARGV代表所有传递的参数，使用list表示，其中如果函数有多个参数，要取得某个参数可以使用ARGV0，ARGV1，ARGV2等;
+# ARGN包含传入参数的list， 与ARGV不同的是并不是代表所有参数，而是指宏或者函数声明的参数之后的所有参数.
+# 举例如下:
+#        cmake_minimum_required (VERSION 3.5)
+#        project(test)
+#        macro( testarg var1 var2 )
+#          message(STATUS "ARGC=${ARGC}")
+#          message(STATUS "ARGV=${ARGV}")
+#          message(STATUS "ARGN=${ARGN}")
+#          message(STATUS "ARGV0=${ARGV0}")
+#          message(STATUS "ARGV1=${ARGV1}")
+#          message(STATUS "ARGV2=${ARGV2}")
+#          message(STATUS "ARGV3=${ARGV3}")
+#          message(STATUS "ARGV4=${ARGV4}")
+#        endmacro()
+#        message(STATUS "\n")
+#        testarg( a b c d e )
+#        message(STATUS "\n")
+#        testarg( a b )
+# 输出结果为:
+#          -- ARGC=5
+#          -- ARGV=a;b;c;d;e
+#          -- ARGN=c;d;e
+#          -- ARGV0=a
+#          -- ARGV1=b
+#          -- ARGV2=c
+#          -- ARGV3=d
+#          -- ARGV4=e
+#       -- ARGC=2
+#       -- ARGV=a;b
+#       -- ARGN=
+#       -- ARGV0=a
+#       -- ARGV1=b
+#       -- ARGV2=
+#       -- ARGV3=
+#       -- ARGV4=
 function(add_mfem_examples EXE_SRCS)
   set(EXE_PREFIX "")
   set(EXE_PREREQUISITE "")
@@ -75,17 +112,18 @@ function(add_mfem_examples EXE_SRCS)
       set_property(SOURCE ${SRC_FILE} PROPERTY LANGUAGE CUDA)
     endif()
 
-    get_filename_component(SRC_FILENAME ${SRC_FILE} NAME)
+    get_filename_component(SRC_FILENAME ${SRC_FILE} NAME) # 关键字NAME表示取文件名,不包含路径。其他关键字: ABSOLUTE(原封不动取目录或包含路径的文件), EXT(取扩展名), REALPATH(ABSOLUTE 一样), PATH(只保留路径)
 
-    string(REPLACE ".cpp" "" EXE_NAME "${EXE_PREFIX}${SRC_FILENAME}")
-    add_executable(${EXE_NAME} ${SRC_FILE})
-    add_dependencies(${MFEM_ALL_EXAMPLES_TARGET_NAME} ${EXE_NAME})
+    string(REPLACE ".cpp" "" EXE_NAME "${EXE_PREFIX}${SRC_FILENAME}") # 把输入参数"${EXE_PREFIX}${SRC_FILENAME}"中的“.cpp”去掉然后保存字符串为EXE_NAME
+    add_executable(${EXE_NAME} ${SRC_FILE}) # 增加可执行目标
+    add_dependencies(${MFEM_ALL_EXAMPLES_TARGET_NAME} ${EXE_NAME}) # 定义 MFEM_ALL_EXAMPLES_TARGET_NAME 依赖 EXE_NAME，确保在编译 MFEM_ALL_EXAMPLES_TARGET_NAME 之前，EXE_NAME 已经被构建
     if (EXE_NEEDED_BY)
       add_dependencies(${EXE_NEEDED_BY} ${EXE_NAME})
     endif()
     add_dependencies(${EXE_NAME}
       ${MFEM_EXEC_PREREQUISITES_TARGET_NAME} ${EXE_PREREQUISITE})
 
+    # include_directories(x/y)和target_include_directories(t x/y)都是用来配置编译头文件的，ref: https://stackoverflow.com/questions/31969547/what-is-the-difference-between-include-directories-and-target-include-directorie
     target_link_libraries(${EXE_NAME} mfem)
     if (MFEM_USE_MPI)
       # Not needed: (mfem already links with MPI_CXX_LIBRARIES)
@@ -97,13 +135,13 @@ function(add_mfem_examples EXE_SRCS)
       endif()
       if (MPI_CXX_COMPILE_FLAGS)
         separate_arguments(MPI_CXX_COMPILE_ARGS UNIX_COMMAND
-          "${MPI_CXX_COMPILE_FLAGS}")
-        target_compile_options(${EXE_NAME} PRIVATE ${MPI_CXX_COMPILE_ARGS})
+          "${MPI_CXX_COMPILE_FLAGS}") # 将空格分隔的参数解析为一个分号分隔的list
+        target_compile_options(${EXE_NAME} PRIVATE ${MPI_CXX_COMPILE_ARGS}) # 在编译给定目标文件时，指定要用到的编译选项。target目标文件必须已经存在（由命令add_executable()或add_library()创建）且不能被IMPORTED修饰。
       endif()
 
       if (MPI_CXX_LINK_FLAGS)
         set_target_properties(${EXE_NAME} PROPERTIES
-          LINK_FLAGS "${MPI_CXX_LINK_FLAGS}")
+          LINK_FLAGS "${MPI_CXX_LINK_FLAGS}") # https://www.cnblogs.com/coderfenghc/archive/2012/10/20/2712806.html
       endif()
     endif()
   endforeach(SRC_FILE)

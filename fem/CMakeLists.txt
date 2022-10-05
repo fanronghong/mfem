@@ -148,8 +148,11 @@ if (MFEM_USE_CEED)
      libceed/mass.hpp)
 endif()
 
-convert_filenames_to_full_paths(SRCS)
+#foreach(name ${SRCS})
+#    message("------: ${name}")
+#endforeach()
+convert_filenames_to_full_paths(SRCS) # 上面的添加的文件都是只有文件名，通过转换可以为每个文件加上绝对路径
 convert_filenames_to_full_paths(HDRS)
 
-set(SOURCES ${SOURCES} ${SRCS} PARENT_SCOPE)
+set(SOURCES ${SOURCES} ${SRCS} PARENT_SCOPE) # PARENT_SCOPE 表示变量SOURCES来自父目录
 set(HEADERS ${HEADERS} ${HDRS} PARENT_SCOPE)

@@ -592,13 +592,17 @@ local-config:
 
 .PHONY: build-config
 build-config:
+	@echo "===> BUILD_SUBDIRS: $(BUILD_SUBDIRS)"
+
 	for d in $(BUILD_SUBDIRS); do mkdir -p $(BLD)$${d}; done
+
+	@echo "===> $(addsuffix /,config $(EM_DIRS) doc $(TEST_DIRS))"
 	for dir in "" $(addsuffix /,config $(EM_DIRS) doc $(TEST_DIRS)); do \
 	   printf "# Auto-generated file.\n%s\n%s\n" \
 	      "MFEM_DIR = $(MFEM_REAL_DIR)" \
 	      "include \$$(MFEM_DIR)/$${dir}makefile" \
 	      > $(BLD)$${dir}GNUmakefile; done
-	$(MAKE) -C $(BLD)config all
+	$(MAKE) -C $(BLD)config all # goon
 	cd "$(BUILD_DIR)" && ln -sf "$(MFEM_REAL_DIR)/data" .
 	for hdr in mfem.hpp mfem-performance.hpp; do \
 	   printf "// Auto-generated file.\n%s\n%s\n" \

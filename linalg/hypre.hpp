@@ -158,6 +158,7 @@ public:
 
    /// Prints the locally owned rows in parallel
    void Print(const char *fname) const;
+    void Read(MPI_Comm comm, const char* fname);
 
    /// Calls hypre's destroy function
    ~HypreParVector();
