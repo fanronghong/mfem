@@ -1,13 +1,13 @@
-// Copyright (c) 2010, Lawrence Livermore National Security, LLC. Produced at
-// the Lawrence Livermore National Laboratory. LLNL-CODE-443211. All Rights
-// reserved. See file COPYRIGHT for details.
+// Copyright (c) 2010-2020, Lawrence Livermore National Security, LLC. Produced
+// at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+// LICENSE and NOTICE for details. LLNL-CODE-806117.
 //
 // This file is part of the MFEM library. For more information and source code
-// availability see http://mfem.org.
+// availability visit https://mfem.org.
 //
 // MFEM is free software; you can redistribute it and/or modify it under the
-// terms of the GNU Lesser General Public License (as published by the Free
-// Software Foundation) version 2.1 dated February 1999.
+// terms of the BSD-3 license. We welcome feedback and contributions, see file
+// CONTRIBUTING.md for details.
 //
 //            -----------------------------------------------------
 //            Joule Miniapp:  Transient Magnetics and Joule Heating
@@ -119,6 +119,10 @@ void display_banner(ostream & os);
 static double mj_ = 0.0;
 static double sj_ = 0.0;
 static double wj_ = 0.0;
+
+// Initialize variables used in joule_solver.cpp
+int electromagnetics::SOLVER_PRINT_LEVEL = 0;
+int electromagnetics::STATIC_COND        = 0;
 
 int main(int argc, char *argv[])
 {
@@ -247,6 +251,11 @@ int main(int argc, char *argv[])
    if (strcmp(problem,"rod")==0 || strcmp(problem,"coil")==0)
    {
 
+       // mesh中的element的attribute有1,2,3. 下面就是在不同的attribute处相应
+       // 的参数取值不同. 例如下面的sigmaMap会传递给
+       // MagneticDiffusionEOperator::MagneticDiffusionEOperator()中的sigma,
+       // 然后调用this->buildA0(*sigma),
+       // 再调用a0->AddDomainIntegrator(new DiffusionIntegrator(Sigma)).
       sigmaMap.insert(pair<int, double>(1, sigma));
       sigmaMap.insert(pair<int, double>(2, sigmaAir));
       sigmaMap.insert(pair<int, double>(3, sigmaAir));
@@ -459,6 +468,7 @@ int main(int argc, char *argv[])
       cout << "Number of Electrostatic unknowns:     " << glob_size_h1 << endl;
    }
 
+   // 下面用的都是GetVSize(), 而不是TrueVSize(). 故后面使用的MakeRef(), 而不是MakeTRef()
    int Vsize_l2 = L2FESpace.GetVSize();
    int Vsize_nd = HCurlFESpace.GetVSize();
    int Vsize_rt = HDivFESpace.GetVSize();
@@ -592,6 +602,7 @@ int main(int argc, char *argv[])
 
       // F is the vector of dofs, t is the current time, and dt is the time step
       // to advance.
+      // F不是TrueVector, 而是dofs(有冗余), 所以在后面的所有计算中都是用的dofs, 不是TrueVector
       ode_solver->Step(F, t, dt);
 
       if (debug == 1)
@@ -747,7 +758,7 @@ void b_exact(const Vector &x, double t, Vector &B)
    B[2] = 0.0;
 }
 
-double t_exact(Vector &x)
+double t_exact(const Vector &x)
 {
    double T = 0.0;
    return T;
@@ -757,6 +768,7 @@ double p_bc(const Vector &x, double t)
 {
    // the value
    double T;
+   // 计算区域是3D
    if (x[2] < 0.0)
    {
       T = 1.0;

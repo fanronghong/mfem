@@ -16,6 +16,16 @@
 //    mpirun -np 4 ex9p -m ../data/disc-nurbs.mesh -p 2 -rp 1 -dt 0.005 -tf 9
 //    mpirun -np 4 ex9p -m ../data/periodic-square.mesh -p 3 -rp 2 -dt 0.0025 -tf 9 -vs 20
 //    mpirun -np 4 ex9p -m ../data/periodic-cube.mesh -p 0 -o 2 -rp 1 -dt 0.01 -tf 8
+//    mpirun -np 3 ex9p -m ../data/amr-hex.mesh -p 1 -rs 1 -rp 0 -dt 0.005 -tf 0.5
+//
+// Device sample runs:
+//    mpirun -np 4 ex9p -pa
+//    mpirun -np 4 ex9p -ea
+//    mpirun -np 4 ex9p -fa
+//    mpirun -np 4 ex9p -pa -m ../data/periodic-cube.mesh
+//    mpirun -np 4 ex9p -pa -m ../data/periodic-cube.mesh -d cuda
+//    mpirun -np 4 ex9p -ea -m ../data/periodic-cube.mesh -d cuda
+//    mpirun -np 4 ex9p -fa -m ../data/periodic-cube.mesh -d cuda
 //
 // Description:  This example code solves the time-dependent advection equation
 //               du/dt + v.grad(u) = 0, where v is a given fluid velocity, and
@@ -26,9 +36,10 @@
 //               and explicit ODE time integrators, the definition of periodic
 //               boundary conditions through periodic meshes, as well as the use
 //               of GLVis for persistent visualization of a time-evolving
-//               solution. The saving of time-dependent data files for external
-//               visualization with VisIt (visit.llnl.gov) and ParaView
-//               (paraview.org) is also illustrated.
+//               solution. Saving of time-dependent data files for visualization
+//               with VisIt (visit.llnl.gov) and ParaView (paraview.org), as
+//               well as the optional saving with ADIOS2 (adios2.readthedocs.io)
+//               are also illustrated.
 
 #include "mfem.hpp"
 #include <fstream>
@@ -212,11 +223,11 @@ public:
 class FE_Evolution : public TimeDependentOperator
 {
 private:
-   HypreParMatrix &M, &K;
+   OperatorHandle M, K;
    const Vector &b;
-   HypreSmoother M_prec;
+   Solver *M_prec;
    CGSolver M_solver;
-   DG_Solver dg_solver;
+   DG_Solver *dg_solver;
 
    mutable Vector z;
 
@@ -229,7 +240,7 @@ public:
    virtual void Mult(const Vector &x, Vector &y) const;
    virtual void ImplicitSolve(const double dt, const Vector &x, Vector &k);
 
-   virtual ~FE_Evolution() { }
+   virtual ~FE_Evolution();
 };
 
 
@@ -247,12 +258,17 @@ int main(int argc, char *argv[])
    int ser_ref_levels = 2;
    int par_ref_levels = 0;
    int order = 3;
+   bool pa = false;
+   bool ea = false;
+   bool fa = false;
+   const char *device_config = "cpu";
    int ode_solver_type = 4;
    double t_final = 10.0;
    double dt = 0.01;
    bool visualization = true;
    bool visit = false;
    bool paraview = false;
+   bool adios2 = false;
    bool binary = false;
    int vis_steps = 5;
    int solver_type = 1;
@@ -274,6 +290,14 @@ int main(int argc, char *argv[])
                   "Number of times to refine the mesh uniformly in parallel.");
    args.AddOption(&order, "-o", "--order",
                   "Order (degree) of the finite elements.");
+   args.AddOption(&pa, "-pa", "--partial-assembly", "-no-pa",
+                  "--no-partial-assembly", "Enable Partial Assembly.");
+   args.AddOption(&ea, "-ea", "--element-assembly", "-no-ea",
+                  "--no-element-assembly", "Enable Element Assembly.");
+   args.AddOption(&fa, "-fa", "--full-assembly", "-no-fa",
+                  "--no-full-assembly", "Enable Full Assembly.");
+   args.AddOption(&device_config, "-d", "--device",
+                  "Device configuration string, see Device::Configure().");
    args.AddOption(&ode_solver_type, "-s", "--ode-solver",
                   "ODE solver: 1 - Forward Euler,\n\t"
                   "            2 - RK2 SSP, 3 - RK3 SSP, 4 - RK4, 6 - RK6,\n\t"
@@ -298,6 +322,9 @@ int main(int argc, char *argv[])
    args.AddOption(&paraview, "-paraview", "--paraview-datafiles", "-no-paraview",
                   "--no-paraview-datafiles",
                   "Save data files for ParaView (paraview.org) visualization.");
+   args.AddOption(&adios2, "-adios2", "--adios2-streams", "-no-adios2",
+                  "--no-adios2-streams",
+                  "Save data using adios2 streams.");
    args.AddOption(&binary, "-binary", "--binary-datafiles", "-ascii",
                   "--ascii-datafiles",
                   "Use binary (Sidre) or ascii format for VisIt data files.");
@@ -317,6 +344,9 @@ int main(int argc, char *argv[])
    {
       args.PrintOptions(cout);
    }
+
+   Device device(device_config);
+   if (myid == 0) { device.Print(); }
 
    // 3. Read the serial mesh from the given mesh file on all processors. We can
    //    handle geometrically periodic meshes in this code.
@@ -398,8 +428,24 @@ int main(int argc, char *argv[])
    FunctionCoefficient u0(u0_function);
 
    ParBilinearForm *m = new ParBilinearForm(fes);
-   m->AddDomainIntegrator(new MassIntegrator);
    ParBilinearForm *k = new ParBilinearForm(fes);
+   if (pa) // partial assembly
+   {
+      m->SetAssemblyLevel(AssemblyLevel::PARTIAL);
+      k->SetAssemblyLevel(AssemblyLevel::PARTIAL);
+   }
+   else if (ea) // element assembly
+   {
+      m->SetAssemblyLevel(AssemblyLevel::ELEMENT);
+      k->SetAssemblyLevel(AssemblyLevel::ELEMENT);
+   }
+   else if (fa)
+   {
+      m->SetAssemblyLevel(AssemblyLevel::FULL);
+      k->SetAssemblyLevel(AssemblyLevel::FULL);
+   }
+
+   m->AddDomainIntegrator(new MassIntegrator);
    k->AddDomainIntegrator(new ConvectionIntegrator(velocity, -1.0));
    k->AddInteriorFaceIntegrator(
       new TransposeIntegrator(new DGTraceIntegrator(velocity, 1.0, -0.5)));
@@ -410,15 +456,14 @@ int main(int argc, char *argv[])
    b->AddBdrFaceIntegrator(
       new BoundaryFlowIntegrator(inflow, velocity, -1.0, -0.5));
 
-   m->Assemble();
-   m->Finalize();
    int skip_zeros = 0;
+   m->Assemble();
    k->Assemble(skip_zeros);
-   k->Finalize(skip_zeros);
    b->Assemble();
+   m->Finalize();
+   k->Finalize(skip_zeros);
 
-   HypreParMatrix *M = m->ParallelAssemble();
-   HypreParMatrix *K = k->ParallelAssemble();
+
    HypreParVector *B = b->ParallelAssemble();
 
    // 9. Define the initial conditions, save the corresponding grid function to
@@ -426,6 +471,7 @@ int main(int argc, char *argv[])
    //    GLVis visualization.
    ParGridFunction *u = new ParGridFunction(fes);
    u->ProjectCoefficient(u0);
+   // U 只能定义为HypreParVector(故下面可以直接*u = *U), 不能是Vector.
    HypreParVector *U = u->GetTrueDofs();
 
    {
@@ -469,13 +515,38 @@ int main(int argc, char *argv[])
    ParaViewDataCollection *pd = NULL;
    if (paraview)
    {
-      pd = new ParaViewDataCollection("PVExample9P", pmesh);
+      pd = new ParaViewDataCollection("Example9P", pmesh);
+      pd->SetPrefixPath("ParaView");
       pd->RegisterField("solution", u);
-      pd->SetLevelsOfDetail(2);
+      pd->SetLevelsOfDetail(order);
+      pd->SetDataFormat(VTKFormat::BINARY);
+      pd->SetHighOrderOutput(true);
       pd->SetCycle(0);
       pd->SetTime(0.0);
       pd->Save();
    }
+
+   // Optionally output a BP (binary pack) file using ADIOS2. This can be
+   // visualized with the ParaView VTX reader.
+#ifdef MFEM_USE_ADIOS2
+   ADIOS2DataCollection *adios2_dc = NULL;
+   if (adios2)
+   {
+      std::string postfix(mesh_file);
+      postfix.erase(0, std::string("../data/").size() );
+      postfix += "_o" + std::to_string(order);
+      const std::string collection_name = "ex9-p-" + postfix + ".bp";
+
+      adios2_dc = new ADIOS2DataCollection(MPI_COMM_WORLD, collection_name, pmesh);
+      // output data substreams are half the number of mpi processes
+      adios2_dc->SetParameter("SubStreams", std::to_string(num_procs/2) );
+      // adios2_dc->SetLevelsOfDetail(2);
+      adios2_dc->RegisterField("solution", u);
+      adios2_dc->SetCycle(0);
+      adios2_dc->SetTime(0.0);
+      adios2_dc->Save();
+   }
+#endif
 
    socketstream sout;
    if (visualization)
@@ -510,15 +581,7 @@ int main(int argc, char *argv[])
    // 10. Define the time-dependent evolution operator describing the ODE
    //     right-hand side, and perform time-integration (looping over the time
    //     iterations, ti, with a time-step dt).
-   FE_Evolution *adv;
-   if (solver_type == 1)
-   {
-      adv = new FE_Evolution(*M, *K, *B, *fes, AIR0);
-   }
-   else
-   {
-      adv = new FE_Evolution(*M, *K, *B, *fes);
-   }
+   FE_Evolution adv(*m, *k, *B);
 
    double t = 0.0;
    adv->SetTime(t);
@@ -528,6 +591,7 @@ int main(int argc, char *argv[])
    for (int ti = 0; !done; )
    {
       double dt_real = min(dt, t_final - t);
+      // 保证在解法器中流动的数据是TrueVector, 而不是GridFunction
       ode_solver->Step(*U, t, dt_real);
       ti++;
 
@@ -542,6 +606,7 @@ int main(int argc, char *argv[])
 
          // 11. Extract the parallel grid function corresponding to the finite
          //     element approximation U (the local solution on each processor).
+         // 重新将TrueVector(i.e., true dofs)赋值给GridFunction
          *u = *U;
 
          if (visualization)
@@ -563,6 +628,16 @@ int main(int argc, char *argv[])
             pd->SetTime(t);
             pd->Save();
          }
+
+#ifdef MFEM_USE_ADIOS2
+         // transient solutions can be visualized with ParaView
+         if (adios2)
+         {
+            adios2_dc->SetCycle(ti);
+            adios2_dc->SetTime(t);
+            adios2_dc->Save();
+         }
+#endif
       }
    }
 
@@ -582,14 +657,18 @@ int main(int argc, char *argv[])
    delete u;
    delete B;
    delete b;
-   delete K;
    delete k;
-   delete M;
    delete m;
    delete fes;
    delete pmesh;
    delete ode_solver;
    delete pd;
+#ifdef MFEM_USE_ADIOS2
+   if (adios2)
+   {
+      delete adios2_dc;
+   }
+#endif
    delete dc;
    delete adv;
 
@@ -599,16 +678,43 @@ int main(int argc, char *argv[])
 
 
 // Implementation of class FE_Evolution
-FE_Evolution::FE_Evolution(HypreParMatrix &_M, HypreParMatrix &_K,
-                           const Vector &_b, const FiniteElementSpace &fes)
+FE_Evolution::FE_Evolution(ParBilinearForm &_M, ParBilinearForm &_K,
+                           const Vector &_b)
    : TimeDependentOperator(_M.Height()),
-     M(_M), K(_K), b(_b), M_solver(M.GetComm()),
-     dg_solver(M, K, fes), z(_M.Height())
+     b(_b),
+     M_solver(_M.ParFESpace()->GetComm()),
+     z(_M.Height())
 {
-   M_prec.SetType(HypreSmoother::Jacobi);
-   M_solver.SetPreconditioner(M_prec);
-   M_solver.SetOperator(M);
+   if (_M.GetAssemblyLevel()==AssemblyLevel::LEGACYFULL)
+   {
+      M.Reset(_M.ParallelAssemble(), true);
+      K.Reset(_K.ParallelAssemble(), true);
+   }
+   else
+   {
+      M.Reset(&_M, false);
+      K.Reset(&_K, false);
+   }
 
+   M_solver.SetOperator(*M);
+
+   Array<int> ess_tdof_list;
+   if (_M.GetAssemblyLevel()==AssemblyLevel::LEGACYFULL)
+   {
+      HypreParMatrix &M_mat = *M.As<HypreParMatrix>();
+      HypreParMatrix &K_mat = *K.As<HypreParMatrix>();
+      HypreSmoother *hypre_prec = new HypreSmoother(M_mat, HypreSmoother::Jacobi);
+      M_prec = hypre_prec;
+
+      dg_solver = new DG_Solver(M_mat, K_mat, *_M.FESpace());
+   }
+   else
+   {
+      M_prec = new OperatorJacobiSmoother(_M, ess_tdof_list);
+      dg_solver = NULL;
+   }
+
+   M_solver.SetPreconditioner(*M_prec);
    M_solver.iterative_mode = false;
    M_solver.SetRelTol(1e-9);
    M_solver.SetAbsTol(0.0);
@@ -641,18 +747,24 @@ FE_Evolution::FE_Evolution(HypreParMatrix &_M, HypreParMatrix &_K,
 //    (M - dt*K) d = K*u + b
 void FE_Evolution::ImplicitSolve(const double dt, const Vector &x, Vector &k)
 {
-   K.Mult(x, z);
+   K->Mult(x, z);
    z += b;
-   dg_solver.SetTimeStep(dt);
-   dg_solver.Mult(z, k);
+   dg_solver->SetTimeStep(dt);
+   dg_solver->Mult(z, k);
 }
 
 void FE_Evolution::Mult(const Vector &x, Vector &y) const
 {
    // y = M^{-1} (K x + b)
-   K.Mult(x, z);
+   K->Mult(x, z);
    z += b;
    M_solver.Mult(z, y);
+}
+
+FE_Evolution::~FE_Evolution()
+{
+   delete M_prec;
+   delete dg_solver;
 }
 
 

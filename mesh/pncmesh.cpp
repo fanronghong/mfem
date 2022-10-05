@@ -1,13 +1,13 @@
-// Copyright (c) 2010, Lawrence Livermore National Security, LLC. Produced at
-// the Lawrence Livermore National Laboratory. LLNL-CODE-443211. All Rights
-// reserved. See file COPYRIGHT for details.
+// Copyright (c) 2010-2020, Lawrence Livermore National Security, LLC. Produced
+// at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+// LICENSE and NOTICE for details. LLNL-CODE-806117.
 //
 // This file is part of the MFEM library. For more information and source code
-// availability see http://mfem.org.
+// availability visit https://mfem.org.
 //
 // MFEM is free software; you can redistribute it and/or modify it under the
-// terms of the GNU Lesser General Public License (as published by the Free
-// Software Foundation) version 2.1 dated February 1999.
+// terms of the BSD-3 license. We welcome feedback and contributions, see file
+// CONTRIBUTING.md for details.
 
 #include "../config/config.hpp"
 
@@ -44,6 +44,22 @@ ParNCMesh::ParNCMesh(MPI_Comm comm, const NCMesh &ncmesh, int *part)
    // note that at this point all processors still have all the leaf elements;
    // we however may now start pruning the refinement tree to get rid of
    // branches that only contain someone else's leaves (see Prune())
+}
+
+ParNCMesh::ParNCMesh(MPI_Comm comm, std::istream &input, int version,
+                     int &curved)
+   : NCMesh(input, version, curved)
+{
+   MyComm = comm;
+   MPI_Comm_size(MyComm, &NRanks);
+   MPI_Comm_rank(MyComm, &MyRank);
+
+   // TODO? Check that the NCMeshes loaded above are compatible across ranks?
+
+   bool iso = Iso;
+   MPI_Allreduce(&iso, &Iso, 1, MPI_C_BOOL, MPI_LAND, MyComm);
+
+   Update();
 }
 
 ParNCMesh::ParNCMesh(const ParNCMesh &other)
@@ -145,7 +161,7 @@ void ParNCMesh::UpdateVertices()
    // The remaining (ghost) vertices are assigned indices greater or equal to
    // Mesh::GetNV().
 
-   for (node_iterator node = nodes.begin(); node != nodes.end(); ++node)
+   for (auto node = nodes.begin(); node != nodes.end(); ++node)
    {
       if (node->HasVertex()) { node->vert_index = -1; }
    }
@@ -165,7 +181,7 @@ void ParNCMesh::UpdateVertices()
    }
 
    vertex_nodeId.SetSize(NVertices);
-   for (node_iterator node = nodes.begin(); node != nodes.end(); ++node)
+   for (auto node = nodes.begin(); node != nodes.end(); ++node)
    {
       if (node->HasVertex() && node->vert_index >= 0)
       {
@@ -174,7 +190,7 @@ void ParNCMesh::UpdateVertices()
    }
 
    NGhostVertices = 0;
-   for (node_iterator node = nodes.begin(); node != nodes.end(); ++node)
+   for (auto node = nodes.begin(); node != nodes.end(); ++node)
    {
       if (node->HasVertex() && node->vert_index < 0)
       {
@@ -190,11 +206,11 @@ void ParNCMesh::OnMeshUpdated(Mesh *mesh)
    // assign indices to ghost edges/faces that don't exist in the 'mesh'.
 
    // clear edge_index and Face::index
-   for (node_iterator node = nodes.begin(); node != nodes.end(); ++node)
+   for (auto node = nodes.begin(); node != nodes.end(); ++node)
    {
       if (node->HasEdge()) { node->edge_index = -1; }
    }
-   for (face_iterator face = faces.begin(); face != faces.end(); ++face)
+   for (auto face = faces.begin(); face != faces.end(); ++face)
    {
       face->index = -1;
    }
@@ -205,7 +221,7 @@ void ParNCMesh::OnMeshUpdated(Mesh *mesh)
    // count ghost edges and assign their indices
    NEdges = mesh->GetNEdges();
    NGhostEdges = 0;
-   for (node_iterator node = nodes.begin(); node != nodes.end(); ++node)
+   for (auto node = nodes.begin(); node != nodes.end(); ++node)
    {
       if (node->HasEdge() && node->edge_index < 0)
       {
@@ -216,7 +232,7 @@ void ParNCMesh::OnMeshUpdated(Mesh *mesh)
    // count ghost faces
    NFaces = mesh->GetNumFaces();
    NGhostFaces = 0;
-   for (face_iterator face = faces.begin(); face != faces.end(); ++face)
+   for (auto face = faces.begin(); face != faces.end(); ++face)
    {
       if (face->index < 0) { NGhostFaces++; }
    }
@@ -262,7 +278,7 @@ void ParNCMesh::OnMeshUpdated(Mesh *mesh)
    }
 
    // assign valid indices also to faces beyond the ghost layer
-   for (face_iterator face = faces.begin(); face != faces.end(); ++face)
+   for (auto face = faces.begin(); face != faces.end(); ++face)
    {
       if (face->index < 0) { face->index = NFaces + (nghosts++); }
    }
@@ -298,7 +314,10 @@ void ParNCMesh::BuildFaceList()
    // face ownership and prepares face processor groups.
 
    face_list.Clear();
-   if (Dim < 3) { return; }
+   shared_faces.Clear();
+   boundary_faces.SetSize(0);
+
+   if (Dim < 3 || !leaf_elements.Size()) { return; }
 
    int nfaces = NFaces + NGhostFaces;
 
@@ -358,6 +377,12 @@ void ParNCMesh::BuildEdgeList()
 {
    // This is an extension of NCMesh::BuildEdgeList() which also determines
    // edge ownership and prepares edge processor groups.
+
+   edge_list.Clear();
+   shared_edges.Clear();
+   if (Dim < 3) { boundary_faces.SetSize(0); }
+
+   if (!leaf_elements.Size()) { return; }
 
    int nedges = NEdges + NGhostEdges;
 
@@ -723,7 +748,7 @@ void ParNCMesh::CalcFaceOrientations()
    face_orient.SetSize(NFaces);
    face_orient = 0;
 
-   for (face_iterator face = faces.begin(); face != faces.end(); ++face)
+   for (auto face = faces.begin(); face != faces.end(); ++face)
    {
       if (face->elem[0] >= 0 && face->elem[1] >= 0 && face->index < NFaces)
       {
@@ -929,9 +954,9 @@ void ParNCMesh::MakeSharedTable(int ngroups, int ent, Array<int> &shared_local,
 
 void ParNCMesh::GetConformingSharedStructures(ParMesh &pmesh)
 {
-   // make sure we have entity_conf_group[x] and the ordering arrays
    if (leaf_elements.Size())
    {
+      // make sure we have entity_conf_group[x] and the ordering arrays
       for (int ent = 0; ent < Dim; ent++)
       {
          GetSharedList(ent);
@@ -1066,9 +1091,9 @@ void ParNCMesh::GetFaceNeighbors(ParMesh &pmesh)
       for (int j = mf.slaves_begin; j < mf.slaves_end; j++)
       {
          const Slave &sf = full_list.slaves[j];
-         if (sf.index < 0) { continue; }
+         if (sf.element < 0) { continue; }
 
-         MFEM_ASSERT(mf.element >= 0 && sf.element >= 0, "");
+         MFEM_ASSERT(mf.element >= 0, "");
          Element* e[2] = { &elements[mf.element], &elements[sf.element] };
 
          bool loc0 = (e[0]->rank == MyRank);
@@ -1143,15 +1168,16 @@ void ParNCMesh::GetFaceNeighbors(ParMesh &pmesh)
    // create vertices in 'face_nbr_vertices'
    {
       pmesh.face_nbr_vertices.SetSize(vert_map.size());
-      tmp_vertex = new TmpVertex[nodes.NumIds()]; // TODO: something cheaper?
-
-      std::map<int, int>::iterator it;
-      for (it = vert_map.begin(); it != vert_map.end(); ++it)
+      if (coordinates.Size())
       {
-         pmesh.face_nbr_vertices[it->second-1].SetCoords(
-            spaceDim, CalcVertexPos(it->first));
+         tmp_vertex = new TmpVertex[nodes.NumIds()]; // TODO: something cheaper?
+         for (auto it = vert_map.begin(); it != vert_map.end(); ++it)
+         {
+            pmesh.face_nbr_vertices[it->second-1].SetCoords(
+               spaceDim, CalcVertexPos(it->first));
+         }
+         delete [] tmp_vertex;
       }
-      delete [] tmp_vertex;
    }
 
    // make the 'send_face_nbr_elements' table
@@ -1224,9 +1250,9 @@ void ParNCMesh::GetFaceNeighbors(ParMesh &pmesh)
          for (int j = mf.slaves_begin; j < mf.slaves_end; j++)
          {
             const Slave &sf = full_list.slaves[j];
-            if (sf.index < 0) { continue; }
+            if (sf.element < 0) { continue; }
 
-            MFEM_ASSERT(sf.element >= 0 && mf.element >= 0, "");
+            MFEM_ASSERT(mf.element >= 0, "");
             Element &sfe = elements[sf.element];
             Element &mfe = elements[mf.element];
 
@@ -1263,6 +1289,8 @@ void ParNCMesh::GetFaceNeighbors(ParMesh &pmesh)
             const DenseMatrix* pm = &sf.point_matrix;
             if (!sloc && Dim == 3)
             {
+               // TODO: does this handle triangle faces correctly?
+
                // ghost slave in 3D needs flipping orientation
                DenseMatrix* pm2 = new DenseMatrix(*pm);
                std::swap((*pm2)(0,1), (*pm2)(0,3));
@@ -1281,6 +1309,14 @@ void ParNCMesh::GetFaceNeighbors(ParMesh &pmesh)
                // 1, which is the element containing the slave face on one
                // processor, but on the other it is the element containing the
                // master face. In the latter case we need to flip the pm.
+            }
+            else if (!sloc && Dim == 2)
+            {
+               fi.Elem2Inf ^= 1; // set orientation to 1
+               // The point matrix (used to define "side 1" which is the same as
+               // "parent side" in this case) does not require a flip since it
+               // is aligned with the parent side, so NO flip is performed in
+               // Mesh::ApplyLocalSlaveTransformation.
             }
 
             MFEM_ASSERT(fi.NCFace < 0, "");

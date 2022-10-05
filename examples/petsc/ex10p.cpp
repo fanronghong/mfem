@@ -103,6 +103,7 @@ public:
    virtual void Mult(const Vector &vx, Vector &dvx_dt) const;
    /** Solve the Backward-Euler equation: k = f(x + dt*k, t), for the unknown k.
        This is the only requirement for high-order SDIRK implicit integration.*/
+   // 把 k 看成 dx/dt, so dx/dt = f(x + dx*dx_dt,t)
    virtual void ImplicitSolve(const double dt, const Vector &x, Vector &k);
 
    double ElasticEnergy(const ParGridFunction &x) const;
@@ -117,6 +118,7 @@ public:
     k --> (M + dt*S)*k + H(x + dt*v + dt^2*k) + S*v,
     where M and S are given BilinearForms, H is a given NonlinearForm, v and x
     are given vectors, and dt is a scalar. */
+    // k 就是 dv_dt,
 class ReducedSystemOperator : public Operator
 {
 private:
@@ -133,6 +135,7 @@ public:
                          ParNonlinearForm *H_, const Array<int> &ess_tdof_list);
 
    /// Set current dt, v, x values - needed to compute action and Jacobian.
+   // 这里的 v，x表示当前的速度解和位移（形变）解，和下面的Mult(),GetGradient()中的形成k有啥区别？k也是当前真解，只是纯代数形式
    void SetParameters(double dt_, const Vector *v_, const Vector *x_);
 
    /// Compute y = H(x + dt (v + dt k)) + M k + S (v + dt k).
@@ -196,7 +199,7 @@ int main(int argc, char *argv[])
    int ser_ref_levels = 2;
    int par_ref_levels = 0;
    int order = 2;
-   int ode_solver_type = 3;
+   int ode_solver_type = 11;
    double t_final = 300.0;
    double dt = 3.0;
    double visc = 1e-2;
@@ -278,10 +281,14 @@ int main(int argc, char *argv[])
    switch (ode_solver_type)
    {
       // Implicit L-stable methods
+      // 所有的隐式方法的最重要的就是ODESolver::Step()方法，
+      // 而该方法会调用 TimeDependentOperator::ImplicitSolve()方法，所以最重要的就是我们自己去实现这个方法
       case 1:  ode_solver = new BackwardEulerSolver; break;
       case 2:  ode_solver = new SDIRK23Solver(2); break;
       case 3:  ode_solver = new SDIRK33Solver; break;
       // Explicit methods
+      // 所有的显式方法的最重要的就是ODESolver::Step()方法，
+      // 而该方法会调用 TimeDependentOperator::Mult()方法，所以最重要的就是我们自己去实现这个方法
       case 11: ode_solver = new ForwardEulerSolver; break;
       case 12: ode_solver = new RK2Solver(0.5); break; // midpoint method
       case 13: ode_solver = new RK3SSPSolver; break;
@@ -528,26 +535,35 @@ void ReducedSystemOperator::SetParameters(double dt_, const Vector *v_,
 
 void ReducedSystemOperator::Mult(const Vector &k, Vector &y) const
 {
-   // compute: y = H(x + dt*(v + dt*k)) + M*k + S*(v + dt*k)
+    // k就是 dv_dt
+   // compute: y = H(x + dt*(v + dt*k)) + M*k + S*(v + dt*k), (v + dt*k)就是dx_dt
    add(*v, dt, k, w);
    add(*x, dt, w, z);
    H->Mult(z, y);
+   // k是TrueVector，而M，S是ParBilinearForm, 所以要用TrueAddMult(), 而不是AddMult()
    M->TrueAddMult(k, y);
    S->TrueAddMult(w, y);
+   // 设定 essential bdc
    y.SetSubVector(ess_tdof_list, 0.0);
 }
 
 Operator &ReducedSystemOperator::GetGradient(const Vector &k) const
 {
+    // k 就是 dv_dt
    delete Jacobian;
+   // 1.0*M + dt*S -> localJ
    SparseMatrix *localJ = Add(1.0, M->SpMat(), dt, S->SpMat());
+   // v + dt*k -> w
    add(*v, dt, k, w);
+   // x + dt*w -> z
    add(*x, dt, w, z);
+   // localJ + dt*dt*H_z -> localJ
    localJ->Add(dt*dt, H->GetLocalGradient(z));
    // if we are using PETSc, the HypreParCSR Jacobian will be converted to
    // PETSc's AIJ on the fly
    Jacobian = M->ParallelAssemble(localJ);
    delete localJ;
+   // 设定 essential bdc
    HypreParMatrix *Je = Jacobian->EliminateRowsCols(ess_tdof_list);
    delete Je;
    return *Jacobian;
@@ -599,6 +615,8 @@ HyperelasticOperator::HyperelasticOperator(ParFiniteElementSpace &f,
    S.Assemble(skip_zero_entries);
    S.Finalize(skip_zero_entries);
 
+    // 这个reduced_oper就是一个 Nonlinear Operator, 后面会调用 reduced_oper->GetGradient(),
+    // reduced_oper->Mult() 分别计算Jacobian和Residual
    reduced_oper = new ReducedSystemOperator(&M, &S, &H, ess_tdof_list);
    if (!use_petsc)
    {
@@ -650,6 +668,7 @@ HyperelasticOperator::HyperelasticOperator(ParFiniteElementSpace &f,
 
 void HyperelasticOperator::Mult(const Vector &vx, Vector &dvx_dt) const
 {
+    // 传进来的vx是当前的解向量合起来的向量
    // Create views to the sub-vectors v, x of vx, and dv_dt, dx_dt of dvx_dt
    int sc = height/2;
    Vector v(vx.GetData() +  0, sc);
@@ -660,7 +679,9 @@ void HyperelasticOperator::Mult(const Vector &vx, Vector &dvx_dt) const
    H.Mult(x, z);
    if (viscosity != 0.0)
    {
+       // 因为这个 S 是一个ParBilinearForm，所以要用 TrueAddMult(), 类似GridFunction要用 True***。
       S.TrueAddMult(v, z);
+      // 设定essential边界条件
       z.SetSubVector(ess_tdof_list, 0.0);
    }
    z.Neg(); // z = -z
@@ -694,10 +715,12 @@ void HyperelasticOperator::ImplicitSolve(const double dt,
    }
    else
    {
+       // 每一个时间步都要求解一个非线性方程
       pnewton_solver->Mult(zero, dv_dt);
       MFEM_VERIFY(pnewton_solver->GetConverged(),
                   "Newton solver did not converge.");
    }
+    // v + dt*dv_dt -> dx_dt
    add(v, dt, dv_dt, dx_dt);
 }
 

@@ -1,13 +1,13 @@
-// Copyright (c) 2010, Lawrence Livermore National Security, LLC. Produced at
-// the Lawrence Livermore National Laboratory. LLNL-CODE-443211. All Rights
-// reserved. See file COPYRIGHT for details.
+// Copyright (c) 2010-2020, Lawrence Livermore National Security, LLC. Produced
+// at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+// LICENSE and NOTICE for details. LLNL-CODE-806117.
 //
 // This file is part of the MFEM library. For more information and source code
-// availability see http://mfem.org.
+// availability visit https://mfem.org.
 //
 // MFEM is free software; you can redistribute it and/or modify it under the
-// terms of the GNU Lesser General Public License (as published by the Free
-// Software Foundation) version 2.1 dated February 1999.
+// terms of the BSD-3 license. We welcome feedback and contributions, see file
+// CONTRIBUTING.md for details.
 
 #include "maxwell_solver.hpp"
 
@@ -141,21 +141,7 @@ MaxwellSolver::MaxwellSolver(ParMesh & pmesh, int order,
          cout << "Creating Admittance Coefficient" << endl;
       }
 
-      abc_marker_.SetSize(pmesh.bdr_attributes.Max());
-      if ( abcs.Size() == 1 && abcs[0] < 0 )
-      {
-         // Mark all boundaries as absorbing
-         abc_marker_ = 1;
-      }
-      else
-      {
-         // Mark select boundaries as absorbing
-         abc_marker_ = 0;
-         for (int i=0; i<abcs.Size(); i++)
-         {
-            abc_marker_[abcs[i]-1] = 1;
-         }
-      }
+      AttrToMarker(pmesh.bdr_attributes.Max(), abcs, abc_marker_);
       etaInvCoef_ = new ConstantCoefficient(sqrt(epsilon0_/mu0_));
    }
 
@@ -166,22 +152,8 @@ MaxwellSolver::MaxwellSolver(ParMesh & pmesh, int order,
       {
          cout << "Configuring Dirichlet BC" << endl;
       }
-      dbc_marker_.SetSize(pmesh.bdr_attributes.Max());
-      if ( dbcs.Size() == 1 && dbcs[0] < 0 )
-      {
-         // Mark all boundaries as Dirichlet
-         dbc_marker_ = 1;
-      }
-      else
-      {
-         // Mark select boundaries as Dirichlet
-         dbc_marker_ = 0;
-         for (int i=0; i<dbcs.Size(); i++)
-         {
-            dbc_marker_[dbcs[i]-1] = 1;
-         }
-      }
 
+      AttrToMarker(pmesh.bdr_attributes.Max(), dbcs, dbc_marker_);
       HCurlFESpace_->GetEssentialTrueDofs(dbc_marker_, dbc_dofs_);
 
       if ( dEdt_bc_ != NULL )
@@ -270,6 +242,7 @@ MaxwellSolver::MaxwellSolver(ParMesh & pmesh, int order,
    b_    = new ParGridFunction(HDivFESpace_);
 
    E_ = e_->ParallelProject();
+    // b_是PrimalVector, B_是对应的TrueVector, 已知b_求B_
    B_ = b_->ParallelProject();
 
    HD_  = new HypreParVector(HDivFESpace_);
@@ -462,7 +435,9 @@ MaxwellSolver::implicitSolve(double dt, const Vector &B, Vector &dEdt) const
 {
    int idt = hCurlLosses_ ? ((int)(dtScale_ * dt / dtMax_)) : 0;
 
+   // b_是PrimalVector, B是对应的TrueVector, 已知B求b_
    b_->Distribute(B);
+   // 这里 weakCurlMuInv_ 没有设定边界条件
    weakCurlMuInv_->Mult(*b_, *rhs_);
 
    if ( hCurlLosses_ )
@@ -489,6 +464,7 @@ MaxwellSolver::implicitSolve(double dt, const Vector &B, Vector &dEdt) const
    setupSolver(idt, dt);
 
    // Apply essential BCs and determine true DoFs for the right hand side
+   // 求解 epsilon dE/dt = Curl 1/mu B - sigma E - J 中的未知量 dE_dt
    a1_[idt]->FormLinearSystem(dbc_dofs_, *dedt_, *rhs_, *A1_[idt], dEdt, *RHS_);
 
    // Solve for the time derivative of the electric field (true DoFs)

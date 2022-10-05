@@ -1,13 +1,13 @@
-// Copyright (c) 2010, Lawrence Livermore National Security, LLC. Produced at
-// the Lawrence Livermore National Laboratory. LLNL-CODE-443211. All Rights
-// reserved. See file COPYRIGHT for details.
+// Copyright (c) 2010-2020, Lawrence Livermore National Security, LLC. Produced
+// at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+// LICENSE and NOTICE for details. LLNL-CODE-806117.
 //
 // This file is part of the MFEM library. For more information and source code
-// availability see http://mfem.org.
+// availability visit https://mfem.org.
 //
 // MFEM is free software; you can redistribute it and/or modify it under the
-// terms of the GNU Lesser General Public License (as published by the Free
-// Software Foundation) version 2.1 dated February 1999.
+// terms of the BSD-3 license. We welcome feedback and contributions, see file
+// CONTRIBUTING.md for details.
 
 #include "mesh_operators.hpp"
 #include "pmesh.hpp"
@@ -60,6 +60,8 @@ ThresholdRefiner::ThresholdRefiner(ErrorEstimator &est)
    total_fraction = 0.5;
    local_err_goal = 0.0;
    max_elements = std::numeric_limits<long>::max();
+   amr_levels=max_elements;
+   yRange=false;
 
    threshold = 0.0;
    num_marked_elements = 0L;
@@ -95,6 +97,33 @@ int ThresholdRefiner::ApplyImpl(Mesh &mesh)
    const Vector &local_err = estimator.GetLocalErrors();
    MFEM_ASSERT(local_err.Size() == NE, "invalid size of local_err");
 
+   double vert[3];
+   double yMean;
+   //a different way to implement yrange (we can modify the local_err vector)
+   //maybe a better way is to modify estimator?
+   if (yRange && mesh.Nonconforming())
+   {
+      Vector &local_err_ = const_cast<Vector &>(local_err);
+      FiniteElementSpace * fes = mesh.GetNodes()->FESpace();
+      Array<int> dofs;
+      for (int el = 0; el < NE; el++)
+      {
+        fes->GetElementDofs(el, dofs);
+        int ndof=dofs.Size();
+        yMean=0.0;
+        for (int j = 0; j < ndof; j++)
+        {
+           mesh.GetNode(dofs[j], vert);
+           yMean+=vert[1];
+        }
+        yMean=yMean/ndof;
+        //std::cout <<"el yMean="<<el<<' '<<yMean << '\n';
+        
+        if (yMean<=ymin && yMean>=ymax)
+           local_err_(el) =0.;
+      }
+   }
+
    const double total_err = GetNorm(local_err, mesh);
    if (total_err <= total_err_goal) { return STOP; }
 
@@ -109,11 +138,48 @@ int ThresholdRefiner::ApplyImpl(Mesh &mesh)
       threshold = std::max(total_err * total_fraction, local_err_goal);
    }
 
+
    for (int el = 0; el < NE; el++)
-   {
-      if (local_err(el) > threshold)
+   { 
+      //it does not hurt to leave it there in case local_err is not communicated
+      if (yRange && mesh.Nonconforming())
       {
-         marked_elements.Append(Refinement(el));
+        FiniteElementSpace * fes = mesh.GetNodes()->FESpace();
+        Array<int> dofs;
+        fes->GetElementDofs(el, dofs);
+        int ndof=dofs.Size();
+        yMean=0.0;
+        for (int j = 0; j < ndof; j++)
+        {
+           mesh.GetNode(dofs[j], vert);
+           yMean+=vert[1];
+        }
+        yMean=yMean/ndof;
+        //std::cout <<"el yMean="<<el<<' '<<yMean << '\n';
+        
+        if (local_err(el) > threshold && 
+            mesh.ncmesh->GetElementDepth(el) < amr_levels &&
+            yMean>ymin && yMean<ymax
+            )
+        {
+           marked_elements.Append(Refinement(el));
+        }
+
+      }
+      else if (mesh.Nonconforming())
+      {
+        if (local_err(el) > threshold && 
+            mesh.ncmesh->GetElementDepth(el) < amr_levels)
+        {
+           marked_elements.Append(Refinement(el));
+        }
+      }
+      else
+      {
+        if (local_err(el) > threshold )
+        {
+           marked_elements.Append(Refinement(el));
+        }
       }
    }
 

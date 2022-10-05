@@ -1,13 +1,13 @@
-// Copyright (c) 2010, Lawrence Livermore National Security, LLC. Produced at
-// the Lawrence Livermore National Laboratory. LLNL-CODE-443211. All Rights
-// reserved. See file COPYRIGHT for details.
+// Copyright (c) 2010-2020, Lawrence Livermore National Security, LLC. Produced
+// at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+// LICENSE and NOTICE for details. LLNL-CODE-806117.
 //
 // This file is part of the MFEM library. For more information and source code
-// availability see http://mfem.org.
+// availability visit https://mfem.org.
 //
 // MFEM is free software; you can redistribute it and/or modify it under the
-// terms of the GNU Lesser General Public License (as published by the Free
-// Software Foundation) version 2.1 dated February 1999.
+// terms of the BSD-3 license. We welcome feedback and contributions, see file
+// CONTRIBUTING.md for details.
 
 // Author: Stefano Zampini <stefano.zampini@gmail.com>
 
@@ -37,25 +37,7 @@
 
 // Note: there are additional #include statements below.
 
-// Error handling
-// Prints PETSc's stacktrace and then calls MFEM_ABORT
-// We cannot use PETSc's CHKERRQ since it returns a PetscErrorCode
-#define PCHKERRQ(obj,err) do {                                                   \
-     if ((err))                                                                  \
-     {                                                                           \
-        PetscError(PetscObjectComm((PetscObject)(obj)),__LINE__,_MFEM_FUNC_NAME, \
-                   __FILE__,(err),PETSC_ERROR_REPEAT,NULL);                      \
-        MFEM_ABORT("Error in PETSc. See stacktrace above.");                     \
-     }                                                                           \
-  } while(0);
-#define CCHKERRQ(comm,err) do {                                \
-     if ((err))                                                \
-     {                                                         \
-        PetscError(comm,__LINE__,_MFEM_FUNC_NAME,              \
-                   __FILE__,(err),PETSC_ERROR_REPEAT,NULL);    \
-        MFEM_ABORT("Error in PETSc. See stacktrace above.");   \
-     }                                                         \
-  } while(0);
+#include "petscinternals.hpp"
 
 // Callback functions: these functions will be called by PETSc
 static PetscErrorCode __mfem_ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
@@ -84,6 +66,7 @@ static PetscErrorCode __mfem_pc_shell_view(PC,PetscViewer);
 static PetscErrorCode __mfem_mat_shell_apply(Mat,Vec,Vec);
 static PetscErrorCode __mfem_mat_shell_apply_transpose(Mat,Vec,Vec);
 static PetscErrorCode __mfem_mat_shell_destroy(Mat);
+static PetscErrorCode __mfem_mat_shell_copy(Mat,Mat,MatStructure);
 static PetscErrorCode __mfem_array_container_destroy(void*);
 static PetscErrorCode __mfem_matarray_container_destroy(void*);
 static PetscErrorCode __mfem_monitor_ctx_destroy(void**);
@@ -108,11 +91,6 @@ static PetscErrorCode MatConvert_hypreParCSR_IS(hypre_ParCSRMatrix*,Mat*);
 // structs used by PETSc code
 typedef struct
 {
-   mfem::Operator *op;
-} __mfem_mat_shell_ctx;
-
-typedef struct
-{
    mfem::Solver                     *op;
    mfem::PetscPreconditionerFactory *factory;
    bool                             ownsop;
@@ -127,7 +105,7 @@ typedef struct
    mfem::Operator::Type  jacType;    // OperatorType for the Jacobian
    // Objective for line search
    void (*objective)(mfem::Operator *op, const mfem::Vector&, double*);
-   // PostCheck function (to be called after successfull line search)
+   // PostCheck function (to be called after successful line search)
    void (*postcheck)(mfem::Operator *op, const mfem::Vector&, mfem::Vector&,
                      mfem::Vector&, bool&, bool&);
    // General purpose update function (to be called at the beginning of
@@ -839,23 +817,24 @@ MPI_Comm PetscParMatrix::GetComm() const
 // TODO This should take a reference on op but how?
 void PetscParMatrix::MakeWrapper(MPI_Comm comm, const Operator* op, Mat *A)
 {
-   __mfem_mat_shell_ctx *ctx = new __mfem_mat_shell_ctx;
    ierr = MatCreate(comm,A); CCHKERRQ(comm,ierr);
    ierr = MatSetSizes(*A,op->Height(),op->Width(),
                       PETSC_DECIDE,PETSC_DECIDE); PCHKERRQ(A,ierr);
    ierr = MatSetType(*A,MATSHELL); PCHKERRQ(A,ierr);
-   ierr = MatShellSetContext(*A,(void *)ctx); PCHKERRQ(A,ierr);
+   ierr = MatShellSetContext(*A,(void *)op); PCHKERRQ(A,ierr);
    ierr = MatShellSetOperation(*A,MATOP_MULT,
                                (void (*)())__mfem_mat_shell_apply);
    PCHKERRQ(A,ierr);
    ierr = MatShellSetOperation(*A,MATOP_MULT_TRANSPOSE,
                                (void (*)())__mfem_mat_shell_apply_transpose);
    PCHKERRQ(A,ierr);
+   ierr = MatShellSetOperation(*A,MATOP_COPY,
+                               (void (*)())__mfem_mat_shell_copy);
+   PCHKERRQ(A,ierr);
    ierr = MatShellSetOperation(*A,MATOP_DESTROY,
                                (void (*)())__mfem_mat_shell_destroy);
    PCHKERRQ(A,ierr);
    ierr = MatSetUp(*A); PCHKERRQ(*A,ierr);
-   ctx->op = const_cast<Operator *>(op);
 }
 
 void PetscParMatrix::ConvertOperator(MPI_Comm comm, const Operator &op, Mat* A,
@@ -1695,6 +1674,19 @@ void PetscParMatrix::EliminateRows(const Array<int> &rows)
    ierr = MatZeroRowsIS(A,dir,0.0,NULL,NULL); PCHKERRQ(A,ierr);
    ierr = ISDestroy(&dir); PCHKERRQ(A,ierr);
 }
+void PetscParMatrix::EliminateRows(const Array<int> &rows, double diag)
+    {
+        ierr = MatSetOption(A,MAT_NO_OFF_PROC_ZERO_ROWS,PETSC_TRUE); PCHKERRQ(A,ierr);
+
+        // rows need to be in global numbering
+        PetscInt rst;
+        ierr = MatGetOwnershipRange(A,&rst,NULL); PCHKERRQ(A,ierr);
+
+        IS dir;
+        ierr = Convert_Array_IS(GetComm(),true,&rows,rst,&dir); PCHKERRQ(A,ierr);
+        ierr = MatZeroRowsIS(A,dir,diag,NULL,NULL); PCHKERRQ(A,ierr);
+        ierr = ISDestroy(&dir); PCHKERRQ(A,ierr);
+    }
 
 Mat PetscParMatrix::ReleaseMat(bool dereference)
 {
@@ -3439,6 +3431,7 @@ void PetscNonlinearSolver::Mult(const Vector &b, Vector &x) const
    bool b_nonempty = b.Size();
    if (!B) { B = new PetscParVector(PetscObjectComm(obj), *this, true); }
    if (!X) { X = new PetscParVector(PetscObjectComm(obj), *this, false, false); }
+   // 自动将MFEM的数据类型Vector转换成PetscParVector
    X->PlaceArray(x.GetData());
    if (b_nonempty) { B->PlaceArray(b.GetData()); }
    else { *B = 0.0; }
@@ -3846,6 +3839,14 @@ static PetscErrorCode __mfem_ts_ijacobian(TS ts, PetscReal t, Vec x,
    // Jacobian reusage
    ierr = PetscObjectStateGet((PetscObject)P,&ts_ctx->cached_ijacstate);
    CHKERRQ(ierr);
+
+   // Fool DM
+   DM dm;
+   MatType mtype;
+   ierr = MatGetType(P,&mtype); CHKERRQ(ierr);
+   ierr = TSGetDM(ts,&dm); CHKERRQ(ierr);
+   ierr = DMSetMatType(dm,mtype); CHKERRQ(ierr);
+   ierr = DMShellSetMatrix(dm,P); CHKERRQ(ierr);
    PetscFunctionReturn(0);
 }
 
@@ -3872,7 +3873,6 @@ static PetscErrorCode __mfem_ts_computesplits(TS ts,PetscReal t,Vec x,Vec xp,
    ierr = PetscObjectStateGet((PetscObject)Jxp,&state); CHKERRQ(ierr);
    if (ts_ctx->type == mfem::PetscODESolver::ODE_SOLVER_LINEAR &&
        state == ts_ctx->cached_splits_xdotstate) { rxp = PETSC_FALSE; }
-
    if (!rx && !rxp) { PetscFunctionReturn(0); }
 
    // update time
@@ -4124,6 +4124,14 @@ static PetscErrorCode __mfem_ts_rhsjacobian(TS ts, PetscReal t, Vec x,
    }
    ierr = PetscObjectStateGet((PetscObject)A,&ts_ctx->cached_rhsjacstate);
    CHKERRQ(ierr);
+
+   // Fool DM
+   DM dm;
+   MatType mtype;
+   ierr = MatGetType(P,&mtype); CHKERRQ(ierr);
+   ierr = TSGetDM(ts,&dm); CHKERRQ(ierr);
+   ierr = DMSetMatType(dm,mtype); CHKERRQ(ierr);
+   ierr = DMShellSetMatrix(dm,P); CHKERRQ(ierr);
    PetscFunctionReturn(0);
 }
 
@@ -4166,6 +4174,8 @@ static PetscErrorCode __mfem_snes_monitor(SNES snes, PetscInt it, PetscReal res,
 static PetscErrorCode __mfem_snes_jacobian(SNES snes, Vec x, Mat A, Mat P,
                                            void *ctx)
 {
+    // x是当前Newton迭代步的解，这个函数就是求在当前解x处的Jacobian A
+    // 给定essential bdc最好是通过bchandler
    PetscScalar     *array;
    PetscInt         n;
    PetscErrorCode   ierr;
@@ -4173,6 +4183,7 @@ static PetscErrorCode __mfem_snes_jacobian(SNES snes, Vec x, Mat A, Mat P,
    __mfem_snes_ctx *snes_ctx = (__mfem_snes_ctx*)ctx;
 
    PetscFunctionBeginUser;
+   // 当前解x的data指针（read-only）赋给 array
    ierr = VecGetArrayRead(x,(const PetscScalar**)&array); CHKERRQ(ierr);
    ierr = VecGetLocalSize(x,&n); CHKERRQ(ierr);
    if (!snes_ctx->bchandler)
@@ -4183,13 +4194,19 @@ static PetscErrorCode __mfem_snes_jacobian(SNES snes, Vec x, Mat A, Mat P,
    {
       // make sure we compute a Jacobian with the correct boundary values
       if (!snes_ctx->work) { snes_ctx->work = new mfem::Vector(n); }
+      // array 就是当前解 x，则txx也是当前解
       mfem::Vector txx(array,n);
       mfem::PetscBCHandler *bchandler = snes_ctx->bchandler;
       xx = snes_ctx->work;
+      // 首先把txx赋值给xx，然后把xx中对应的essential dofs设成0.
+      // 当前解 txx 还没有给定 essential bdc，下
+      // 面把essential bdc对应的dof设定为0(一般情况)然后赋值给xx
       bchandler->ApplyBC(txx,*xx);
    }
 
    // Use Operator::GetGradient(x)
+   // 这一步就是得到当前解xx的Jacobian，这个xx已经满足了essential bdc (x 不满足）
+   // 但是Jacobian没有给定essential bdc
    mfem::Operator& J = snes_ctx->op->GetGradient(*xx);
    ierr = VecRestoreArrayRead(x,(const PetscScalar**)&array); CHKERRQ(ierr);
    if (!snes_ctx->bchandler) { delete xx; }
@@ -4206,8 +4223,10 @@ static PetscErrorCode __mfem_snes_jacobian(SNES snes, Vec x, Mat A, Mat P,
       delete_pA = true;
    }
 
+   //could I skip it? -QT
    // Eliminate essential dofs
-   if (snes_ctx->bchandler)
+   // 让Jacobian满足essential bdc
+   if (snes_ctx->bchandler && false)
    {
       mfem::PetscBCHandler *bchandler = snes_ctx->bchandler;
       mfem::PetscParVector dummy(PetscObjectComm((PetscObject)snes),0);
@@ -4243,11 +4262,20 @@ static PetscErrorCode __mfem_snes_jacobian(SNES snes, Vec x, Mat A, Mat P,
       ierr = MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
       ierr = MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
    }
+
+   // Fool DM
+   DM dm;
+   MatType mtype;
+   ierr = MatGetType(P,&mtype); CHKERRQ(ierr);
+   ierr = SNESGetDM(snes,&dm); CHKERRQ(ierr);
+   ierr = DMSetMatType(dm,mtype); CHKERRQ(ierr);
+   ierr = DMShellSetMatrix(dm,P); CHKERRQ(ierr);
    PetscFunctionReturn(0);
 }
 
 static PetscErrorCode __mfem_snes_function(SNES snes, Vec x, Vec f, void *ctx)
 {
+    // 给定当前解x，计算残差向量 f
    __mfem_snes_ctx* snes_ctx = (__mfem_snes_ctx*)ctx;
 
    PetscFunctionBeginUser;
@@ -4259,14 +4287,18 @@ static PetscErrorCode __mfem_snes_function(SNES snes, Vec x, Vec f, void *ctx)
       if (!snes_ctx->work) { snes_ctx->work = new mfem::Vector(xx.Size()); }
       mfem::PetscBCHandler *bchandler = snes_ctx->bchandler;
       mfem::Vector* txx = snes_ctx->work;
+      // 首先把xx赋值给txx，然后在bchandler里面保存的essential dofs处把txx设为0
       bchandler->ApplyBC(xx,*txx);
+      // 在满足essential bdc的当前解 txx处计算 Residual
       snes_ctx->op->Mult(*txx,ff);
       // and fix the residual (i.e. f_\partial\Omega = u - g)
-      bchandler->FixResidualBC(xx,ff);
+      // skip this step for now -QT
+      //bchandler->FixResidualBC(xx,ff);
    }
    else
    {
       // use the Mult method of the class
+      // 调用Newton::Mult(x,y)计算Residual。snes_ctx->op->GetGradient(*xx)计算Jacobian
       snes_ctx->op->Mult(xx,ff);
    }
    // need to tell PETSc the Vec has been updated
@@ -4376,14 +4408,15 @@ static PetscErrorCode __mfem_ksp_monitor(KSP ksp, PetscInt it, PetscReal res,
 
 static PetscErrorCode __mfem_mat_shell_apply(Mat A, Vec x, Vec y)
 {
-   __mfem_mat_shell_ctx *ctx;
-   PetscErrorCode       ierr;
+   mfem::Operator *op;
+   PetscErrorCode ierr;
 
    PetscFunctionBeginUser;
-   ierr = MatShellGetContext(A,(void **)&ctx); CHKERRQ(ierr);
+   ierr = MatShellGetContext(A,(void **)&op); CHKERRQ(ierr);
+   if (!op) { SETERRQ(PetscObjectComm((PetscObject)A),PETSC_ERR_LIB,"Missing operator"); }
    mfem::PetscParVector xx(x,true);
    mfem::PetscParVector yy(y,true);
-   ctx->op->Mult(xx,yy);
+   op->Mult(xx,yy);
    // need to tell PETSc the Vec has been updated
    ierr = PetscObjectStateIncrease((PetscObject)y); CHKERRQ(ierr);
    PetscFunctionReturn(0);
@@ -4391,27 +4424,35 @@ static PetscErrorCode __mfem_mat_shell_apply(Mat A, Vec x, Vec y)
 
 static PetscErrorCode __mfem_mat_shell_apply_transpose(Mat A, Vec x, Vec y)
 {
-   __mfem_mat_shell_ctx *ctx;
-   PetscErrorCode       ierr;
+   mfem::Operator *op;
+   PetscErrorCode ierr;
 
    PetscFunctionBeginUser;
-   ierr = MatShellGetContext(A,(void **)&ctx); CHKERRQ(ierr);
+   ierr = MatShellGetContext(A,(void **)&op); CHKERRQ(ierr);
+   if (!op) { SETERRQ(PetscObjectComm((PetscObject)A),PETSC_ERR_LIB,"Missing operator"); }
    mfem::PetscParVector xx(x,true);
    mfem::PetscParVector yy(y,true);
-   ctx->op->MultTranspose(xx,yy);
+   op->MultTranspose(xx,yy);
    // need to tell PETSc the Vec has been updated
    ierr = PetscObjectStateIncrease((PetscObject)y); CHKERRQ(ierr);
    PetscFunctionReturn(0);
 }
 
-static PetscErrorCode __mfem_mat_shell_destroy(Mat A)
+static PetscErrorCode __mfem_mat_shell_copy(Mat A, Mat B, MatStructure str)
 {
-   __mfem_mat_shell_ctx *ctx;
-   PetscErrorCode       ierr;
+   mfem::Operator *op;
+   PetscErrorCode ierr;
 
    PetscFunctionBeginUser;
-   ierr = MatShellGetContext(A,(void **)&ctx); CHKERRQ(ierr);
-   delete ctx;
+   ierr = MatShellGetContext(A,(void **)&op); CHKERRQ(ierr);
+   if (!op) { SETERRQ(PetscObjectComm((PetscObject)A),PETSC_ERR_LIB,"Missing operator"); }
+   ierr = MatShellSetContext(B,(void *)op); CHKERRQ(ierr);
+   PetscFunctionReturn(0);
+}
+
+static PetscErrorCode __mfem_mat_shell_destroy(Mat A)
+{
+   PetscFunctionBeginUser;
    PetscFunctionReturn(0);
 }
 

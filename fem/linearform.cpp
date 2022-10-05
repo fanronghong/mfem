@@ -1,13 +1,13 @@
-// Copyright (c) 2010, Lawrence Livermore National Security, LLC. Produced at
-// the Lawrence Livermore National Laboratory. LLNL-CODE-443211. All Rights
-// reserved. See file COPYRIGHT for details.
+// Copyright (c) 2010-2020, Lawrence Livermore National Security, LLC. Produced
+// at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+// LICENSE and NOTICE for details. LLNL-CODE-806117.
 //
 // This file is part of the MFEM library. For more information and source code
-// availability see http://mfem.org.
+// availability visit https://mfem.org.
 //
 // MFEM is free software; you can redistribute it and/or modify it under the
-// terms of the GNU Lesser General Public License (as published by the Free
-// Software Foundation) version 2.1 dated February 1999.
+// terms of the BSD-3 license. We welcome feedback and contributions, see file
+// CONTRIBUTING.md for details.
 
 // Implementation of class LinearForm
 
@@ -74,6 +74,12 @@ void LinearForm::AddBdrFaceIntegrator(LinearFormIntegrator *lfi,
 {
    flfi.Append(lfi);
    flfi_marker.Append(&bdr_attr_marker);
+}
+
+// added by fan
+void LinearForm::AddInteriorFaceIntegrator(LinearFormIntegrator *lfi)
+{
+    _flfi.Append(lfi);
 }
 
 void LinearForm::Assemble()
@@ -194,13 +200,48 @@ void LinearForm::Assemble()
          }
       }
    }
+   if (_flfi.Size()) // added by fan. Interior and boundary face linear form integrator
+   {
+       Mesh* mesh = fes->GetMesh();
+       FaceElementTransformations* tr;
+       Array<int> vdofs1, vdofs2; //单元刚度向量组装到总的载荷向量时用到的自由度编号
+
+       for (size_t i=0; i<mesh->GetNumFaces(); i++) // 对所有的facet循环:interior facet, boundary facet
+       {
+           tr = mesh->GetFaceElementTransformations(i);
+           if (tr->Elem2No >= 0)
+           {
+               fes -> GetElementVDofs (tr -> Elem1No, vdofs1);
+               fes -> GetElementVDofs (tr -> Elem2No, vdofs2);
+               vdofs1.Append(vdofs2); // 把两边单元的自由度编号合并到第一个vdofs
+
+               const FiniteElement* fe1 = fes->GetFE(tr->Elem1No); // 与该内部facet相连的两个 FiniteElement (与Element区分)
+               const FiniteElement* fe2 = fes->GetFE(tr->Elem2No);
+
+               for (size_t k=0; k<_flfi.Size(); k++)
+               {
+                   _flfi[k]->AssembleRHSElementVect(*fe1, *fe2,*tr, elemvect);
+                   AddElementVector(vdofs1, elemvect);
+               }
+           }
+       }
+   }
 }
 
 void LinearForm::Update(FiniteElementSpace *f, Vector &v, int v_offset)
 {
    fes = f;
-   NewDataAndSize((double *)v + v_offset, fes->GetVSize());
+   NewMemoryAndSize(Memory<double>(v.GetMemory(), v_offset, f->GetVSize()),
+                    f->GetVSize(), false);
    ResetDeltaLocations();
+}
+
+void LinearForm::MakeRef(FiniteElementSpace *f, Vector &v, int v_offset)
+{
+   MFEM_ASSERT(v.Size() >= v_offset + f->GetVSize(), "");
+   fes = f;
+   v.UseDevice(true);
+   this->Vector::MakeRef(v, v_offset, fes->GetVSize());
 }
 
 void LinearForm::AssembleDelta()
@@ -267,6 +308,5 @@ LinearForm::~LinearForm()
       for (k=0; k < flfi.Size(); k++) { delete flfi[k]; }
    }
 }
-
 
 }

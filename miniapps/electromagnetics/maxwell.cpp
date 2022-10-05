@@ -1,13 +1,13 @@
-// Copyright (c) 2010, Lawrence Livermore National Security, LLC. Produced at
-// the Lawrence Livermore National Laboratory. LLNL-CODE-443211. All Rights
-// reserved. See file COPYRIGHT for details.
+// Copyright (c) 2010-2020, Lawrence Livermore National Security, LLC. Produced
+// at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+// LICENSE and NOTICE for details. LLNL-CODE-806117.
 //
 // This file is part of the MFEM library. For more information and source code
-// availability see http://mfem.org.
+// availability visit https://mfem.org.
 //
 // MFEM is free software; you can redistribute it and/or modify it under the
-// terms of the GNU Lesser General Public License (as published by the Free
-// Software Foundation) version 2.1 dated February 1999.
+// terms of the BSD-3 license. We welcome feedback and contributions, see file
+// CONTRIBUTING.md for details.
 //
 //    ------------------------------------------------------------------
 //    Maxwell Miniapp:  Simple Full-Wave Electromagnetic Simulation Code
@@ -84,18 +84,21 @@ using namespace mfem::common;
 using namespace mfem::electromagnetics;
 
 // Permittivity Function
+// 球的中心坐标, 半径, 介电常数
 static Vector ds_params_(0);  // Center, Radius, and Permittivity
 //                               of dielectric sphere
 double dielectric_sphere(const Vector &);
 double epsilon(const Vector &x) { return dielectric_sphere(x); }
 
 // Permeability Function
+// 球壳的中心坐标, 内径, 外径, 磁导率.
 static Vector ms_params_(0);  // Center, Inner and Outer Radii, and
 //                               Permeability of magnetic shell
 double magnetic_shell(const Vector &);
 double muInv(const Vector & x) { return 1.0/magnetic_shell(x); }
 
 // Conductivity Function
+// 导电球的中心坐标, 半径, 导电率
 static Vector cs_params_(0);  // Center, Radius, and Conductivity
 //                               of conductive sphere
 double conductive_sphere(const Vector &);
@@ -108,15 +111,17 @@ void dipole_pulse(const Vector &x, double t, Vector &j);
 void j_src(const Vector &x, double t, Vector &j) { dipole_pulse(x, t, j); }
 
 // dE/dt Boundary Condition: The following function returns zero but any time
-// depenent function could be used.
+// dependent function could be used.
 void dEdtBCFunc(const Vector &x, double t, Vector &E);
 
 // The following functions return zero but they could be modified to set initial
 // conditions for the electric and magnetic fields
+// 电场和磁场的初始值
 void EFieldFunc(const Vector &, Vector&);
 void BFieldFunc(const Vector &, Vector&);
 
 // Scale factor between input time units and seconds
+// 秒和纳秒之间变换
 static double tScale_ = 1e-9;  // Input time in nanosecond
 
 int SnapTimeStep(double tmax, double dtmax, double & dt);
@@ -140,11 +145,14 @@ int main(int argc, char *argv[])
    bool visit = true;
    double dt = 1.0e-12;
    double dtsf = 0.95;
+   // 初始时间, 最后时间
    double ti = 0.0;
    double ts = 1.0;
    double tf = 40.0;
 
+   // Absorbing Boundary Condition Surfaces
    Array<int> abcs;
+   // Dirichlet Boundary Condition Surfaces
    Array<int> dbcs;
 
    OptionsParser args(argc, argv);
@@ -378,15 +386,20 @@ void display_banner(ostream & os)
 
 // A sphere with constant permittivity.  The sphere has a radius, center, and
 // permittivity specified on the command line and stored in ds_params_.
+// dielectric sphere: 绝缘球
 double dielectric_sphere(const Vector &x)
 {
    double r2 = 0.0;
 
+   // 假定是3D网格, ds_params_的前三个元素就是该球的中心坐标,
+   // r2表示空间中一个点到该中心的距离的平方
    for (int i=0; i<x.Size(); i++)
    {
       r2 += (x(i)-ds_params_(i))*(x(i)-ds_params_(i));
    }
 
+   // epsilon0_ 是真空介电常数. 对3D网格, x.Size() 为3,
+   // 则ds_params_(3)表示该球的半径,ds_params_(4)表示该球的介电常数
    if ( sqrt(r2) <= ds_params_(x.Size()) )
    {
       return ds_params_(x.Size()+1) * epsilon0_;
@@ -401,16 +414,19 @@ double magnetic_shell(const Vector &x)
 {
    double r2 = 0.0;
 
+   // 对3D网格. r2 表示空间中一点x到球壳中心的距离的平方
    for (int i=0; i<x.Size(); i++)
    {
       r2 += (x(i)-ms_params_(i))*(x(i)-ms_params_(i));
    }
 
+   // mu0_ 表示真空磁导率. 球壳的磁导率
    if ( sqrt(r2) >= ms_params_(x.Size()) &&
         sqrt(r2) <= ms_params_(x.Size()+1) )
    {
       return mu0_*ms_params_(x.Size()+2);
    }
+   // 除了球壳的磁导率就为真空磁导率
    return mu0_;
 }
 
@@ -420,25 +436,30 @@ double conductive_sphere(const Vector &x)
 {
    double r2 = 0.0;
 
+   // 对3D网格. r2表示空间中一点x到球中心的距离的平方
    for (int i=0; i<x.Size(); i++)
    {
       r2 += (x(i)-cs_params_(i))*(x(i)-cs_params_(i));
    }
 
+   // cs_params_(x.Size()+1) 表示球内部的导电率
    if ( sqrt(r2) <= cs_params_(x.Size()) )
    {
       return cs_params_(x.Size()+1);
    }
+   // 球外部导电率为0.0
    return 0.0;
 }
 
 // A cylindrical rod of current density.  The rod has two axis end points, a
-// radus, a current amplitude in Amperes, a center time, and a width.  All of
+// radius, a current amplitude in Amperes, a center time, and a width.  All of
 // these parameters are stored in dp_params_.
+// 注意: 电流除了跟空间中的点有关,还和时间有关
 void dipole_pulse(const Vector &x, double t, Vector &j)
 {
    MFEM_ASSERT(x.Size() == 3, "current source requires 3D space.");
 
+   // j 表示电流
    j.SetSize(x.Size());
    j = 0.0;
 
@@ -447,37 +468,47 @@ void dipole_pulse(const Vector &x, double t, Vector &j)
 
    xu = x;
 
+   // 假定是3D网格, x.Size()为3.
+   // dp_params_的0,1,2号元素表示这个圆柱形杆的左端的圆盘的中心坐标(就是 xu),
+   // 右端圆盘的中心坐标为3,4,5号元素. v 就表示从左中心到右中心的方向向量
    for (int i=0; i<x.Size(); i++)
    {
       xu[i] -= dp_params_[i];
       v[i]   = dp_params_[x.Size()+i] - dp_params_[i];
    }
 
+   // h 表示杆的长度
    double h = v.Norml2();
 
    if ( h == 0.0 )
    {
       return;
    }
+   // 把v单位化
    v /= h;
 
+   // r 表示圆柱杆的半径
    double r = dp_params_[2*x.Size()+0];
    double a = dp_params_[2*x.Size()+1] * tScale_;
    double b = dp_params_[2*x.Size()+2] * tScale_;
    double c = dp_params_[2*x.Size()+3] * tScale_;
 
+   // v是单位向量, 则xv表示向量xu在v的投影的长度
    double xv = xu * v;
 
    // Compute perpendicular vector from axis to x
+   // 现在 xu 就是垂直与 v 的一个向量. 自己画一个图就很好理解了
    xu.Add(-xv, v);
 
    double xp = xu.Norml2();
 
+   // 下面这三个条件同时满足表示该空间中的点x在这个圆柱形杆内部
    if ( xv >= 0.0 && xv <= h && xp <= r )
    {
       j = v;
    }
 
+   // ref: https://mfem.org/electromagnetics/#mjx-eqn-faraday, (13)式
    j *= a * (t - b) * exp(-0.5 * pow((t-b)/c, 2)) / (c * c);
 }
 
@@ -495,6 +526,7 @@ BFieldFunc(const Vector &x, Vector &B)
    B = 0.0;
 }
 
+// dE_dt 的边界条件
 void
 dEdtBCFunc(const Vector &x, double t, Vector &dE)
 {

@@ -1,0 +1,20 @@
+#BSUB -n 1
+#BSUB -o bsub.out
+
+cd pnp_box/
+make pnp_steadystate_box
+
+# ------> 用解析解计算收敛阶
+./pnp_steadystate_box -p 1 -ref 3 -lin gummel -dis cg -rate
+./pnp_steadystate_box -p 1 -ref 3 -lin gummel -dis dg -rate
+./pnp_steadystate_box -p 1 -ref 3 -lin newton -dis cg -rate
+./pnp_steadystate_box -p 1 -ref 3 -lin newton -dis dg -rate
+
+
+cd ../pnp_protein
+make pnp_steadystate_protein
+
+# ------>
+./pnp_steadystate_protein -p 1 -lin gummel -dis cg -v
+./pnp_steadystate_protein -p 1 -lin newton -dis cg -v
+

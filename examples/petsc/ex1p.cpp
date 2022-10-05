@@ -223,6 +223,7 @@ int main(int argc, char *argv[])
    if (static_cond) { a->EnableStaticCondensation(); }
    a->Assemble();
 
+   // 所有并行的离散部分全部在MFEM和Hypre之间完成，PETSc不参与；PETSc只参与求解线性方程组
    HypreParMatrix A;
    Vector B, X;
    a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B);
@@ -269,6 +270,8 @@ int main(int argc, char *argv[])
          pcg->iterative_mode = true;
          X.Randomize();
       }
+       // 所有并行的离散部分全部在MFEM和Hypre之间完成，PETSc不参与；
+       // PETSc只参与求解线性方程组，且在把矩阵向量传入PETSc的时候，不需要自己进行数据类型转换
       pcg->Mult(B, X);
       delete pcg;
    }

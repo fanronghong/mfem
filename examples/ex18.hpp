@@ -1,5 +1,5 @@
 //                  MFEM Example 18 - Serial/Parallel Shared Code
-
+// 方程的弱形式参考： https://www.theoretical-physics.com/dev/fluid-dynamics/euler.html#d-version-of-the-equations
 #include "mfem.hpp"
 
 using namespace std;
@@ -88,8 +88,6 @@ private:
    Vector funval2;
    Vector nor;
    Vector fluxN;
-   IntegrationPoint eip1;
-   IntegrationPoint eip2;
 
 public:
    FaceIntegrator(RiemannSolver &rsolver_, const int dim);
@@ -118,10 +116,12 @@ FE_Evolution::FE_Evolution(FiniteElementSpace &_vfes,
    const int dof = vfes.GetFE(0)->GetDof();
    DenseMatrix Me(dof);
    DenseMatrixInverse inv(&Me);
+   // 手动生成单元刚度矩阵: 只需要Integrator, 不需要BilinearForm
    MassIntegrator mi;
    for (int i = 0; i < vfes.GetNE(); i++)
    {
       mi.AssembleElementMatrix(*vfes.GetFE(i), *vfes.GetElementTransformation(i), Me);
+      // 手动LU分解, 并返回逆矩阵
       inv.Factor();
       inv.GetInverseMatrix(Me_inv(i));
    }
@@ -174,13 +174,17 @@ bool StateIsPhysical(const Vector &state, const int dim);
 // Pressure (EOS) computation
 inline double ComputePressure(const Vector &state, int dim)
 {
+    // state 就是 (rho, u1, u2, E)? u1,u2是速度的两个分量, rho是密度, E是能量
+    // 压强p = (kappa - 1.0) * (E - 0.5 * rho * (u1^2 + u2^2)), kappa 就是specific heat ratio. ref: https://www.theoretical-physics.com/dev/fluid-dynamics/euler.html#introduction
+    // 这里计算的是 rho*u1 和 rho*u2, 所以 p = (kappa - 1.0) * ( rho * E - 0.5 * ((rho * u1)^2 + (rho * u2)^2)) ) / rho
    const double den = state(0);
    const Vector den_vel(state.GetData() + 1, dim);
    const double den_energy = state(1 + dim);
 
    double den_vel2 = 0;
    for (int d = 0; d < dim; d++) { den_vel2 += den_vel(d) * den_vel(d); }
-   den_vel2 /= den;
+   den_vel2 /= den; // 原本是除, 但这里计算的就是 rho*u1 和 rho*u2, ref: https://www.theoretical-physics.com/dev/fluid-dynamics/euler.html#d-version-of-the-equations
+   // 最终 den_vel2 = rho * (u1^2 + u2^2)
 
    return (specific_heat_ratio - 1.0) * (den_energy - 0.5 * den_vel2);
 }
@@ -196,9 +200,9 @@ void ComputeFlux(const Vector &state, int dim, DenseMatrix &flux)
 
    const double pres = ComputePressure(state, dim);
 
-   for (int d = 0; d < dim; d++)
+   for (int d = 0; d < dim; d++) // dim 应该为 2
    {
-      flux(0, d) = den_vel(d);
+      flux(0, d) = den_vel(d); // rho*ui
       for (int i = 0; i < dim; i++)
       {
          flux(1+i, d) = den_vel(i) * den_vel(d) / den;
@@ -211,6 +215,7 @@ void ComputeFlux(const Vector &state, int dim, DenseMatrix &flux)
    {
       flux(1+dim, d) = den_vel(d) * H;
    }
+   // 最终 flux 就是 (f_x, f_y) 组成的4*2的矩阵, ref: https://www.theoretical-physics.com/dev/fluid-dynamics/euler.html#d-version-of-the-equations
 }
 
 // Compute the scalar F(u).n
@@ -418,27 +423,24 @@ void FaceIntegrator::AssembleFaceVector(const FiniteElement &el1,
    {
       intorder++;
    }
-   const IntegrationRule *ir = &IntRules.Get(Tr.FaceGeom, intorder);
+   const IntegrationRule *ir = &IntRules.Get(Tr.GetGeometryType(), intorder);
 
    for (int i = 0; i < ir->GetNPoints(); i++)
    {
       const IntegrationPoint &ip = ir->IntPoint(i);
 
-      Tr.Loc1.Transform(ip, eip1);
-      Tr.Loc2.Transform(ip, eip2);
+      Tr.SetAllIntPoints(&ip); // set face and element int. points
 
       // Calculate basis functions on both elements at the face
-      el1.CalcShape(eip1, shape1);
-      el2.CalcShape(eip2, shape2);
+      el1.CalcShape(Tr.GetElement1IntPoint(), shape1);
+      el2.CalcShape(Tr.GetElement2IntPoint(), shape2);
 
       // Interpolate elfun at the point
       elfun1_mat.MultTranspose(shape1, funval1);
       elfun2_mat.MultTranspose(shape2, funval2);
 
-      Tr.Face->SetIntPoint(&ip);
-
       // Get the normal vector and the flux on the face
-      CalcOrtho(Tr.Face->Jacobian(), nor);
+      CalcOrtho(Tr.Jacobian(), nor);
       const double mcs = rsolver.Eval(funval1, funval2, nor, fluxN);
 
       // Update max char speed

@@ -1,0 +1,76 @@
+# ---------------------------------> phi2 equation Params
+-phi2_ksp_type cg
+#-phi2_pc_type lu -phi2_pc_factor_mat_solver_type mumps
+-phi2_pc_type gamg -phi3_pc_gamg_type classical -phi3_pc_gamg_agg_nsmooths 1
+-phi2_ksp_max_it 1000 -phi2_ksp_rtol 1e-10 -phi2_ksp_atol 1e-10 -phi2_ksp_divtol 1e5
+
+# ----------------------------------> Gummel Params
+-phi3_ksp_type cg
+#-phi3_pc_type lu -phi3_pc_factor_mat_solver_type mumps
+-phi3_pc_type gamg -phi3_pc_gamg_type classical -phi3_pc_gamg_agg_nsmooths 1
+-phi3_ksp_max_it 1000 -phi3_ksp_rtol 1e-10 -phi3_ksp_atol 1e-20 -phi3_ksp_divtol 1e5
+#-phi3_ksp_converged_reason
+
+-np1_ksp_type gmres
+#-np1_pc_type lu -np1_pc_factor_mat_solver_type mumps
+-np1_pc_type gamg -np1_pc_gamg_type classical -np1_pc_gamg_agg_nsmooths 1
+-np1_ksp_max_it 1000 -np1_ksp_rtol 1e-10 -np1_ksp_atol 1e-20 -np1_ksp_divtol 1e5
+#-np1_ksp_converged_reason
+
+-np2_ksp_type gmres
+#-np2_pc_type lu -np2_pc_factor_mat_solver_type mumps
+-np2_pc_type gamg -np2_pc_gamg_type classical -np2_pc_gamg_agg_nsmooths 1
+-np2_ksp_max_it 1000 -np2_ksp_rtol 1e-10 -np2_ksp_atol 1e-20 -np2_ksp_divtol 1e5
+#-np2_ksp_converged_reason
+
+
+# ----------------------------------> Newton Params
+-newton_snes_type newtonls
+-newton_snes_rtol 1e-10 -newton_snes_atol 1e-20 -newton_snes_stol 1e-14 -newton_snes_max_it 50 -newton_snes_divergence_tolerance 1e5
+-newton_snes_linesearch_type basic # bt, basic
+-newton_snes_monitor
+-newton_snes_lg_residualnorm
+-newton_snes_converged_reason
+#-newton_snes_view
+
+-newton_ksp_type fgmres
+#-newton_pc_type jacobi # jacobi, ilu, 注释掉就是使用自定义的预条件(在程序中给定)
+-newton_ksp_rtol 1E-8 -newton_ksp_max_it 1000 -newton_ksp_atol 1E-20 -newton_ksp_divtol 1e+5
+#-newton_ksp_norm_type
+#-newton_ksp_monitor
+#-newton_ksp_monitor_short
+#-newton_ksp_monitor_true_residual
+-newton_ksp_converged_reason
+#-newton_ksp_view
+
+-sub_block1_ksp_type gmres
+-sub_block1_pc_type lu -sub_block1_pc_factor_mat_solver_type mumps
+#-sub_block1_pc_type ilu
+-sub_block1_ksp_rtol 1e-8 -sub_block1_ksp_atol 1e-10 -sub_block1_ksp_divtol 1e5 -sub_block1_ksp_max_it 1000
+#-sub_block1_ksp_monitor
+#-sub_block1_ksp_monitor_short
+#-sub_block1_ksp_monitor_true_residual
+#-sub_block1_ksp_converged_reason
+
+-sub_block2_ksp_type gmres
+-sub_block2_pc_type lu -sub_block2_pc_factor_mat_solver_type mumps
+#-sub_block2_pc_type ilu
+-sub_block2_ksp_rtol 1e-8 -sub_block2_ksp_atol 1e-10 -sub_block2_ksp_divtol 1e5 -sub_block2_ksp_max_it 1000
+#-sub_block2_ksp_monitor
+#-sub_block2_ksp_monitor_short
+#-sub_block2_ksp_monitor_true_residual
+#-sub_block2_ksp_converged_reason
+
+-sub_block3_ksp_type gmres
+-sub_block3_pc_type lu -sub_block3_pc_factor_mat_solver_type mumps
+#-sub_block3_pc_type ilu
+-sub_block3_ksp_rtol 1e-8 -sub_block3_ksp_atol 1e-10 -sub_block3_ksp_divtol 1e5 -sub_block3_ksp_max_it 1000
+#-sub_block3_ksp_monitor
+#-sub_block3_ksp_monitor_short
+#-sub_block3_ksp_monitor_true_residual
+#-sub_block3_ksp_converged_reason
+
+
+# -------------------------------> Petsc Other Params
+#-options_view
+-options_left 0

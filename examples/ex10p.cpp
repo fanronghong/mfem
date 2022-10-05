@@ -302,6 +302,8 @@ int main(int argc, char *argv[])
 
    BlockVector vx(true_offset);
    ParGridFunction v_gf, x_gf;
+   // v_gf的TrueVector的data指针和vx的data指针指向同一块内存空间,
+   // 所以在解法器中修改TrueVector, 相应的ParGridFunction也同时修改了
    v_gf.MakeTRef(&fespace, vx, true_offset[0]);
    x_gf.MakeTRef(&fespace, vx, true_offset[1]);
 
@@ -319,8 +321,15 @@ int main(int argc, char *argv[])
    v_gf.SetTrueVector();
    VectorFunctionCoefficient deform(dim, InitialDeformation);
    x_gf.ProjectCoefficient(deform);
+   // 上面的ProjectCoefficient()改变了x_gf的data指针,但是没有改变TrueVector,
+   // 下面的SetTrueVector()就会计算新的t_vec(就是x_gf中的TrueVector, 不是data指针),
+   // 从而上面的vx的block 0块也更新了
    x_gf.SetTrueVector();
 
+   // 下面就是利用prolongation matrix和每个ParGridFunction中的t_vec成员变量相乘,
+   // 得到的向量赋给ParGridFunction的data指针成员
+   // 按道理讲上面的ProjectCoefficient()就已经修改了ParGridFunction的data指针,
+   // 为啥这里还要调用SetFromTrueVector()来通过ParGridFunction的t_vec来修改它的data指针???
    v_gf.SetFromTrueVector(); x_gf.SetFromTrueVector();
 
    Array<int> ess_bdr(fespace.GetMesh()->bdr_attributes.Max());
@@ -371,12 +380,17 @@ int main(int argc, char *argv[])
    {
       double dt_real = min(dt, t_final - t);
 
+      // 依然是TrueVector(i.e., vx)用来在解法器中进行数据流通
       ode_solver->Step(vx, t, dt_real);
 
       last_step = (t >= t_final - 1e-8*dt);
 
       if (last_step || (ti % vis_steps) == 0)
       {
+          // 由于v_gf的TrueVector指针和vx的data指针指向同一块区域,
+          // 所以在上面Step()中得到了新的vx就表示v_gf的TrueVector也更新了,
+          // 为了得到新的v_gf的ParGridFunction对应的data指针,
+          // 只需要用prolongation matrix与其TrueVector相差得到data指针(SetFromTrueVector()就是这个功能)
          v_gf.SetFromTrueVector(); x_gf.SetFromTrueVector();
 
          double ee = oper.ElasticEnergy(x_gf);

@@ -1,18 +1,19 @@
-// Copyright (c) 2010, Lawrence Livermore National Security, LLC. Produced at
-// the Lawrence Livermore National Laboratory. LLNL-CODE-443211. All Rights
-// reserved. See file COPYRIGHT for details.
+// Copyright (c) 2010-2020, Lawrence Livermore National Security, LLC. Produced
+// at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+// LICENSE and NOTICE for details. LLNL-CODE-806117.
 //
 // This file is part of the MFEM library. For more information and source code
-// availability see http://mfem.org.
+// availability visit https://mfem.org.
 //
 // MFEM is free software; you can redistribute it and/or modify it under the
-// terms of the GNU Lesser General Public License (as published by the Free
-// Software Foundation) version 2.1 dated February 1999.
+// terms of the BSD-3 license. We welcome feedback and contributions, see file
+// CONTRIBUTING.md for details.
 
 #ifndef MFEM_MAXWELL_SOLVER
 #define MFEM_MAXWELL_SOLVER
 
 #include "../common/pfem_extras.hpp"
+#include "../common/mesh_extras.hpp"
 #include "electromagnetics.hpp"
 
 #ifdef MFEM_USE_MPI
@@ -107,6 +108,7 @@ private:
 
    ParDiscreteCurlOperator * Curl_;
 
+   // 对应的TrueVector就是下面的E_, B_
    ParGridFunction * e_;    // Electric Field (HCurl)
    ParGridFunction * b_;    // Magnetic Flux (HDiv)
    ParGridFunction * j_;    // Volumetric Current Density (HCurl)
@@ -118,6 +120,7 @@ private:
    HypreParMatrix * M2MuInv_;
    HypreParMatrix * NegCurl_;
    HypreParMatrix * WeakCurlMuInv_;
+   // 对应的PrimalVector就是上面的e_, b_
    HypreParVector * E_; // Current value of the electric field DoFs
    HypreParVector * B_; // Current value of the magnetic flux DoFs
    mutable HypreParVector * HD_; // Used in energy calculation
@@ -132,6 +135,7 @@ private:
    VectorCoefficient * jCoef_;      // Time dependent current density
    VectorCoefficient * dEdtBCCoef_; // Time dependent boundary condition
 
+   // 分别对应maxwell.cpp中的几个函数
    double (*eps_    )(const Vector&);
    double (*muInv_  )(const Vector&);
    double (*sigma_  )(const Vector&);

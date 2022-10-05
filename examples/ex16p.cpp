@@ -24,7 +24,8 @@
 //               class ConductionOperator defining C(u)), as well as their
 //               implicit time integration. Note that implementing the method
 //               ConductionOperator::ImplicitSolve is the only requirement for
-//               high-order implicit (SDIRK) time integration.
+//               high-order implicit (SDIRK) time integration. Optional saving
+//               with ADIOS2 (adios2.readthedocs.io) is also illustrated.
 //
 //               We recommend viewing examples 2, 9 and 10 before viewing this
 //               example.
@@ -100,7 +101,7 @@ int main(int argc, char *argv[])
    int ser_ref_levels = 2;
    int par_ref_levels = 1;
    int order = 2;
-   int ode_solver_type = 3;
+   int ode_solver_type = 1;
    double t_final = 0.5;
    double dt = 1.0e-2;
    double alpha = 1.0e-2;
@@ -108,6 +109,7 @@ int main(int argc, char *argv[])
    bool visualization = true;
    bool visit = false;
    int vis_steps = 5;
+   bool adios2 = false;
 
    int precision = 8;
    cout.precision(precision);
@@ -140,6 +142,9 @@ int main(int argc, char *argv[])
                   "Save data files for VisIt (visit.llnl.gov) visualization.");
    args.AddOption(&vis_steps, "-vs", "--visualization-steps",
                   "Visualize every n-th timestep.");
+   args.AddOption(&adios2, "-adios2", "--adios2-streams", "-no-adios2",
+                  "--no-adios2-streams",
+                  "Save data using adios2 streams.");
    args.Parse();
    if (!args.Good())
    {
@@ -248,6 +253,27 @@ int main(int argc, char *argv[])
       visit_dc.Save();
    }
 
+   // Optionally output a BP (binary pack) file using ADIOS2. This can be
+   // visualized with the ParaView VTX reader.
+#ifdef MFEM_USE_ADIOS2
+   ADIOS2DataCollection* adios2_dc = NULL;
+   if (adios2)
+   {
+      std::string postfix(mesh_file);
+      postfix.erase(0, std::string("../data/").size() );
+      postfix += "_o" + std::to_string(order);
+      postfix += "_solver" + std::to_string(ode_solver_type);
+      const std::string collection_name = "ex16-p-" + postfix + ".bp";
+
+      adios2_dc = new ADIOS2DataCollection(MPI_COMM_WORLD, collection_name, pmesh);
+      adios2_dc->SetParameter("SubStreams", std::to_string(num_procs/2) );
+      adios2_dc->RegisterField("temperature", &u_gf);
+      adios2_dc->SetCycle(0);
+      adios2_dc->SetTime(0.0);
+      adios2_dc->Save();
+   }
+#endif
+
    socketstream sout;
    if (visualization)
    {
@@ -317,9 +343,26 @@ int main(int argc, char *argv[])
             visit_dc.SetTime(t);
             visit_dc.Save();
          }
+
+#ifdef MFEM_USE_ADIOS2
+         if (adios2)
+         {
+            adios2_dc->SetCycle(ti);
+            adios2_dc->SetTime(t);
+            adios2_dc->Save();
+         }
+#endif
       }
+      // 重新生成新的刚度矩阵 K (它跟时间相关)
       oper.SetParameters(u);
    }
+
+#ifdef MFEM_USE_ADIOS2
+   if (adios2)
+   {
+      delete adios2_dc;
+   }
+#endif
 
    // 11. Save the final solution in parallel. This output can be viewed later
    //     using GLVis: "glvis -np <np> -m ex16-mesh -g ex16-final".
@@ -350,6 +393,7 @@ ConductionOperator::ConductionOperator(ParFiniteElementSpace &f, double al,
 
    M = new ParBilinearForm(&fespace);
    M->AddDomainIntegrator(new MassIntegrator());
+   // 为什么skip_zeros=0就能保持相同的sparsity pattern？
    M->Assemble(0); // keep sparsity pattern of M and K the same
    M->FormSystemMatrix(ess_tdof_list, Mmat);
 
@@ -406,7 +450,11 @@ void ConductionOperator::ImplicitSolve(const double dt,
 void ConductionOperator::SetParameters(const Vector &u)
 {
    ParGridFunction u_alpha_gf(&fespace);
+   // u 是TrueVector(true dofs), 所以这里要使用SetFromTrueDofs(),
+   // 是对其内部的t_vec进行操作
    u_alpha_gf.SetFromTrueDofs(u);
+   // 下面对u_alpha_gf的每个元素进行操作, 是把u_alpha_gf当成Vector,
+   // 是对其data指针操作, 而不是true dofs
    for (int i = 0; i < u_alpha_gf.Size(); i++)
    {
       u_alpha_gf(i) = kappa + alpha*u_alpha_gf(i);

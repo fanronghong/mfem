@@ -1,13 +1,13 @@
-// Copyright (c) 2010, Lawrence Livermore National Security, LLC. Produced at
-// the Lawrence Livermore National Laboratory. LLNL-CODE-443211. All Rights
-// reserved. See file COPYRIGHT for details.
+// Copyright (c) 2010-2020, Lawrence Livermore National Security, LLC. Produced
+// at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+// LICENSE and NOTICE for details. LLNL-CODE-806117.
 //
 // This file is part of the MFEM library. For more information and source code
-// availability see http://mfem.org.
+// availability visit https://mfem.org.
 //
 // MFEM is free software; you can redistribute it and/or modify it under the
-// terms of the GNU Lesser General Public License (as published by the Free
-// Software Foundation) version 2.1 dated February 1999.
+// terms of the BSD-3 license. We welcome feedback and contributions, see file
+// CONTRIBUTING.md for details.
 //
 //            -----------------------------------------------------
 //            Mesh Explorer Miniapp:  Explore and manipulate meshes
@@ -39,7 +39,7 @@
 using namespace mfem;
 using namespace std;
 
-// This tranformation can be applied to a mesh with the 't' menu option.
+// This transformation can be applied to a mesh with the 't' menu option.
 void transformation(const Vector &p, Vector &v)
 {
    // simple shear transformation
@@ -53,8 +53,9 @@ void transformation(const Vector &p, Vector &v)
    }
    else if (p.Size() == 2)
    {
-      v(0) = p(0) + s*p(1);
-      v(1) = p(1) + s*p(0);
+      double xscale=1;
+      v(0) = tan(p(0)*xscale)/tan(xscale);
+      v(1) = tan(p(1)*xscale)/tan(xscale);
    }
    else
    {
@@ -68,8 +69,33 @@ double region_eps = 1e-8;
 double region(const Vector &p)
 {
    const double x = p(0), y = p(1);
+   const double x0=0.25;
    // here we describe the region: (x <= 1/4) && (y >= 0) && (y <= 1)
-   return std::max(std::max(x - 0.25, -y), y - 1.0);
+   //return std::max(std::max(std::max(x - 0.45, -y-0.45), y - 0.45), -x-0.45);
+   //return std::max(std::max(std::max(x - x0, -y-x0), y - x0), -x-x0);
+   return (std::max( -y-x0, y - x0));
+}
+
+// The projection of this function can be plotted with the 'l' menu option
+double f(const Vector &p)
+{
+   double x = p(0);
+   double y = p.Size() > 1 ? p(1) : 0.0;
+   double z = p.Size() > 2 ? p(2) : 0.0;
+
+   if (1)
+   {
+      // torus in the xy-plane
+      const double r_big = 2.0;
+      const double r_small = 1.0;
+      return hypot(r_big - hypot(x, y), z) - r_small;
+   }
+   if (0)
+   {
+      // sphere at the origin:
+      const double r = 1.0;
+      return hypot(hypot(x, y), z) - r;
+   }
 }
 
 Mesh *read_par_mesh(int np, const char *mesh_prefix)
@@ -329,6 +355,7 @@ int main (int argc, char *argv[])
            "e) View elements\n"
            "h) View element sizes, h\n"
            "k) View element ratios, kappa\n"
+           "l) Plot a function\n"
            "x) Print sub-element stats\n"
            "f) Find physical point in reference space\n"
            "p) Generate a partitioning\n"
@@ -336,7 +363,7 @@ int main (int argc, char *argv[])
            "S) Save in MFEM format\n"
            "V) Save in VTK format (only linear and quadratic meshes)\n"
            "q) Quit\n"
-#ifdef MFEM_USE_GZSTREAM
+#ifdef MFEM_USE_ZLIB
            "Z) Save in MFEM format with compression\n"
 #endif
            "--> " << flush;
@@ -622,21 +649,52 @@ int main (int argc, char *argv[])
       if (mk == 'o')
       {
          cout << "What type of reordering?\n"
+              "g) Gecko edge-product minimization\n"
               "h) Hilbert spatial sort\n"
-              //"g) Gecko edge-product minimization\n" // TODO future
               "--> " << flush;
          char rk;
          cin >> rk;
 
-         Array<int> ordering;
+         Array<int> ordering, tentative;
          if (rk == 'h')
          {
             mesh->GetHilbertElementOrdering(ordering);
             mesh->ReorderElements(ordering);
          }
+         else if (rk == 'g')
+         {
+            int outer, inner, window, period;
+            cout << "Enter number of outer iterations (default 5): " << flush;
+            cin >> outer;
+            cout << "Enter number of inner iterations (default 4): " << flush;
+            cin >> inner;
+            cout << "Enter window size (default 4, beware of exponential cost): "
+                 << flush;
+            cin >> window;
+            cout << "Enter period for window size increment (default 2): "
+                 << flush;
+            cin >> period;
+
+            double best_cost = infinity();
+            for (int i = 0; i < outer; i++)
+            {
+               int seed = i+1;
+               double cost = mesh->GetGeckoElementOrdering(
+                                tentative, inner, window, period, seed, true);
+
+               if (cost < best_cost)
+               {
+                  ordering = tentative;
+                  best_cost = cost;
+               }
+            }
+            cout << "Final cost: " << best_cost << endl;
+
+            mesh->ReorderElements(ordering);
+         }
       }
 
-      // These are the cases that open a new GLVis window
+      // These are most of the cases that open a new GLVis window
       if (mk == 'm' || mk == 'b' || mk == 'e' || mk == 'v' || mk == 'h' ||
           mk == 'k' || mk == 'p')
       {
@@ -949,6 +1007,43 @@ int main (int argc, char *argv[])
          delete bdr_attr_fespace;
       }
 
+      if (mk == 'l')
+      {
+         // Project and plot the function 'f'
+         int p;
+         FiniteElementCollection *fec = NULL;
+         cout << "Enter projection space order: " << flush;
+         cin >> p;
+         if (p >= 1)
+         {
+            fec = new H1_FECollection(p, mesh->Dimension(),
+                                      BasisType::GaussLobatto);
+         }
+         else
+         {
+            fec = new DG_FECollection(-p, mesh->Dimension(),
+                                      BasisType::GaussLegendre);
+         }
+         FiniteElementSpace fes(mesh, fec);
+         GridFunction level(&fes);
+         FunctionCoefficient coeff(f);
+         level.ProjectCoefficient(coeff);
+         char vishost[] = "localhost";
+         int  visport   = 19916;
+         socketstream sol_sock(vishost, visport);
+         if (sol_sock.is_open())
+         {
+            sol_sock.precision(14);
+            sol_sock << "solution\n" << *mesh << level << flush;
+         }
+         else
+         {
+            cout << "Unable to connect to "
+                 << vishost << ':' << visport << endl;
+         }
+         delete fec;
+      }
+
       if (mk == 'S')
       {
          const char mesh_file[] = "mesh-explorer.mesh";
@@ -967,7 +1062,7 @@ int main (int argc, char *argv[])
          cout << "New VTK mesh file: " << mesh_file << endl;
       }
 
-#ifdef MFEM_USE_GZSTREAM
+#ifdef MFEM_USE_ZLIB
       if (mk == 'Z')
       {
          const char mesh_file[] = "mesh-explorer.mesh.gz";

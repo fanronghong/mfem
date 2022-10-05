@@ -1,13 +1,13 @@
-// Copyright (c) 2010, Lawrence Livermore National Security, LLC. Produced at
-// the Lawrence Livermore National Laboratory. LLNL-CODE-443211. All Rights
-// reserved. See file COPYRIGHT for details.
+// Copyright (c) 2010-2020, Lawrence Livermore National Security, LLC. Produced
+// at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+// LICENSE and NOTICE for details. LLNL-CODE-806117.
 //
 // This file is part of the MFEM library. For more information and source code
-// availability see http://mfem.org.
+// availability visit https://mfem.org.
 //
 // MFEM is free software; you can redistribute it and/or modify it under the
-// terms of the GNU Lesser General Public License (as published by the Free
-// Software Foundation) version 2.1 dated February 1999.
+// terms of the BSD-3 license. We welcome feedback and contributions, see file
+// CONTRIBUTING.md for details.
 
 // Author: Stefano Zampini <stefano.zampini@gmail.com>
 
@@ -413,6 +413,7 @@ public:
 
    /** @brief Eliminate only the rows from the matrix */
    void EliminateRows(const Array<int> &rows);
+   void EliminateRows(const Array<int> &rows, double diag=1.0);
 
    /// Makes this object a reference to another PetscParMatrix
    void MakeRef(const PetscParMatrix &master);
@@ -475,6 +476,7 @@ public:
    /// Boundary conditions evaluation
    /** In the result vector, @a g, only values at the essential dofs need to be
        set. */
+       // t 是时间？
    virtual void Eval(double t, Vector &g)
    { mfem_error("PetscBCHandler::Eval method not overloaded"); }
 
@@ -505,10 +507,11 @@ public:
    /// y = x on ess_tdof_list_c and y = 0 on ess_tdof_list
    void ZeroBC(const Vector &x, Vector &y);
 
-private:
+protected:
    enum Type bctype;
    bool setup;
 
+   // eval_g 就是用来保存 eval_t 时刻 this->Eval() 算出来的值
    double eval_t;
    double eval_t_cached;
    Vector eval_g;
@@ -546,6 +549,7 @@ protected:
    PetscClassId cid;
 
    /// Right-hand side and solution vector
+   // 对子类PetscODESolver X 是当前时间步的解向量
    mutable PetscParVector *B, *X;
 
    /// Handler for boundary conditions

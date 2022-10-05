@@ -1,13 +1,13 @@
-// Copyright (c) 2010, Lawrence Livermore National Security, LLC. Produced at
-// the Lawrence Livermore National Laboratory. LLNL-CODE-443211. All Rights
-// reserved. See file COPYRIGHT for details.
+// Copyright (c) 2010-2020, Lawrence Livermore National Security, LLC. Produced
+// at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+// LICENSE and NOTICE for details. LLNL-CODE-806117.
 //
 // This file is part of the MFEM library. For more information and source code
-// availability see http://mfem.org.
+// availability visit https://mfem.org.
 //
 // MFEM is free software; you can redistribute it and/or modify it under the
-// terms of the GNU Lesser General Public License (as published by the Free
-// Software Foundation) version 2.1 dated February 1999.
+// terms of the BSD-3 license. We welcome feedback and contributions, see file
+// CONTRIBUTING.md for details.
 
 #ifndef MFEM_NONLINEARFORM
 #define MFEM_NONLINEARFORM
@@ -87,6 +87,7 @@ public:
 
    /// Access all integrators added with AddDomainIntegrator().
    Array<NonlinearFormIntegrator*> *GetDNFI() { return &dnfi; }
+   const Array<NonlinearFormIntegrator*> *GetDNFI() const { return &dnfi; }
 
    /// Adds new Interior Face Integrator.
    void AddInteriorFaceIntegrator(NonlinearFormIntegrator *nlfi)
@@ -110,8 +111,8 @@ public:
        have zero entries at the essential true dofs. */
    void SetEssentialBC(const Array<int> &bdr_attr_is_ess, Vector *rhs = NULL);
 
-   /// (DEPRECATED) Specify essential boundary conditions.
-   /** @deprecated Use either SetEssentialBC() or SetEssentialTrueDofs(). */
+   /// Specify essential boundary conditions.
+   /** Use either SetEssentialBC() or SetEssentialTrueDofs() if possible. */
    void SetEssentialVDofs(const Array<int> &ess_vdofs_list);
 
    /// Specify essential boundary conditions.
@@ -198,24 +199,41 @@ protected:
        GridFunction-like block-vector data (e.g. in parallel). */
    mutable BlockVector xs, ys;
 
-   mutable Array2D<SparseMatrix*> Grads;
+   mutable Array2D<SparseMatrix*> Grads, cGrads;
    mutable BlockOperator *BlockGrad;
 
    // A list of the offsets
    Array<int> block_offsets;
    Array<int> block_trueOffsets;
 
-   // Essential vdofs: one list of vdofs for each space in 'fes'
-   Array<Array<int> *> ess_vdofs;
+   // Array of Arrays of tdofs for each space in 'fes'
+   Array<Array<int> *> ess_tdofs;
+
+   /// Array of pointers to the prolongation matrix of fes, may be NULL
+   Array<const Operator *> P;
+
+   /// Array of results of dynamic-casting P to SparseMatrix pointer
+   Array<const SparseMatrix *> cP;
+
+   /// Indicator if the Operator is part of a parallel run
+   bool is_serial = true;
+
+   /// Indicator if the Operator needs prolongation on assembly
+   bool needs_prolongation = false;
+
+   mutable BlockVector aux1, aux2;
+
+   const BlockVector &Prolongate(const BlockVector &bx) const;
 
    /// Specialized version of GetEnergy() for BlockVectors
    double GetEnergyBlocked(const BlockVector &bx) const;
 
    /// Specialized version of Mult() for BlockVector%s
+   /// Block L-Vector to Block L-Vector
    void MultBlocked(const BlockVector &bx, BlockVector &by) const;
 
    /// Specialized version of GetGradient() for BlockVector
-   Operator &GetGradientBlocked(const BlockVector &bx) const;
+   void ComputeGradientBlocked(const BlockVector &bx) const;
 
 public:
    /// Construct an empty BlockNonlinearForm. Initialize with SetSpaces().
@@ -260,8 +278,12 @@ public:
 
    virtual double GetEnergy(const Vector &x) const;
 
+   /// Method is only called in serial, the parallel version calls MultBlocked
+   /// directly.
    virtual void Mult(const Vector &x, Vector &y) const;
 
+   /// Method is only called in serial, the parallel version calls
+   /// GetGradientBlocked directly.
    virtual Operator &GetGradient(const Vector &x) const;
 
    /// Destructor.

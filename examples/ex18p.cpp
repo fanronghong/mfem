@@ -37,7 +37,7 @@
 //
 //               We recommend viewing examples 9, 14 and 17 before viewing this
 //               example.
-
+// 方程的弱形式参考：https://www.theoretical-physics.com/dev/fluid-dynamics/euler.html#d-version-of-the-equations
 #include "mfem.hpp"
 #include <fstream>
 #include <sstream>
@@ -48,6 +48,7 @@
 #include "ex18.hpp"
 
 // Choice for the problem setup. See InitialCondition in ex18.hpp.
+// 取值：1-fast vortex，2-slow vortex
 int problem;
 
 // Equation constant parameters.
@@ -64,12 +65,12 @@ int main(int argc, char *argv[])
    MPI_Session mpi(argc, argv);
 
    // 2. Parse command-line options.
-   problem = 1;
+   problem = 2;
    const char *mesh_file = "../data/periodic-square.mesh";
    int ser_ref_levels = 0;
    int par_ref_levels = 1;
    int order = 3;
-   int ode_solver_type = 4;
+   int ode_solver_type = 1;
    double t_final = 2.0;
    double dt = -0.01;
    double cfl = 0.3;
@@ -163,33 +164,47 @@ int main(int argc, char *argv[])
    DG_FECollection fec(order, dim);
    // Finite element space for a scalar (thermodynamic quantity)
    ParFiniteElementSpace fes(&pmesh, &fec);
-   // Finite element space for a mesh-dim vector quantity (momentum)
+   // Finite element space for a mesh-dim vector quantity (momentum) 动量(是个向量)
    ParFiniteElementSpace dfes(&pmesh, &fec, dim, Ordering::byNODES);
    // Finite element space for all variables together (total thermodynamic state)
+   // 方程个数就是未知量个数
    ParFiniteElementSpace vfes(&pmesh, &fec, num_equation, Ordering::byNODES);
 
    // This example depends on this ordering of the space.
    MFEM_ASSERT(fes.GetOrdering() == Ordering::byNODES, "");
 
    HYPRE_Int glob_size = vfes.GlobalTrueVSize();
-   if (mpi.Root()) { cout << "Number of unknowns: " << glob_size << endl; }
+   if (mpi.Root()) {
+       cout << "Number of unknowns: " << glob_size << endl;
+       cout << "                  : " << dfes.GlobalTrueVSize() << endl;
+       cout << "                  : " << fes.GlobalTrueVSize() << endl;
+   }
 
    // 8. Define the initial conditions, save the corresponding mesh and grid
    //    functions to a file. This can be opened with GLVis with the -gc option.
 
    // The solution u has components {density, x-momentum, y-momentum, energy}.
    // These are stored contiguously in the BlockVector u_block.
+    // The solution u has components {density, x-momentum, y-momentum, energy},
+    // 所以必须用 Ordering::byNODES
    Array<int> offsets(num_equation + 1);
    for (int k = 0; k <= num_equation; k++) { offsets[k] = k * vfes.GetNDofs(); }
    BlockVector u_block(offsets);
 
    // Momentum grid function on dfes for visualization.
+    // 第二个参数 只 是给定了data指针的起始地址，具体偏移多少由第一个参数确定
    ParGridFunction mom(&dfes, u_block.GetData() + offsets[1]);
 
    // Initialize the state.
+    // 包括所有的未知量的初始条件：密度，动量，能量
+    // 多少个方程就对应多少个变量
    VectorFunctionCoefficient u0(num_equation, InitialCondition);
+    // sol是有限元的表现形式，u_block是纯代数的表现形式，二者可以进行转换
    ParGridFunction sol(&vfes, u_block.GetData());
    sol.ProjectCoefficient(u0);
+    // 首先定义包含所有要解的未知量的 TrueVector，即 u_block，
+    // 在求解线性方程组时都是 u_block 在作为数据的载体在各个solver之间传递数据;
+    // 然后定义包含所有未知量的 GridFunction，即 sol, 并将 sol 和 u_block 相连接。
 
    // Output the initial solution.
    {
@@ -201,7 +216,7 @@ int main(int argc, char *argv[])
 
       for (int k = 0; k < num_equation; k++)
       {
-         ParGridFunction uk(&fes, u_block.GetBlock(k));
+         ParGridFunction uk(&fes, u_block.GetBlock(k)); // 把每个向量拿出来形成GridFunction
          ostringstream sol_name;
          sol_name << "vortex-" << k << "-init."
                   << setfill('0') << setw(6) << mpi.WorldRank();
@@ -287,6 +302,7 @@ int main(int argc, char *argv[])
       // maximum char speed at all quadrature points on all faces.
       max_char_speed = 0.;
       Vector z(sol.Size());
+      // 内部会修改 max_char_speed
       A.Mult(sol, z);
       // Reduce to find the global maximum wave speed
       {
