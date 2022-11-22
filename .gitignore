@@ -349,3 +349,10 @@ pkg.gitcommit
 
 # Jupyter Notebook Checkpoints
 .ipynb_checkpoints
+
+
+# 由我自己添加的
+.idea/
+cmake-build-debug/
+build*/
+
