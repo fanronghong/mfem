@@ -424,3 +424,8 @@ pkg.gitcommit
 
 # Jupyter Notebook Checkpoints
 .ipynb_checkpoints
+
+.idea/
+cmake-build-debug/
+install*/
+build*/

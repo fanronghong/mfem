@@ -175,9 +175,14 @@ set(Threads_LIB_VARS CMAKE_THREAD_LIBS_INIT)
 # The ScaLAPACK library, required by STRUMPACK
 set(ScaLAPACK_DIR "${MFEM_DIR}/../scalapack-2.0.2/lib/cmake/scalapack-2.0.2"
     CACHE PATH "Path to the configuration file scalapack-config.cmake")
-set(ScaLAPACK_TARGET_NAMES scalapack)
+#set(ScaLAPACK_TARGET_NAMES scalapack)
+message("======> ScaLAPACK_TARGET_NAMES: ${ScaLAPACK_TARGET_NAMES}, in defaults.cmake")
 # set(ScaLAPACK_TARGET_FORCE)
 # set(ScaLAPACK_IMPORT_CONFIG DEBUG)
+set(ScaLAPACK_FOUND "" CACHE BOOL "")  # https://github.com/mfem/mfem/issues/3558
+set(ScaLAPACK_INCLUDE_DIRS "")
+set(ScaLAPACK_LIBRARIES "")
+message("------> scalapack info: ${ScaLAPACK_DIR}, ${ScaLAPACK_FOUND}, ${ScaLAPACK_INCLUDE_DIRS}, ${ScaLAPACK_LIBRARIES}")
 
 set(Ginkgo_DIR "${MFEM_DIR}/../ginkgo" CACHE PATH "Path to the Ginkgo library.")
 
